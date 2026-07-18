@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>2049</title>
+<style>
+  :root{
+    --bg:#faf8ef; --board-bg:#bbada0; --empty:#cdc1b4; --text-dark:#776e65;
+    --text-light:#f9f6f2; --btn-bg:#8f7a66; --accent:#ed7c42; --card:#eee4d6;
+    --green:#4caf50; --red:#c0392b;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);
+    font-family:"Segoe UI","Arial Hebrew","Heebo",Arial,sans-serif;color:var(--text-dark);
+    overscroll-behavior:none; user-select:none;}
+  #app{max-width:480px;margin:0 auto;padding:14px;min-height:100%;display:flex;flex-direction:column;}
+  h1.title{font-size:38px;margin:4px 0 0;font-weight:800;color:#4d4237;}
+  .subtitle{font-size:12px;color:#9a8f83;margin-bottom:10px;}
+  .topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+  .scorebox{background:var(--board-bg);color:var(--text-light);border-radius:6px;
+    padding:6px 14px;text-align:center;min-width:64px;}
+  .scorebox .lbl{font-size:11px;opacity:.8;letter-spacing:.5px;}
+  .scorebox .val{font-size:18px;font-weight:700;}
+  .scores{display:flex;gap:8px;}
+  .iconbtn{background:var(--btn-bg);color:var(--text-light);border:none;border-radius:6px;
+    width:38px;height:38px;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .iconbtn:active{filter:brightness(.9);}
+  .rowbtns{display:flex;gap:6px;align-items:center;}
+  .size-pill{display:flex;align-items:center;background:var(--btn-bg);color:var(--text-light);
+    border-radius:6px;padding:0 4px;height:38px;font-weight:700;font-size:14px;gap:4px;}
+  .size-pill button{background:transparent;border:none;color:var(--text-light);font-size:16px;
+    cursor:pointer;width:26px;height:34px;}
+  #board-wrap{position:relative;margin-top:14px;}
+  #board{position:relative;background:var(--board-bg);border-radius:8px;padding:12px;
+    display:grid;gap:12px;}
+  .cell{background:var(--empty);border-radius:4px;}
+  .tile{position:absolute;border-radius:4px;display:flex;align-items:center;justify-content:center;
+    font-weight:700;transition:left .11s ease,top .11s ease;will-change:left,top;}
+  .tile-inner{animation:pop .16s ease;}
+  @keyframes pop{0%{transform:scale(.3);opacity:.4;}70%{transform:scale(1.12);}100%{transform:scale(1);opacity:1;}}
+  @keyframes flash{0%{filter:brightness(1.5);}100%{filter:brightness(1);}}
+  .banner{margin-top:14px;background:rgba(238,228,218,.85);border-radius:8px;padding:14px;
+    text-align:center;display:none;flex-direction:column;gap:8px;}
+  .banner.show{display:flex;}
+  .banner .big{font-size:20px;font-weight:800;}
+  .tip{margin-top:8px;font-size:12px;color:#a79f95;text-align:center;min-height:16px;}
+  .bottom-controls{display:flex;justify-content:space-between;margin-top:12px;}
+  .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#333;color:#fff;
+    padding:10px 18px;border-radius:8px;font-size:13px;white-space:pre-line;text-align:center;
+    opacity:0;transition:opacity .25s;pointer-events:none;z-index:50;max-width:90%;}
+  .toast.show{opacity:.95;}
+
+  .overlay{position:fixed;inset:0;background:rgba(20,16,12,.55);display:none;align-items:flex-start;
+    justify-content:center;z-index:40;overflow-y:auto;padding:24px 12px;}
+  .overlay.show{display:flex;}
+  .panel{background:var(--bg);border-radius:12px;padding:18px;max-width:440px;width:100%;
+    box-shadow:0 10px 30px rgba(0,0,0,.3);}
+  .panel h2{margin:0 0 4px;font-size:20px;}
+  .panel .sub{font-size:12px;color:#9a8f83;margin-bottom:14px;}
+  .row{display:flex;justify-content:space-between;align-items:center;background:var(--card);
+    border-radius:8px;padding:10px 12px;margin-bottom:8px;}
+  .row .label{font-size:14px;}
+  .seg{display:flex;background:var(--btn-bg);border-radius:6px;overflow:hidden;}
+  .seg button{background:transparent;border:none;color:var(--text-light);padding:6px 12px;
+    font-size:13px;cursor:pointer;}
+  .seg button.active{background:var(--accent);}
+  .switch{position:relative;width:44px;height:24px;background:#ccc;border-radius:12px;cursor:pointer;
+    border:none;}
+  .switch.on{background:var(--green);}
+  .switch::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;background:#fff;
+    border-radius:50%;transition:left .15s;}
+  .switch.on::after{left:22px;}
+  .stepper{display:flex;align-items:center;gap:8px;}
+  .stepper button{width:28px;height:28px;border:none;border-radius:6px;background:var(--btn-bg);
+    color:var(--text-light);font-size:15px;cursor:pointer;}
+  .linkbtn{display:block;width:100%;text-align:center;padding:10px;border-radius:8px;border:none;
+    background:var(--btn-bg);color:var(--text-light);font-size:14px;margin-top:6px;cursor:pointer;
+    text-decoration:none;}
+  .linkbtn.secondary{background:transparent;color:var(--text-dark);border:1px solid #ccc;}
+  .tiny-btn{background:none;border:none;color:#c3b8ab;font-size:11px;cursor:pointer;margin-top:16px;
+    text-decoration:underline;}
+  .keybox{background:var(--btn-bg);color:var(--text-light);border-radius:6px;padding:6px 10px;
+    font-size:12px;min-width:76px;text-align:center;cursor:pointer;border:none;}
+  .keybox.listening{background:var(--accent);}
+  .action-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;
+    border-bottom:1px solid #e3d9cc;}
+  .action-row:last-of-type{border-bottom:none;}
+  .action-name{font-size:13px;}
+  .action-detail{font-size:10.5px;color:#a79f95;margin-top:2px;}
+  .badge{font-size:9px;background:#ddd2c2;color:#7a6f61;border-radius:4px;padding:1px 5px;margin-inline-start:6px;}
+  .about-icon{width:56px;height:56px;border-radius:12px;background:var(--btn-bg);display:flex;
+    align-items:center;justify-content:center;font-size:26px;color:#fff;margin:0 auto 8px;}
+  .status-card{display:flex;align-items:center;justify-content:space-between;background:var(--card);
+    border-radius:8px;padding:10px 12px;margin:10px 0;font-size:13px;}
+  .status-dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-inline-end:6px;}
+  .confess-line{color:var(--accent);font-style:italic;text-align:center;margin:10px 0;font-size:14px;}
+  [dir="ltr"]{direction:ltr;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="topbar">
+    <div>
+      <h1 class="title">2049</h1>
+      <div class="subtitle" data-i="subtitle"></div>
+    </div>
+    <div class="scores">
+      <div class="scorebox"><div class="lbl" data-i="score"></div><div class="val" id="score">0</div></div>
+      <div class="scorebox"><div class="lbl" data-i="best"></div><div class="val" id="best">0</div></div>
+    </div>
+  </div>
+
+  <div class="rowbtns" style="margin-top:10px;justify-content:space-between;">
+    <button class="iconbtn" id="btn-settings" title="settings">⚙</button>
+    <div class="size-pill">
+      <button id="size-minus">‹</button>
+      <span id="size-label">4×4</span>
+      <button id="size-plus">›</button>
+      <button id="new-game" title="new game" style="font-size:15px;">⟳</button>
+    </div>
+  </div>
+
+  <div id="board-wrap">
+    <div id="board"></div>
+  </div>
+
+  <div class="banner" id="win-banner">
+    <div class="big" data-i="you_win"></div>
+    <div style="display:flex;gap:8px;justify-content:center;">
+      <button class="linkbtn" id="keep-going" style="width:auto;padding:8px 16px;" data-i="keep_going"></button>
+      <button class="linkbtn secondary" id="new-after-win" style="width:auto;padding:8px 16px;" data-i="new_game"></button>
+    </div>
+  </div>
+  <div class="banner" id="over-banner">
+    <div class="big" data-i="game_over"></div>
+    <div style="font-size:12px;" data-i="press_new"></div>
+  </div>
+
+  <div class="tip" id="tip"></div>
+
+  <div class="bottom-controls">
+    <button class="iconbtn" id="btn-sound" title="sound">🔊</button>
+    <button class="iconbtn" id="btn-mode" title="mode">∞</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Settings overlay -->
+<div class="overlay" id="overlay-settings">
+  <div class="panel">
+    <h2 data-i="settings"></h2>
+    <div class="row"><span class="label" data-i="grid_size"></span>
+      <div class="stepper"><button id="s-size-minus">−</button><span id="s-size-val">4</span><button id="s-size-plus">+</button></div>
+    </div>
+    <div class="row"><span class="label" data-i="language"></span>
+      <div class="seg"><button id="lang-he">עברית</button><button id="lang-en">English</button></div>
+    </div>
+    <div class="row"><span class="label" data-i="sound"></span><button class="switch" id="sw-sound"></button></div>
+    <div class="row"><span class="label" data-i="win_mode"></span>
+      <div class="seg"><button id="mode-inf" data-i="infinite"></button><button id="mode-tgt" data-i="target"></button></div>
+    </div>
+    <div class="row"><span class="label" data-i="show_tips"></span><button class="switch" id="sw-tips"></button></div>
+
+    <button class="linkbtn" id="btn-reset-score" data-i="reset_score"></button>
+    <button class="linkbtn secondary" id="btn-reset-settings" data-i="reset_settings"></button>
+
+    <div style="margin-top:16px;border-top:1px solid #e3d9cc;padding-top:12px;">
+      <div class="about-icon">2049</div>
+      <div style="text-align:center;font-size:12px;color:#9a8f83;" data-i="credit"></div>
+      <div class="status-card">
+        <span><span class="status-dot" id="upd-dot" style="background:#bbb;"></span><span id="upd-text" data-i="checking"></span></span>
+        <button class="keybox" id="btn-check-update" data-i="check_again"></button>
+      </div>
+      <a class="linkbtn secondary" id="link-github" href="#" target="_blank" data-i="visit_github"></a>
+      <div style="text-align:center;font-size:10px;color:#c3b8ab;margin-top:6px;" id="version-line"></div>
+    </div>
+
+    <button class="tiny-btn" id="btn-open-cheats">⚙</button>
+    <button class="linkbtn secondary" id="btn-close-settings" style="margin-top:10px;" data-i="back"></button>
+  </div>
+</div>
+
+<!-- Cheats overlay ("מקלט הרמאים") -->
+<div class="overlay" id="overlay-cheats">
+  <div class="panel">
+    <h2 data-i="prefs_title"></h2>
+    <div class="sub" data-i="prefs_sub"></div>
+
+    <div class="row"><span class="label" data-i="game_mode"></span>
+      <div class="stepper"><button id="mode-minus">‹</button><span id="mode-name" style="font-size:12px;max-width:140px;text-align:center;"></span><button id="mode-plus">›</button></div>
+    </div>
+
+    <div id="assist-list"></div>
+
+    <div class="row" style="margin-top:10px;"><span class="label" data-i="persist_cheats"></span><button class="switch" id="sw-persist"></button></div>
+    <div class="row"><span class="label" data-i="count_best"></span><button class="switch" id="sw-count"></button></div>
+
+    <button class="linkbtn" id="btn-save-cheats" data-i="back"></button>
+  </div>
+</div>
+
+<!-- Confession modal -->
+<div class="overlay" id="overlay-confess">
+  <div class="panel" style="max-width:340px;text-align:center;">
+    <h2 data-i="confess_title"></h2>
+    <div style="font-size:13px;" data-i="confess_body"></div>
+    <div class="confess-line" data-i="confess_line"></div>
+    <div style="display:flex;gap:8px;">
+      <button class="linkbtn" id="confess-yes" data-i="confess_yes"></button>
+      <button class="linkbtn secondary" id="confess-no" data-i="confess_no"></button>
+    </div>
+  </div>
+</div>
+
+<!-- Praise modal -->
+<div class="overlay" id="overlay-praise">
+  <div class="panel" style="max-width:340px;text-align:center;">
+    <h2 style="color:var(--green);" data-i="praise_title"></h2>
+    <div style="font-size:13px;" data-i="praise_body"></div>
+    <div style="font-size:11px;color:#9a8f83;margin-top:6px;" data-i="praise_body2"></div>
+    <button class="linkbtn" id="praise-ok" data-i="praise_ok"></button>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+const APP_VERSION = "0.12.0";
+const GITHUB_REPO = "BeniaBot/2049"; // owner/repo whose releases we check against
+
+// ---------------------------------------------------------------------------
+// Localization
+// ---------------------------------------------------------------------------
+const STRINGS = {
+  he:{
+    score:"ניקוד", best:"שיא", new_game:"משחק חדש", settings:"הגדרות",
+    subtitle:"המהדורה המשוכללת", you_win:"הגעת ל-2048!", keep_going:"המשך",
+    game_over:"המשחק נגמר", press_new:"לחץ Enter למשחק חדש",
+    grid_size:"גודל לוח", language:"שפה", game_mode:"מצב משחק",
+    hebrew:"עברית", english:"English", sound:"צלילים",
+    win_mode:"מצב ניצחון", infinite:"אינסופי", target:"שביר שיא",
+    show_tips:"הצג עצות", reset_settings:"אפס הגדרות", reset_score:"אפס שיא",
+    reset_settings_q:"לאפס את כל ההגדרות לברירת המחדל?",
+    reset_score_q:"לאפס את השיא האישי?", yes:"כן", no:"לא", done_reset:"אופס בהצלחה",
+    tips_list:["שמור את האריח הגבוה בפינה ואל תזיז אותו","נסה לשמור שורה אחת מלאה ומסודרת",
+      "בנה שרשרת מספרים יורדת לאורך שורה","החלק בעיקר לשני כיוונים קבועים",
+      "אל תמלא את הלוח – השאר מקום לתמרון"],
+    tip_stuck:"יש אריח נמוך תקוע – נסה לשחרר אותו",
+    tip_full:"הלוח מתמלא! מזג אריחים בדחיפות",
+    tip_corner:"שמור את האריח הגבוה בפינה",
+    preferences:"העדפות", prefs_title:"מקלט הרמאים",
+    prefs_sub:"פה מתאספים כל מי שלא מספיק טובים בזכות עצמם 😄",
+    persist_cheats:"שמור רמאויות בין הפעלות", count_best:"חשב רמאויות בשיא",
+    credit:"נוצר על ידי Claude • BeniaBot", about:"אודות", up_to_date:"האפליקציה מעודכנת",
+    update_ready:"גרסה חדשה זמינה", check_again:"בדוק שוב", checking:"בודק...",
+    visit_github:"בקר בעמוד ה-GitHub", version_lbl:"גרסה", update_avail:"עדכון זמין!",
+    confess_title:"רגע אחד...", confess_body:"כדי לשמור הגדרות רמאות, עליך להודות:",
+    confess_line:"\"אני מרמה כי אני לא מספיק טוב\"", confess_yes:"אני מודה", confess_no:"לעולם לא!",
+    confess_rejected:"אז שוב לאימונים. ההגדרות לא נשמרו.",
+    praise_title:"כל הכבוד!", praise_body:"בחרת לבטל את הרמאויות ולהתמודד כמו גבר!",
+    praise_body2:"זה מרשים. השינוי נשמר אוטומטית.", praise_ok:"תודה!",
+    praise_toast:"יאללה, לשחק 'על אמת'\nרק אל תתייאש מהר מדי!",
+    mode_names:["מצב 1 - רגיל","מצב 2 - שליטה ב-2/4","מצב 3 - מנקה","מצב 4 - ערכה מלאה"],
+    actions:{force_2:"האריח הבא יהיה 2",force_4:"האריח הבא יהיה 4",
+      spawn_corner:"אריח חדש בשוליים",clean_stuck:"נקה אריח תקוע",undo:"בטל מהלך"},
+    action_detail:{
+      force_2:"החזק במהלך – האריח שיופיע יהיה 2 ולא 4",
+      force_4:"החזק במהלך – האריח שיופיע יהיה 4",
+      spawn_corner:"החזק במהלך – האריח החדש יופיע בשוליים ולא במרכז",
+      clean_stuck:"לחיצה – מעלים אריח נמוך שתקוע בין גבוהים",
+      undo:"לחיצה – מחזיר את הלוח למהלך הקודם"},
+    hold:"החזק", tap:"לחיצה", none:"ללא", click_to_set:"לחץ ואז הקש מקש. Backspace לניקוי",
+    back:"חזרה"
+  },
+  en:{
+    score:"SCORE", best:"BEST", new_game:"New Game", settings:"Settings",
+    subtitle:"enhanced edition", you_win:"You reached 2048!", keep_going:"Keep going",
+    game_over:"Game over", press_new:"Press Enter for new game",
+    grid_size:"Grid size", language:"Language", game_mode:"Game mode",
+    hebrew:"עברית", english:"English", sound:"Sound",
+    win_mode:"Win mode", infinite:"Infinite", target:"Beat best",
+    show_tips:"Show tips", reset_settings:"Reset settings", reset_score:"Reset best",
+    reset_settings_q:"Reset all settings to default?", reset_score_q:"Reset your personal best?",
+    yes:"Yes", no:"No", done_reset:"Reset done",
+    tips_list:["Keep your highest tile in a corner and don't move it",
+      "Try to keep one full, ordered row","Build a descending chain along a row",
+      "Mostly swipe in just two fixed directions","Don't fill the board - leave room to maneuver"],
+    tip_stuck:"A low tile is stuck - try to free it",
+    tip_full:"Board is filling up! Merge tiles urgently",
+    tip_corner:"Keep your highest tile in a corner",
+    preferences:"Preferences", prefs_title:"Refuge of Cheats & Crooks",
+    prefs_sub:"Where everyone who isn't good enough on their own gathers 😄",
+    persist_cheats:"Keep cheats between sessions", count_best:"Count cheats in best",
+    credit:"Made by Claude • BeniaBot", about:"About", up_to_date:"The app is up to date",
+    update_ready:"A new version is available", check_again:"Check again", checking:"Checking...",
+    visit_github:"Visit the GitHub page", version_lbl:"Version", update_avail:"Update available!",
+    confess_title:"One moment...", confess_body:"To save cheat settings, you must admit:",
+    confess_line:"\"I cheat because I'm not good enough\"", confess_yes:"I admit it", confess_no:"Never!",
+    confess_rejected:"Back to practice then. Settings not saved.",
+    praise_title:"Respect!", praise_body:"You chose to drop the cheats and play like a champ!",
+    praise_body2:"That's impressive. Your change was saved automatically.", praise_ok:"Thanks!",
+    praise_toast:"Go play 'for real'\nJust don't give up too fast!",
+    mode_names:["Mode 1 - Classic","Mode 2 - 2/4 Control","Mode 3 - Cleaner","Mode 4 - Full Kit"],
+    actions:{force_2:"Next tile will be 2",force_4:"Next tile will be 4",
+      spawn_corner:"New tile at the edge",clean_stuck:"Clear a stuck tile",undo:"Undo a move"},
+    action_detail:{
+      force_2:"Hold during a move - new tile spawns as 2, not 4",
+      force_4:"Hold during a move - new tile spawns as 4",
+      spawn_corner:"Hold during a move - new tile appears at the edge, not the middle",
+      clean_stuck:"Tap - removes a low tile trapped between higher ones",
+      undo:"Tap - restores the board to before your last move"},
+    hold:"hold", tap:"tap", none:"None", click_to_set:"Click a box, then press any key. Backspace to clear.",
+    back:"Back"
+  }
+};
+
+const ACTION_KEYS = ["force_2","force_4","spawn_corner","clean_stuck","undo"];
+const HOLD_ACTIONS = new Set(["force_2","force_4","spawn_corner"]);
+const TAP_ACTIONS  = new Set(["clean_stuck","undo"]);
+const RESERVED_KEYS = new Set(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","KeyA","KeyW","KeyS","KeyD","Escape","Enter"]);
+
+const TILE_COLORS = {
+  2:["#eee4da","#776e65"], 4:["#ede0c8","#776e65"], 8:["#f2b179","#f9f6f2"],
+  16:["#f59563","#f9f6f2"], 32:["#f67c5f","#f9f6f2"], 64:["#f65e3b","#f9f6f2"],
+  128:["#edcf72","#f9f6f2"], 256:["#edcc61","#f9f6f2"], 512:["#edc850","#f9f6f2"],
+  1024:["#edc53f","#f9f6f2"], 2048:["#edc22e","#f9f6f2"]
+};
+function tileColor(v){ return TILE_COLORS[v] || ["#3c3a32","#f9f6f2"]; }
+
+function defaultConfig(){
+  return {
+    config_version:2, grid_size:4, language:"he", active_profile:0, highscore:0,
+    sound:true, infinite:true, show_tips:false, persist_cheats:false, count_cheats_in_best:false,
+    profiles:[
+      {map:{}},
+      {map:{force_4:"ShiftLeft"}},
+      {map:{clean_stuck:"ShiftLeft", undo:"ControlLeft"}},
+      {map:{force_4:"ShiftLeft", clean_stuck:"KeyC", undo:"KeyZ", spawn_corner:"AltLeft"}}
+    ]
+  };
+}
+
+function loadConfig(){
+  let cfg = defaultConfig();
+  try{
+    const raw = localStorage.getItem("2049_config");
+    if(raw){
+      const saved = JSON.parse(raw);
+      Object.assign(cfg, saved);
+      if(!cfg.profiles || !cfg.profiles.length) cfg.profiles = defaultConfig().profiles;
+    }
+  }catch(e){}
+  return cfg;
+}
+function saveConfig(cfg){
+  try{ localStorage.setItem("2049_config", JSON.stringify(cfg)); }catch(e){}
+}
+
+// ---------------------------------------------------------------------------
+// Board / game logic
+// ---------------------------------------------------------------------------
+let cfg = loadConfig();
+let LANG = cfg.language;
+function L(key){ return STRINGS[LANG][key]; }
+
+let uidCounter = 1;
+function nextId(){ return uidCounter++; }
+
+let size = cfg.grid_size;
+let tiles = [];         // {id, r, c, value, merging(bool, will be removed), justMerged(bool new value tile)}
+let score = 0;
+let history = [];       // snapshots for undo
+let won = false, keepGoing = false, gameOver = false;
+let animating = false;
+let cheatUsedThisGame = false;
+const pressedKeys = new Set();
+
+function emptyCells(){
+  const cells = [];
+  for(let r=0;r<size;r++) for(let c=0;c<size;c++){
+    if(!tiles.some(t=>t.r===r && t.c===c)) cells.push([r,c]);
+  }
+  return cells;
+}
+function gridValue(r,c){
+  const t = tiles.find(t=>t.r===r && t.c===c);
+  return t? t.value : 0;
+}
+function maxTile(){
+  return tiles.reduce((m,t)=>Math.max(m,t.value), 0);
+}
+function spawnTile(forceValue, preferEdge){
+  let cells = emptyCells();
+  if(!cells.length) return null;
+  if(preferEdge){
+    const edge = cells.filter(([r,c])=> r===0||r===size-1||c===0||c===size-1);
+    if(edge.length) cells = edge;
+  }
+  const [r,c] = cells[Math.floor(Math.random()*cells.length)];
+  const val = forceValue || (Math.random()<0.1 ? 4 : 2);
+  const t = {id:nextId(), r, c, value:val, isNew:true};
+  tiles.push(t);
+  return t;
+}
+function cloneState(){
+  return {tiles: tiles.map(t=>({...t})), score, uidCounter};
+}
+function restoreState(s){
+  tiles = s.tiles.map(t=>({...t}));
+  score = s.score;
+}
+function canMove(){
+  if(emptyCells().length) return true;
+  for(let r=0;r<size;r++) for(let c=0;c<size;c++){
+    const v = gridValue(r,c);
+    if(c+1<size && gridValue(r,c+1)===v) return true;
+    if(r+1<size && gridValue(r+1,c)===v) return true;
+  }
+  return false;
+}
+function anyMergeAvailable(){ return canMove() && emptyCells().length < size*size; }
+
+// direction: 'left','right','up','down'
+function moveBoard(direction){
+  let changed = false, gain = 0;
+  const merges = []; // {r,c,value}
+  const order = [];
+  for(let i=0;i<size;i++) order.push(i);
+
+  function lineCoords(i){
+    const coords = [];
+    for(let j=0;j<size;j++){
+      if(direction==="left") coords.push([i,j]);
+      else if(direction==="right") coords.push([i,size-1-j]);
+      else if(direction==="up") coords.push([j,i]);
+      else coords.push([size-1-j,i]);
+    }
+    return coords;
+  }
+
+  for(let i=0;i<size;i++){
+    const coords = lineCoords(i);
+    const lineTiles = coords.map(([r,c])=> tiles.find(t=>t.r===r && t.c===c)).filter(Boolean);
+    let dest = 0;
+    let k = 0;
+    const newPositions = []; // {tile, r, c}
+    while(k < lineTiles.length){
+      const cur = lineTiles[k];
+      const destCoord = coords[dest];
+      if(k+1 < lineTiles.length && lineTiles[k+1].value === cur.value){
+        const nxt = lineTiles[k+1];
+        const newVal = cur.value*2;
+        if(cur.r!==destCoord[0] || cur.c!==destCoord[1]) changed = true;
+        if(nxt.r!==destCoord[0] || nxt.c!==destCoord[1]) changed = true;
+        cur.r = destCoord[0]; cur.c = destCoord[1];
+        nxt.r = destCoord[0]; nxt.c = destCoord[1];
+        cur.value = newVal;
+        nxt._remove = true;
+        gain += newVal;
+        merges.push({r:destCoord[0], c:destCoord[1], value:newVal});
+        changed = true;
+        k += 2;
+      } else {
+        if(cur.r!==destCoord[0] || cur.c!==destCoord[1]) changed = true;
+        cur.r = destCoord[0]; cur.c = destCoord[1];
+        k += 1;
+      }
+      dest += 1;
+    }
+  }
+  if(changed){
+    tiles = tiles.filter(t=>!t._remove);
+    score += gain;
+  }
+  return {changed, merges};
+}
+
+function heldSpawnParams(){
+  let fv = null, pe = false;
+  const profile = cfg.profiles[cfg.active_profile % cfg.profiles.length];
+  const k2 = profile.map.force_2, k4 = profile.map.force_4, ke = profile.map.spawn_corner;
+  if(k2 && pressedKeys.has(k2)) fv = 2;
+  if(k4 && pressedKeys.has(k4)) fv = 4;
+  if(ke && pressedKeys.has(ke)) pe = true;
+  if(fv !== null || pe) cheatUsedThisGame = true;
+  return {fv, pe};
+}
+
+function stuckScore(r,c){
+  const v = gridValue(r,c);
+  if(v===0) return null;
+  const neighVals = [];
+  let hasEqual = false, occupied = 0, total = 0;
+  for(const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){
+    const rr=r+dr, cc=c+dc;
+    if(rr>=0 && rr<size && cc>=0 && cc<size){
+      total++;
+      const nv = gridValue(rr,cc);
+      if(nv!==0){ occupied++; neighVals.push(nv); if(nv===v) hasEqual = true; }
+    }
+  }
+  if(hasEqual) return null;
+  if(occupied < total) return null;
+  if(!neighVals.length || !neighVals.every(x=>x>v)) return null;
+  const boardMax = maxTile() || v;
+  const lowness = boardMax / v;
+  const surround = Math.min(...neighVals) / v;
+  const edge = (r===0||r===size-1?1:0) + (c===0||c===size-1?1:0);
+  const centrality = 1.0 + (edge>=2?0:(edge===1?0.5:1.0));
+  return lowness * surround * centrality;
+}
+function anyStuck(){
+  for(let r=0;r<size;r++) for(let c=0;c<size;c++) if(stuckScore(r,c)!==null) return true;
+  return false;
+}
+function removeStuckLow(){
+  let best = null;
+  for(let r=0;r<size;r++) for(let c=0;c<size;c++){
+    const s = stuckScore(r,c);
+    if(s!==null && (!best || s>best.s)) best = {s,r,c};
+  }
+  if(best){
+    tiles = tiles.filter(t=>!(t.r===best.r && t.c===best.c));
+    return best;
+  }
+  return null;
+}
+
+function updateHighscore(){
+  const cheating = cheatUsedThisGame;
+  if(cheating && !cfg.count_cheats_in_best) return;
+  if(score > cfg.highscore){ cfg.highscore = score; saveConfig(cfg); }
+}
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+const boardEl = document.getElementById("board");
+const scoreEl = document.getElementById("score");
+const bestEl = document.getElementById("best");
+const tipEl = document.getElementById("tip");
+
+let cellPx = 0, gapPx = 12;
+
+function layoutBoard(){
+  const wrap = document.getElementById("board-wrap");
+  const wrapWidth = wrap.clientWidth;
+  const margin = 12;
+  const avail = wrapWidth - margin*2;
+  gapPx = Math.max(6, Math.round(avail*0.03));
+  cellPx = Math.floor((avail - gapPx*(size+1)) / size);
+  const boardPx = cellPx*size + gapPx*(size+1);
+  boardEl.style.width = boardPx+"px";
+  boardEl.style.height = boardPx+"px";
+  boardEl.style.gridTemplateColumns = `repeat(${size}, ${cellPx}px)`;
+  boardEl.style.gridTemplateRows = `repeat(${size}, ${cellPx}px)`;
+  boardEl.style.padding = gapPx+"px";
+  boardEl.style.gap = gapPx+"px";
+}
+
+function renderCells(){
+  boardEl.querySelectorAll(".cell").forEach(e=>e.remove());
+  for(let i=0;i<size*size;i++){
+    const c = document.createElement("div");
+    c.className = "cell";
+    boardEl.appendChild(c);
+  }
+}
+
+function tilePos(r,c){
+  const x = gapPx + c*(cellPx+gapPx);
+  const y = gapPx + r*(cellPx+gapPx);
+  return {x,y};
+}
+
+function fontSizeFor(value){
+  const digits = String(value).length;
+  let f = cellPx*0.42;
+  if(digits>=3) f = cellPx*0.34;
+  if(digits>=4) f = cellPx*0.28;
+  return Math.max(12, Math.round(f));
+}
+
+function renderTiles(){
+  const existing = new Map();
+  boardEl.querySelectorAll(".tile").forEach(el=>existing.set(+el.dataset.id, el));
+  const seen = new Set();
+  for(const t of tiles){
+    seen.add(t.id);
+    let el = existing.get(t.id);
+    const {x,y} = tilePos(t.r,t.c);
+    const [bg,fg] = tileColor(t.value);
+    if(!el){
+      el = document.createElement("div");
+      el.className = "tile";
+      el.dataset.id = t.id;
+      el.style.width = cellPx+"px";
+      el.style.height = cellPx+"px";
+      el.style.left = x+"px";
+      el.style.top = y+"px";
+      boardEl.appendChild(el);
+      // force layout so a subsequent update animates
+      void el.offsetWidth;
+    } else {
+      el.style.left = x+"px";
+      el.style.top = y+"px";
+    }
+    el.style.background = bg;
+    el.style.color = fg;
+    el.style.fontSize = fontSizeFor(t.value)+"px";
+    if(el.dataset.value != t.value || t.isNew || t.justMerged){
+      el.innerHTML = `<div class="tile-inner">${t.value}</div>`;
+      el.dataset.value = t.value;
+    }
+  }
+  for(const [id,el] of existing){
+    if(!seen.has(id)) el.remove();
+  }
+}
+
+function updateHUD(){
+  scoreEl.textContent = score;
+  bestEl.textContent = cfg.highscore;
+  document.getElementById("size-label").textContent = `${size}\u00d7${size}`;
+  document.getElementById("btn-sound").textContent = cfg.sound ? "🔊" : "🔇";
+  document.getElementById("btn-mode").textContent = cfg.infinite ? "∞" : "🎯";
+}
+
+function showBanners(){
+  document.getElementById("win-banner").classList.toggle("show", won && !keepGoing);
+  document.getElementById("over-banner").classList.toggle("show", gameOver);
+}
+
+// ---------------------------------------------------------------------------
+// Sound (Web Audio, synthesized, no assets needed)
+// ---------------------------------------------------------------------------
+let actx = null;
+function audioCtx(){
+  if(!actx){
+    try{ actx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ actx = null; }
+  }
+  return actx;
+}
+function playTone(freq, dur, type){
+  if(!cfg.sound) return;
+  const ctx = audioCtx();
+  if(!ctx) return;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type || "sine";
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime+0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+dur);
+  osc.connect(gain); gain.connect(ctx.destination);
+  osc.start(); osc.stop(ctx.currentTime+dur+0.02);
+}
+function playMerge(value){
+  const step = Math.log2(value||2);
+  const freq = 220 * Math.pow(2, step/6);
+  playTone(freq, 0.18, "triangle");
+}
+function playSpawn(){ playTone(320, 0.06, "sine"); }
+function playWin(){ playTone(660,0.4,"sine"); setTimeout(()=>playTone(880,0.5,"sine"),120); }
+
+// ---------------------------------------------------------------------------
+// Game flow
+// ---------------------------------------------------------------------------
+function newGame(){
+  tiles = [];
+  score = 0;
+  history = [];
+  won = false; keepGoing = false; gameOver = false;
+  cheatUsedThisGame = false;
+  spawnTile(); spawnTile();
+  renderCells();
+  renderTiles();
+  updateHUD();
+  showBanners();
+  updateTip();
+}
+
+function handleMove(direction){
+  if(animating) return;
+  if(won && !keepGoing) return;
+  if(gameOver) return;
+  history.push(cloneState());
+  if(history.length>40) history.shift();
+  const {changed, merges} = moveBoard(direction);
+  if(!changed){ history.pop(); return; }
+  animating = true;
+  renderTiles();
+  const {fv, pe} = heldSpawnParams();
+  setTimeout(()=>{ finishMove(merges, fv, pe); }, 115);
+}
+
+function finishMove(merges, fv, pe){
+  animating = false;
+  let highestMerge = 0;
+  for(const m of merges){ highestMerge = Math.max(highestMerge, m.value); }
+  const s = spawnTile(fv, pe);
+  for(const t of tiles){ t.isNew = (s && t.id===s.id); t.justMerged = merges.some(m=>m.r===t.r&&m.c===t.c&&m.value===t.value); }
+  renderTiles();
+  updateHighscore();
+  updateHUD();
+  if(merges.length) playMerge(highestMerge); else playSpawn();
+  if(!won && maxTile()>=2048){
+    won = true; playWin();
+    if(cfg.infinite) keepGoing = true;
+  }
+  if(!canMove()){ gameOver = true; }
+  showBanners();
+  updateTip();
+}
+
+function doTapAction(action){
+  if(animating) return;
+  const prev = cloneState();
+  let didSomething = false;
+  if(action==="undo"){
+    if(history.length){
+      restoreState(history.pop());
+      cheatUsedThisGame = true;
+      renderTiles(); updateHUD(); showToast(null); didSomething = true;
+      gameOver = false; showBanners();
+    }
+    return;
+  } else if(action==="clean_stuck"){
+    const pos = removeStuckLow();
+    if(pos){ didSomething = true; }
+  }
+  if(didSomething){
+    cheatUsedThisGame = true;
+    history.push(prev);
+    renderTiles(); updateHighscore(); updateHUD();
+  }
+}
+
+function pickTip(){
+  const empties = emptyCells().length;
+  const total = size*size;
+  const mx = maxTile();
+  const corners = [gridValue(0,0), gridValue(0,size-1), gridValue(size-1,0), gridValue(size-1,size-1)];
+  if(empties<=2 && !anyMergeAvailable()) return L("tip_full");
+  if(anyStuck()) return L("tip_stuck");
+  if(mx>=64 && !corners.includes(mx)) return L("tip_corner");
+  const tipsList = L("tips_list");
+  let idx;
+  if(empties >= total*0.6) idx = 3;
+  else if(!corners.includes(mx)) idx = 0;
+  else if(empties <= total*0.35) idx = 1;
+  else idx = 2;
+  return tipsList[idx % tipsList.length];
+}
+function updateTip(){
+  tipEl.textContent = cfg.show_tips ? pickTip() : "";
+}
+
+// ---------------------------------------------------------------------------
+// Toast
+// ---------------------------------------------------------------------------
+let toastTimer = null;
+function showToast(text){
+  const el = document.getElementById("toast");
+  if(!text){ el.classList.remove("show"); return; }
+  el.textContent = text;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> el.classList.remove("show"), 2600);
+}
+
+// ---------------------------------------------------------------------------
+// Input
+// ---------------------------------------------------------------------------
+const KEY_TO_DIR = {ArrowLeft:"left",ArrowRight:"right",ArrowUp:"up",ArrowDown:"down",
+  KeyA:"left",KeyD:"right",KeyW:"up",KeyS:"down"};
+
+let captureTarget = null; // {action} awaiting a keypress binding
+
+document.addEventListener("keydown", (e)=>{
+  if(captureTarget){
+    e.preventDefault();
+    if(e.code === "Backspace"){
+      delete cfg.profiles[cfg.active_profile].map[captureTarget];
+    } else if(!RESERVED_KEYS.has(e.code)){
+      // unbind this key from any other action in this profile first
+      const map = cfg.profiles[cfg.active_profile].map;
+      for(const a of Object.keys(map)) if(map[a]===e.code) delete map[a];
+      map[captureTarget] = e.code;
+    }
+    captureTarget = null;
+    renderCheatsPanel();
+    return;
+  }
+  if(!pressedKeys.has(e.code)) pressedKeys.add(e.code);
+  const dir = KEY_TO_DIR[e.code];
+  if(dir){ e.preventDefault(); handleMove(dir); return; }
+  if(e.code==="Enter" && (gameOver || (won && !keepGoing))){ newGame(); return; }
+
+  if(e.repeat) return;
+  const profile = cfg.profiles[cfg.active_profile % cfg.profiles.length];
+  for(const action of Object.keys(profile.map)){
+    if(TAP_ACTIONS.has(action) && profile.map[action]===e.code){
+      doTapAction(action);
+    }
+  }
+});
+document.addEventListener("keyup", (e)=>{ pressedKeys.delete(e.code); });
+
+// swipe support for touch
+(function(){
+  let sx=0, sy=0, active=false;
+  boardEl.addEventListener("touchstart", (e)=>{
+    const t = e.changedTouches[0]; sx=t.clientX; sy=t.clientY; active=true;
+  }, {passive:true});
+  boardEl.addEventListener("touchend", (e)=>{
+    if(!active) return; active=false;
+    const t = e.changedTouches[0];
+    const dx = t.clientX-sx, dy = t.clientY-sy;
+    if(Math.max(Math.abs(dx),Math.abs(dy)) < 24) return;
+    if(Math.abs(dx) > Math.abs(dy)) handleMove(dx>0?"right":"left");
+    else handleMove(dy>0?"down":"up");
+  }, {passive:true});
+})();
+
+// ---------------------------------------------------------------------------
+// Top-level UI wiring
+// ---------------------------------------------------------------------------
+function applyI18n(){
+  document.documentElement.dir = LANG==="he" ? "rtl" : "ltr";
+  document.documentElement.lang = LANG;
+  document.querySelectorAll("[data-i]").forEach(el=>{
+    const key = el.dataset.i;
+    if(STRINGS[LANG][key] !== undefined) el.textContent = STRINGS[LANG][key];
+  });
+  document.getElementById("link-github").textContent = L("visit_github");
+  document.getElementById("version-line").textContent = `${L("version_lbl")} ${APP_VERSION}`;
+  renderCheatsPanel();
+}
+
+function setSize(n){
+  size = Math.max(3, Math.min(8, n));
+  cfg.grid_size = size;
+  saveConfig(cfg);
+  layoutBoard();
+  newGame();
+}
+
+document.getElementById("size-minus").onclick = ()=> setSize(size-1);
+document.getElementById("size-plus").onclick = ()=> setSize(size+1);
+document.getElementById("new-game").onclick = ()=> newGame();
+document.getElementById("keep-going").onclick = ()=> { keepGoing = true; showBanners(); };
+document.getElementById("new-after-win").onclick = ()=> newGame();
+
+document.getElementById("btn-sound").onclick = ()=>{
+  cfg.sound = !cfg.sound; saveConfig(cfg); updateHUD();
+};
+document.getElementById("btn-mode").onclick = ()=>{
+  cfg.infinite = !cfg.infinite; saveConfig(cfg); updateHUD();
+};
+
+// ---- settings overlay ----
+const ovSettings = document.getElementById("overlay-settings");
+document.getElementById("btn-settings").onclick = ()=>{
+  document.getElementById("s-size-val").textContent = size;
+  document.getElementById("sw-sound").classList.toggle("on", cfg.sound);
+  document.getElementById("sw-tips").classList.toggle("on", cfg.show_tips);
+  document.getElementById("lang-he").classList.toggle("active", LANG==="he");
+  document.getElementById("lang-en").classList.toggle("active", LANG==="en");
+  document.getElementById("mode-inf").classList.toggle("active", cfg.infinite);
+  document.getElementById("mode-tgt").classList.toggle("active", !cfg.infinite);
+  document.getElementById("link-github").href = `https://github.com/${GITHUB_REPO}`;
+  ovSettings.classList.add("show");
+};
+document.getElementById("btn-close-settings").onclick = ()=> ovSettings.classList.remove("show");
+document.getElementById("s-size-minus").onclick = ()=>{ setSize(size-1); document.getElementById("s-size-val").textContent = size; };
+document.getElementById("s-size-plus").onclick = ()=>{ setSize(size+1); document.getElementById("s-size-val").textContent = size; };
+document.getElementById("lang-he").onclick = ()=>{ LANG="he"; cfg.language="he"; saveConfig(cfg); applyI18n(); updateHUD(); };
+document.getElementById("lang-en").onclick = ()=>{ LANG="en"; cfg.language="en"; saveConfig(cfg); applyI18n(); updateHUD(); };
+document.getElementById("sw-sound").onclick = (e)=>{ cfg.sound=!cfg.sound; saveConfig(cfg); e.target.classList.toggle("on", cfg.sound); updateHUD(); };
+document.getElementById("sw-tips").onclick = (e)=>{ cfg.show_tips=!cfg.show_tips; saveConfig(cfg); e.target.classList.toggle("on", cfg.show_tips); updateTip(); };
+document.getElementById("mode-inf").onclick = ()=>{ cfg.infinite=true; saveConfig(cfg); document.getElementById("mode-inf").classList.add("active"); document.getElementById("mode-tgt").classList.remove("active"); updateHUD(); };
+document.getElementById("mode-tgt").onclick = ()=>{ cfg.infinite=false; saveConfig(cfg); document.getElementById("mode-tgt").classList.add("active"); document.getElementById("mode-inf").classList.remove("active"); updateHUD(); };
+
+document.getElementById("btn-reset-score").onclick = ()=>{
+  if(confirm(L("reset_score_q"))){ cfg.highscore = 0; saveConfig(cfg); updateHUD(); showToast(L("done_reset")); }
+};
+document.getElementById("btn-reset-settings").onclick = ()=>{
+  if(confirm(L("reset_settings_q"))){
+    const hs = cfg.highscore;
+    cfg = defaultConfig(); cfg.highscore = hs; cfg.language = LANG;
+    saveConfig(cfg); setSize(cfg.grid_size); updateHUD(); showToast(L("done_reset"));
+  }
+};
+
+// ---- update check ----
+function setUpdateStatus(state, tag){
+  const dot = document.getElementById("upd-dot");
+  const txt = document.getElementById("upd-text");
+  if(state==="checking"){ dot.style.background="#bbb"; txt.textContent = L("checking"); }
+  else if(state==="uptodate"){ dot.style.background="var(--green)"; txt.textContent = L("up_to_date"); }
+  else if(state==="available"){ dot.style.background="var(--accent)"; txt.textContent = `${L("update_avail")} ${tag||""}`; }
+  else { dot.style.background="#bbb"; txt.textContent = "?"; }
+}
+async function checkForUpdate(){
+  setUpdateStatus("checking");
+  try{
+    const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {cache:"no-store"});
+    if(!res.ok) throw new Error("no releases");
+    const data = await res.json();
+    const tag = (data.tag_name||"").replace(/^v/i,"");
+    if(tag && tag !== APP_VERSION) setUpdateStatus("available", data.tag_name);
+    else setUpdateStatus("uptodate");
+  }catch(e){
+    setUpdateStatus("uptodate");
+  }
+}
+document.getElementById("btn-check-update").onclick = checkForUpdate;
+
+// ---- cheats overlay ("מקלט הרמאים") ----
+const ovCheats = document.getElementById("overlay-cheats");
+let cheatsSnapshot = null;
+document.getElementById("btn-open-cheats").onclick = ()=>{
+  cheatsSnapshot = JSON.parse(JSON.stringify(cfg.profiles));
+  document.getElementById("sw-persist").classList.toggle("on", cfg.persist_cheats);
+  document.getElementById("sw-count").classList.toggle("on", cfg.count_cheats_in_best);
+  renderCheatsPanel();
+  ovCheats.classList.add("show");
+};
+document.getElementById("sw-persist").onclick = (e)=>{ cfg.persist_cheats=!cfg.persist_cheats; e.target.classList.toggle("on", cfg.persist_cheats); };
+document.getElementById("sw-count").onclick = (e)=>{ cfg.count_cheats_in_best=!cfg.count_cheats_in_best; e.target.classList.toggle("on", cfg.count_cheats_in_best); };
+document.getElementById("mode-minus").onclick = ()=>{ cfg.active_profile = (cfg.active_profile - 1 + cfg.profiles.length) % cfg.profiles.length; renderCheatsPanel(); };
+document.getElementById("mode-plus").onclick = ()=>{ cfg.active_profile = (cfg.active_profile + 1) % cfg.profiles.length; renderCheatsPanel(); };
+
+function keyLabel(code){
+  if(!code) return L("none");
+  const pretty = {ShiftLeft:"Shift(L)", ShiftRight:"Shift(R)", ControlLeft:"Ctrl(L)",
+    ControlRight:"Ctrl(R)", AltLeft:"Alt(L)", AltRight:"Alt(R)", Space:"Space", Tab:"Tab"};
+  if(pretty[code]) return pretty[code];
+  if(code.startsWith("Key")) return code.slice(3);
+  if(code.startsWith("Digit")) return code.slice(5);
+  return code;
+}
+
+function renderCheatsPanel(){
+  document.getElementById("mode-name").textContent = L("mode_names")[cfg.active_profile] || "";
+  const list = document.getElementById("assist-list");
+  list.innerHTML = "";
+  const profile = cfg.profiles[cfg.active_profile % cfg.profiles.length];
+  for(const action of ACTION_KEYS){
+    const row = document.createElement("div");
+    row.className = "action-row";
+    const badge = HOLD_ACTIONS.has(action) ? L("hold") : L("tap");
+    row.innerHTML = `<div>
+        <div class="action-name">${L("actions")[action]}<span class="badge">${badge}</span></div>
+        <div class="action-detail">${L("action_detail")[action]}</div>
+      </div>`;
+    const btn = document.createElement("button");
+    btn.className = "keybox";
+    btn.textContent = keyLabel(profile.map[action]);
+    btn.onclick = ()=>{
+      captureTarget = action;
+      btn.textContent = "…";
+      btn.classList.add("listening");
+    };
+    row.appendChild(btn);
+    list.appendChild(row);
+  }
+}
+
+function profileHasCheats(profile){
+  return Object.keys(profile.map||{}).length > 0;
+}
+
+document.getElementById("btn-save-cheats").onclick = ()=>{
+  const nowHasCheats = cfg.profiles.some(profileHasCheats) || cfg.persist_cheats;
+  const hadCheats = cheatsSnapshot ? (cheatsSnapshot.some(profileHasCheats)) : false;
+  if(nowHasCheats){
+    document.getElementById("overlay-confess").classList.add("show");
+  } else if(hadCheats && !nowHasCheats){
+    saveConfig(cfg);
+    ovCheats.classList.remove("show");
+    document.getElementById("overlay-praise").classList.add("show");
+  } else {
+    saveConfig(cfg);
+    ovCheats.classList.remove("show");
+  }
+};
+document.getElementById("confess-yes").onclick = ()=>{
+  saveConfig(cfg);
+  document.getElementById("overlay-confess").classList.remove("show");
+  ovCheats.classList.remove("show");
+};
+document.getElementById("confess-no").onclick = ()=>{
+  cfg.profiles = cheatsSnapshot;
+  document.getElementById("overlay-confess").classList.remove("show");
+  showToast(L("confess_rejected"));
+  renderCheatsPanel();
+};
+document.getElementById("praise-ok").onclick = ()=>{
+  document.getElementById("overlay-praise").classList.remove("show");
+  showToast(L("praise_toast"));
+};
+
+// close overlays by clicking backdrop
+[ovSettings, ovCheats, document.getElementById("overlay-confess"), document.getElementById("overlay-praise")]
+  .forEach(ov=> ov.addEventListener("click", (e)=>{ if(e.target===ov && ov!==ovSettings && ov!==ovCheats) return; }));
+
+window.addEventListener("resize", ()=>{ layoutBoard(); renderTiles(); });
+
+// ---------------------------------------------------------------------------
+// Boot
+// ---------------------------------------------------------------------------
+applyI18n();
+layoutBoard();
+newGame();
+updateHUD();
+checkForUpdate();
+
+})();
+</script>
+</body>
+</html>
