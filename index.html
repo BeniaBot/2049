@@ -228,8 +228,10 @@
 (function(){
 "use strict";
 
-const APP_VERSION = "0.12.0";
-const GITHUB_REPO = "BeniaBot/2049"; // owner/repo whose releases we check against
+const GITHUB_REPO   = "BeniaBot/2049"; // owner/repo whose releases we check against
+const VERSION_BRANCH = "main";         // branch to read 2049.py from (falls back to master)
+const VERSION_FILE    = "2049.py";     // source file containing the APP_VERSION line
+let APP_VERSION = null;                // filled in live from 2049.py, see fetchLiveVersion()
 
 // ---------------------------------------------------------------------------
 // Localization
@@ -837,7 +839,7 @@ function applyI18n(){
     if(STRINGS[LANG][key] !== undefined) el.textContent = STRINGS[LANG][key];
   });
   document.getElementById("link-github").textContent = L("visit_github");
-  document.getElementById("version-line").textContent = `${L("version_lbl")} ${APP_VERSION}`;
+  document.getElementById("version-line").textContent = `${L("version_lbl")} ${APP_VERSION || "…"}`;
   renderCheatsPanel();
 }
 
@@ -905,14 +907,34 @@ function setUpdateStatus(state, tag){
   else if(state==="available"){ dot.style.background="var(--accent)"; txt.textContent = `${L("update_avail")} ${tag||""}`; }
   else { dot.style.background="#bbb"; txt.textContent = "?"; }
 }
+// Reads APP_VERSION straight out of 2049.py in the source repo, live, on
+// every load - so this web page never needs a manual version bump again.
+// Tries VERSION_BRANCH first, falls back to the other common default name.
+async function fetchLiveVersion(){
+  const branches = [VERSION_BRANCH, VERSION_BRANCH === "main" ? "master" : "main"];
+  for(const branch of branches){
+    try{
+      const url = `https://raw.githubusercontent.com/${GITHUB_REPO}/${branch}/${VERSION_FILE}?_=${Date.now()}`;
+      const res = await fetch(url, {cache:"no-store"});
+      if(!res.ok) continue;
+      const src = await res.text();
+      const m = src.match(/APP_VERSION\s*=\s*["']([^"']+)["']/);
+      if(m) return m[1];
+    }catch(e){ /* try next branch */ }
+  }
+  return null;
+}
+
 async function checkForUpdate(){
   setUpdateStatus("checking");
   try{
+    APP_VERSION = await fetchLiveVersion();
+    document.getElementById("version-line").textContent = `${L("version_lbl")} ${APP_VERSION || "?"}`;
     const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {cache:"no-store"});
     if(!res.ok) throw new Error("no releases");
     const data = await res.json();
     const tag = (data.tag_name||"").replace(/^v/i,"");
-    if(tag && tag !== APP_VERSION) setUpdateStatus("available", data.tag_name);
+    if(tag && APP_VERSION && tag !== APP_VERSION) setUpdateStatus("available", data.tag_name);
     else setUpdateStatus("uptodate");
   }catch(e){
     setUpdateStatus("uptodate");
