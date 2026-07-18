@@ -15,7 +15,7 @@ import copy
 import math
 
 APP_NAME    = "2049"
-APP_VERSION = "0.13.0"
+APP_VERSION = "0.12.0"
 GITHUB_REPO = "BeniaBot/2049"   # owner/repo for auto-update checks
 
 # Optional RTL shaping for Hebrew. Falls back gracefully if unavailable.
@@ -156,11 +156,6 @@ STRINGS = {
         "tip_stuck":"\u05d9\u05e9 \u05d0\u05e8\u05d9\u05d7 \u05e0\u05de\u05d5\u05da \u05ea\u05e7\u05d5\u05e2 \u2013 \u05e0\u05e1\u05d4 \u05dc\u05e9\u05d7\u05e8\u05e8 \u05d0\u05d5\u05ea\u05d5",
         "tip_full":"\u05d4\u05dc\u05d5\u05d7 \u05de\u05ea\u05de\u05dc\u05d0! \u05de\u05d6\u05d2 \u05d0\u05e8\u05d9\u05d7\u05d9\u05dd \u05d1\u05d3\u05d7\u05d9\u05e4\u05d5\u05ea",
         "tip_corner":"\u05e9\u05de\u05d5\u05e8 \u05d0\u05ea \u05d4\u05d0\u05e8\u05d9\u05d7 \u05d4\u05d2\u05d1\u05d5\u05d4 \u05d1\u05e4\u05d9\u05e0\u05d4",
-        "tip_lost_corner":"\u05d4\u05d0\u05e8\u05d9\u05d7 \u05d4\u05d2\u05d1\u05d5\u05d4 \u05d9\u05e6\u05d0 \u05de\u05d4\u05e4\u05d9\u05e0\u05d4 \u2013 \u05d4\u05d7\u05d6\u05e8 \u05d0\u05d5\u05ea\u05d5!",
-        "tip_good_corner":"\u05d9\u05d5\u05e4\u05d9! \u05d4\u05d7\u05d6\u05e8\u05ea \u05d0\u05ea \u05d4\u05d2\u05d1\u05d5\u05d4 \u05dc\u05e4\u05d9\u05e0\u05d4",
-        "tip_good_clear":"\u05d9\u05e4\u05d4 \u05de\u05d0\u05d5\u05d3! \u05e9\u05d7\u05e8\u05e8\u05ea \u05d0\u05ea \u05d4\u05dc\u05d5\u05d7",
-        "tip_good_merge":"\u05de\u05e6\u05d5\u05d9\u05df! \u05de\u05d9\u05d6\u05d5\u05d2 \u05d2\u05d3\u05d5\u05dc",
-        "tip_good_space":"\u05d9\u05e4\u05d4! \u05e4\u05d9\u05e0\u05d9\u05ea \u05d4\u05e8\u05d1\u05d4 \u05de\u05e7\u05d5\u05dd",
         "infinite":"\u05d0\u05d9\u05e0\u05e1\u05d5\u05e4\u05d9", "target":"\u05e9\u05d1\u05d9\u05e8\u05ea \u05e9\u05d9\u05d0",
         "preferences":"\u05d4\u05e2\u05d3\u05e4\u05d5\u05ea",
         "prefs_hint":"\u05d4\u05d2\u05d3\u05e8\u05d5\u05ea \u05de\u05ea\u05e7\u05d3\u05de\u05d5\u05ea",
@@ -245,11 +240,6 @@ STRINGS = {
         "tip_stuck":"A low tile is stuck - try to free it",
         "tip_full":"Board is filling up! Merge tiles urgently",
         "tip_corner":"Keep your highest tile in a corner",
-        "tip_lost_corner":"Your highest tile left the corner - bring it back!",
-        "tip_good_corner":"Nice! You got the highest back to a corner",
-        "tip_good_clear":"Great! You freed up the board",
-        "tip_good_merge":"Excellent! Big merge",
-        "tip_good_space":"Nice! You cleared lots of space",
         "preferences":"Preferences", "prefs_hint":"Advanced settings", "prefs_title":"Refuge of Cheats & Crooks",
         "prefs_sub":"Where everyone who isn't good enough on their own gathers",
         "persist_cheats":"Keep cheats between sessions",
@@ -314,8 +304,26 @@ RESERVED_KEYS = {pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN,
                  pygame.K_a, pygame.K_w, pygame.K_s, pygame.K_d,
                  pygame.K_ESCAPE}
 
+# Modifier keys: these are accumulated during capture instead of finalizing
+# the binding immediately, so combos like Ctrl+1 can be recorded.
+MODIFIER_KEYS = {pygame.K_LCTRL, pygame.K_RCTRL,
+                 pygame.K_LSHIFT, pygame.K_RSHIFT,
+                 pygame.K_LALT, pygame.K_RALT}
+for _mod_name in ("K_LMETA","K_RMETA","K_LGUI","K_RGUI"):
+    if hasattr(pygame, _mod_name):
+        MODIFIER_KEYS.add(getattr(pygame, _mod_name))
+
+# Display/sort order for modifiers within a combo (lower = shown first).
+_MOD_ORDER = {}
+for _i, _pair in enumerate([
+        ("K_LCTRL","K_RCTRL"), ("K_LSHIFT","K_RSHIFT"),
+        ("K_LALT","K_RALT"), ("K_LMETA","K_RMETA"), ("K_LGUI","K_RGUI")]):
+    for _name in _pair:
+        if hasattr(pygame, _name):
+            _MOD_ORDER[getattr(pygame, _name)] = _i
+
 def key_display_name(code):
-    """Human-readable label for a pygame key code (or None)."""
+    """Human-readable label for a single pygame key code (or None)."""
     if code is None:
         return None
     try:
@@ -331,6 +339,25 @@ def key_display_name(code):
         "space":"Space", "return":"Enter", "tab":"Tab",
     }
     return pretty.get(name, name.upper() if len(name)==1 else name.title())
+
+def _combo_tuple(v):
+    """Normalize a stored binding (int, list, or tuple) to a tuple of codes."""
+    if isinstance(v, int):
+        return (v,)
+    if isinstance(v, (list, tuple)) and v:
+        return tuple(v)
+    return None
+
+def binding_display_name(v):
+    """Human-readable label for a binding, which may be a single key or a combo."""
+    combo = _combo_tuple(v)
+    if not combo:
+        return None
+    parts = [key_display_name(k) for k in combo]
+    parts = [p for p in parts if p]
+    if not parts:
+        return None
+    return "+".join(parts)
 
 def default_config():
     return {
@@ -368,6 +395,8 @@ def _migrate_map(m):
                 out[action] = code
         elif isinstance(val, int):
             out[action] = val
+        elif isinstance(val, list) and val and all(isinstance(x, int) for x in val):
+            out[action] = val if len(val) > 1 else val[0]
     return out
 
 def load_config():
@@ -493,25 +522,23 @@ class Board:
         return max(max(row) for row in self.grid)
 
     def _stuck_score(self, r, c):
-        """How 'stuck' is the tile at (r,c)? Higher = more stuck; None if not.
-        A tile counts as stuck only when it is genuinely trapped:
-          - it is a LOW tile (<= a quarter of the board's max, so 2/4 amid big
-            tiles) - high tiles are never 'stuck' in a useful sense,
-          - it has NO orthogonal neighbor of equal value (can't merge now),
-          - it has NO empty orthogonal neighbor (can't slide sideways),
-          - it cannot slide to an empty cell along its own row OR column
-            (nothing to move toward), AND
-          - all its neighbors are strictly larger (it can't absorb them)."""
+        """How 'stuck' is the tile at (r,c)? Higher = more stuck.
+        Returns None if the tile isn't stuck at all.
+        A tile is stuck when:
+          - it has NO orthogonal neighbor of equal value (can't merge), AND
+          - every orthogonal neighbor cell is occupied (can't slide into a gap
+            beside it), AND
+          - all those neighbors are strictly larger (it can't absorb them).
+        We also require it to be a genuinely low tile relative to the board,
+        and weight edge/corner tiles as less stuck (they're easier to deal
+        with) so the cheat targets the truly trapped ones first."""
         n = self.size
         v = self.grid[r][c]
         if v == 0:
             return None
-        board_max = self.max_tile() or v
-        # only low tiles relative to the board are meaningfully "stuck"
-        if v * 4 > board_max:
-            return None
         neigh_vals = []
         occupied = 0; total = 0
+        has_equal = False
         for dr, dc in ((1,0),(-1,0),(0,1),(0,-1)):
             rr, cc = r+dr, c+dc
             if 0 <= rr < n and 0 <= cc < n:
@@ -521,22 +548,18 @@ class Board:
                     occupied += 1
                     neigh_vals.append(nv)
                     if nv == v:
-                        return None          # can merge -> not stuck
+                        has_equal = True
+        if has_equal:
+            return None                     # can merge -> not stuck
         if occupied < total:
-            return None                      # empty neighbor -> can move
+            return None                     # has an empty neighbor -> can move
         if not neigh_vals or not all(x > v for x in neigh_vals):
-            return None
-        # can it slide toward any empty cell in its row or column? if so, the
-        # tile isn't really trapped - a move in that direction shifts it.
-        for cc in range(n):
-            if cc != c and self.grid[r][cc] == 0:
-                return None                  # empty cell in same row
-        for rr in range(n):
-            if rr != r and self.grid[rr][c] == 0:
-                return None                  # empty cell in same column
-        # genuinely trapped. score by how low + how boxed + how central.
-        lowness = board_max / v
-        surround = min(neigh_vals) / v
+            return None                     # can still grow/merge somehow
+        # genuinely stuck. Score by how trapped + how low it is.
+        board_max = self.max_tile() or v
+        lowness = board_max / v             # small tile amid big ones = worse
+        surround = min(neigh_vals) / v      # neighbors much bigger = worse
+        # interior tiles are more stuck than edge/corner (fewer escape routes)
         edge = (r == 0 or r == n-1) + (c == 0 or c == n-1)
         centrality = 1.0 + (0 if edge >= 2 else (0.5 if edge == 1 else 1.0))
         return lowness * surround * centrality
@@ -735,6 +758,7 @@ class Game:
         self.pop_tiles = {}; self.pending_merges = []
         self.flash = None
         self.capturing_action = None   # preferences: action awaiting a key press
+        self.capture_mods = set()      # modifier keys held so far during capture
         self.cheat_dirty = False       # unsaved cheat changes in this session
         self.confessing = False        # showing the confession dialog
         self.praising = False          # showing the praise dialog (quit cheating)
@@ -745,10 +769,6 @@ class Game:
         self._tip_now = None           # (text, timer) current on-screen tip
         self._tip_cooldown = 0.0       # seconds until next tip may show
         self._tip_index = 0
-        self._prev_corner_ok = None    # was max tile in a corner last move
-        self._prev_stuck = None        # was there a stuck tile last move
-        self._prev_max = 0             # max tile last move (for merge praise)
-        self._prev_empties = None      # empty count last move (for space praise)
         self._confirm = None           # (question, action) pending confirmation
         self.update_status = "checking"
         self._start_update_check()
@@ -884,9 +904,29 @@ class Game:
     def key_for_action(self, a):
         v = self.profile()["map"].get(a)
         return v if isinstance(v, int) else None
+    def combo_for_action(self, a):
+        """Full binding (single key or modifier combo) for an action, as a tuple."""
+        return _combo_tuple(self.profile()["map"].get(a))
+    def is_combo_held(self, a):
+        combo = self.combo_for_action(a)
+        if not combo:
+            return False
+        pressed = pygame.key.get_pressed()
+        return all(pressed[k] for k in combo)
     def taps_for_key(self, kc):
-        return [a for a,code in self.profile()["map"].items()
-                if a in TAP_ACTIONS and code==kc and kc is not None]
+        """Tap actions whose binding includes kc, and whose full combo is
+        currently held (so Ctrl+1 only fires once Ctrl is also down)."""
+        pressed = pygame.key.get_pressed()
+        out = []
+        for a, val in self.profile()["map"].items():
+            if a not in TAP_ACTIONS:
+                continue
+            combo = _combo_tuple(val)
+            if not combo or kc not in combo:
+                continue
+            if all(pressed[k] for k in combo):
+                out.append(a)
+        return out
 
     def new_game(self):
         self.board = Board(self.cfg["grid_size"])
@@ -895,8 +935,6 @@ class Game:
         self.anim_tiles = []; self.animating = False; self.pending_spawn = None
         self.pop_tiles = {}
         self.cheat_used_this_game = False   # fresh game, clean slate
-        self._prev_corner_ok = None; self._prev_stuck = None
-        self._prev_max = 0; self._prev_empties = None
         if s1: self.pop_tiles[(s1[0],s1[1])] = 1.0
         if s2: self.pop_tiles[(s2[0],s2[1])] = 1.0
     def update_highscore(self):
@@ -910,14 +948,10 @@ class Game:
             self.cfg["highscore"] = self.board.score; save_config(self.cfg)
 
     def held_spawn_params(self):
-        pressed = pygame.key.get_pressed()
         fv, pe = None, False
-        k2 = self.key_for_action("force_2")
-        if k2 and pressed[k2]: fv = 2
-        k4 = self.key_for_action("force_4")
-        if k4 and pressed[k4]: fv = 4
-        ke = self.key_for_action("spawn_corner")
-        if ke and pressed[ke]: pe = True
+        if self.is_combo_held("force_2"): fv = 2
+        if self.is_combo_held("force_4"): fv = 4
+        if self.is_combo_held("spawn_corner"): pe = True
         if fv is not None or pe:
             self.cheat_used_this_game = True   # taint the score
         return fv, pe
@@ -962,8 +996,6 @@ class Game:
             self.play_sound("win")
             if self.cfg.get("infinite", True):
                 self.keep_going = True  # auto-continue in infinite mode
-        # fire responsive tips based on what just changed on the board
-        self._check_tip_events()
 
     def _pick_tip(self):
         """Pick the single most relevant tip for the CURRENT board, in priority
@@ -1052,64 +1084,7 @@ class Game:
         if any(b._stuck_score(r, c) is not None
                for r in range(n) for c in range(n)):
             return L("tip_stuck")
-        if not self._max_in_corner() and b.max_tile() >= 64:
-            return L("tip_lost_corner")
         return None
-
-    def _max_in_corner(self):
-        b = self.board; n = b.size
-        mx = b.max_tile()
-        corners = [b.grid[0][0], b.grid[0][n-1], b.grid[n-1][0], b.grid[n-1][n-1]]
-        return mx in corners
-
-    def _has_stuck(self):
-        b = self.board; n = b.size
-        return any(b._stuck_score(r, c) is not None
-                   for r in range(n) for c in range(n))
-
-    def _show_tip(self, text, secs=4.0):
-        if self.cfg.get("show_tips", False):
-            self._tip_now = [text, secs]
-
-    def _check_tip_events(self):
-        """Called right after a move settles. Fires immediate tips on state
-        TRANSITIONS - both warnings (corner lost, tile stuck) and praise
-        (corner regained, board freed, big merge). This is what makes tips
-        feel responsive and fair instead of delayed/random."""
-        if not self.cfg.get("show_tips", False):
-            return
-        L = self.L; b = self.board
-        corner_ok = self._max_in_corner()
-        stuck = self._has_stuck()
-        mx = b.max_tile()
-        empties = len(b.empty_cells())
-
-        # praise: got the highest back into a corner
-        if self._prev_corner_ok is False and corner_ok and mx >= 64:
-            self._show_tip(L("tip_good_corner")); self._save_tip_state(corner_ok, stuck, mx, empties); return
-        # warning: highest just left the corner
-        if self._prev_corner_ok is True and not corner_ok and mx >= 64:
-            self._show_tip(L("tip_lost_corner")); self._save_tip_state(corner_ok, stuck, mx, empties); return
-        # praise: cleared a previously stuck tile
-        if self._prev_stuck is True and not stuck:
-            self._show_tip(L("tip_good_clear")); self._save_tip_state(corner_ok, stuck, mx, empties); return
-        # warning: a tile just became stuck
-        if self._prev_stuck is False and stuck:
-            self._show_tip(L("tip_stuck")); self._save_tip_state(corner_ok, stuck, mx, empties); return
-        # praise: reached a new higher max tile (big merge)
-        if self._prev_max and mx > self._prev_max and mx >= 128:
-            self._show_tip(L("tip_good_merge")); self._save_tip_state(corner_ok, stuck, mx, empties); return
-        # praise: freed a lot of space at once (several merges)
-        if self._prev_empties is not None and empties - self._prev_empties >= 3:
-            self._show_tip(L("tip_good_space")); self._save_tip_state(corner_ok, stuck, mx, empties); return
-
-        self._save_tip_state(corner_ok, stuck, mx, empties)
-
-    def _save_tip_state(self, corner_ok, stuck, mx, empties):
-        self._prev_corner_ok = corner_ok
-        self._prev_stuck = stuck
-        self._prev_max = mx
-        self._prev_empties = empties
 
     def do_tap_action(self, action):
         if self.animating: return
@@ -1581,17 +1556,6 @@ class Game:
         if self._confirm:
             self._draw_confirm()
 
-    def _clip_text(self, text, font, max_w_logical, color):
-        """Render text truncated with an ellipsis so it fits max_w_logical
-        (logical px). Returns a Surface."""
-        if font.size(text)[0]/self.SS <= max_w_logical:
-            return font.render(self.shape(text), True, color)
-        ell = "\u2026"
-        s = text
-        while s and font.size(s + ell)[0]/self.SS > max_w_logical:
-            s = s[:-1]
-        return font.render(self.shape((s + ell) if s else ell), True, color)
-
     def _pref_checkbox(self, y, label, on, rtl):
         """Draw a compact checkbox row; returns the clickable box Rect."""
         row = pygame.Rect(24, y, self.W-48, 38)
@@ -1665,44 +1629,40 @@ class Game:
             desc = acts[action]
             detail = details.get(action, "")
             tag = L("hold") if action in HOLD_ACTIONS else L("tap")
-            tagcol = ACCENT if action in HOLD_ACTIONS else (110, 155, 110)
+            tagcol = ACCENT if action in HOLD_ACTIONS else (120, 160, 120)
             code = self.profile()["map"].get(action)
             listening = (self.capturing_action == action)
             if listening:
-                cur_disp = L("press_key")
+                held_mods = [key_display_name(k) for k in
+                             sorted(self.capture_mods, key=lambda k: _MOD_ORDER.get(k, 9))]
+                cur_disp = "+".join(held_mods + [L("press_key")]) if held_mods else L("press_key")
             else:
-                nm = key_display_name(code) if isinstance(code, int) else None
+                nm = binding_display_name(code)
                 cur_disp = nm if nm else L("none")
-            has_key = isinstance(code, int)
-            kbw = 118
-            keybox = pygame.Rect(0, y+(row_h-34)//2, kbw, 34)
-            # the text column must never run under the key box
-            text_pad = 16
-            title_y = y + 9
-            detail_y = y + 31
-            # available width for the text column (between edge and key box)
-            avail = self.W - 40 - kbw - 24 - text_pad
+            has_key = code is not None
+            kbw = 150
+            keybox = pygame.Rect(0, y+(row_h-36)//2, kbw, 36)
+            # text column start (opposite the key box)
+            title_y = y + 10
+            detail_y = y + 32
+            tag_y = y + row_h - 22
             if rtl:
-                keybox.x = 34
-                text_right = self.W - 40
-                # title
+                # title + tag on first line (right), detail below
                 tt = self.f_small.render(self.shape(desc), True, TEXT_DARK)
-                self.screen.blit(tt, (text_right-tt.get_width()/self.SS, title_y))
-                # tag pill just left of the title
+                self.screen.blit(tt, (self.W-40-tt.get_width()/self.SS, title_y))
+                dt = self.f_tiny.render(self.shape(detail), True, BOARD_BG)
+                self.screen.blit(dt, (self.W-40-dt.get_width()/self.SS, detail_y))
                 tg = self.f_tiny.render(self.shape(tag), True, tagcol)
-                tgx = text_right - tt.get_width()/self.SS - 10 - tg.get_width()/self.SS
-                self.screen.blit(tg, (tgx, title_y+2))
-                # detail (clipped to avail width)
-                dsurf = self._clip_text(detail, self.f_tiny, avail, BOARD_BG)
-                self.screen.blit(dsurf, (text_right-dsurf.get_width()/self.SS, detail_y))
+                self.screen.blit(tg, (self.W-40-tg.get_width()/self.SS, tag_y))
+                keybox.x = 40
             else:
-                keybox.x = self.W-40-kbw
                 tt = self.f_small.render(self.shape(desc), True, TEXT_DARK)
                 self.screen.blit(tt, (40, title_y))
+                dt = self.f_tiny.render(self.shape(detail), True, BOARD_BG)
+                self.screen.blit(dt, (40, detail_y))
                 tg = self.f_tiny.render(self.shape(tag), True, tagcol)
-                self.screen.blit(tg, (40+tt.get_width()/self.SS+10, title_y+2))
-                dsurf = self._clip_text(detail, self.f_tiny, avail, BOARD_BG)
-                self.screen.blit(dsurf, (40, detail_y))
+                self.screen.blit(tg, (40, tag_y))
+                keybox.x = self.W-40-kbw
             box_col = ACCENT if listening else EMPTY_CELL
             self.screen.rect(box_col, keybox, border_radius=8)
             txt_col = (TEXT_LIGHT if listening else
@@ -1778,13 +1738,20 @@ class Game:
         self.pr_ok.draw(self.screen)
 
     def start_key_capture(self, action):
-        """Enter listening mode: the next key pressed becomes this action's key."""
+        """Enter listening mode: the next key(s) pressed become this action's binding.
+        Modifier keys (Ctrl/Shift/Alt) are held in the combo and don't finalize it -
+        capture ends on the first non-modifier key, e.g. holding Ctrl then pressing 1
+        binds Ctrl+1."""
         self.capturing_action = action
+        self.capture_mods = set()
 
     def assign_captured_key(self, keycode):
-        """Assign a captured key to the action currently being configured."""
+        """Assign the captured key (plus any modifiers held during capture) to the
+        action currently being configured."""
         action = self.capturing_action
+        mods = self.capture_mods
         self.capturing_action = None
+        self.capture_mods = set()
         if action is None:
             return
         if keycode == pygame.K_ESCAPE:
@@ -1792,13 +1759,16 @@ class Game:
         if keycode == pygame.K_BACKSPACE or keycode == pygame.K_DELETE:
             self.profile()["map"].pop(action, None)  # clear binding
             self.cheat_dirty = True; return
-        if keycode in RESERVED_KEYS:
+        combo_keys = sorted(mods, key=lambda k: _MOD_ORDER.get(k, 9)) + [keycode]
+        if any(k in RESERVED_KEYS for k in combo_keys):
             return  # can't bind gameplay keys
-        # remove this key from any other action in this profile (no duplicates)
+        combo_set = set(combo_keys)
+        # remove this exact combo from any other action in this profile (no duplicates)
         for a in list(self.profile()["map"].keys()):
-            if self.profile()["map"].get(a) == keycode:
+            existing = _combo_tuple(self.profile()["map"].get(a))
+            if existing is not None and set(existing) == combo_set:
                 self.profile()["map"].pop(a, None)
-        self.profile()["map"][action] = keycode
+        self.profile()["map"][action] = combo_keys[0] if len(combo_keys) == 1 else combo_keys
         # NOTE: not saved to disk yet - requires "confession" on leaving.
         self.cheat_dirty = True
 
@@ -2021,13 +1991,18 @@ class Game:
                 if hasattr(self,"cf_no") and self.cf_no.hit(e.pos):
                     self.confess_no(); return
             return
-        # If we're waiting for a key, capture the next keypress
+        # If we're waiting for a key, capture the next keypress (accumulating
+        # any modifiers first so combos like Ctrl+1 can be recorded)
         if self.capturing_action is not None:
             if e.type == pygame.KEYDOWN:
+                if e.key in MODIFIER_KEYS:
+                    self.capture_mods.add(e.key)
+                    return  # keep listening for the main key
                 self.assign_captured_key(e.key)
                 return
             if e.type == pygame.MOUSEBUTTONDOWN:
                 self.capturing_action = None
+                self.capture_mods = set()
         if e.type==pygame.MOUSEBUTTONDOWN and e.button==1:
             if self.p_back.hit(e.pos): self.leave_preferences(); return
             if self.p_prev.hit(e.pos):
