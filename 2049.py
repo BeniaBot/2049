@@ -15,7 +15,7 @@ import copy
 import math
 
 APP_NAME    = "2049"
-APP_VERSION = "0.13.0"
+APP_VERSION = "0.14.0"
 GITHUB_REPO = "BeniaBot/2049"   # owner/repo for auto-update checks
 
 # Optional RTL shaping for Hebrew. Falls back gracefully if unavailable.
@@ -492,51 +492,79 @@ class Board:
     def max_tile(self):
         return max(max(row) for row in self.grid)
 
+    def _simulate(self, direction):
+        """Return a NEW grid (list of lists) after applying `direction`, without
+        touching this board. Used to test whether a tile can be freed."""
+        b = self.clone()
+        b.move(direction)
+        return b.grid
+
+    def _tile_can_merge_soon(self, r, c):
+        """True if the tile at (r,c) can merge now, become mergeable after a
+        single move, OR relocate toward open space (i.e. it isn't trapped)."""
+        n = self.size
+        v = self.grid[r][c]
+        if v == 0:
+            return True
+        # 1) direct: an equal orthogonal neighbour -> can merge immediately
+        for dr, dc in ((1,0),(-1,0),(0,1),(0,-1)):
+            rr, cc = r+dr, c+dc
+            if 0 <= rr < n and 0 <= cc < n and self.grid[rr][cc] == v:
+                return True
+        # 2) can the tile slide to a different cell under some move? if a move
+        #    relocates it (board still has room), it isn't trapped.
+        cur_v_count = sum(row.count(v) for row in self.grid)
+        for d in ("left", "right", "up", "down"):
+            g = self._simulate(d)
+            if g == self.grid:
+                continue  # this move does nothing
+            new_v_count = sum(row.count(v) for row in g)
+            if new_v_count < cur_v_count:
+                return True  # a v tile merged away -> progress possible
+            # this tile no longer at (r,c) after the move -> it relocated
+            if g[r][c] != v:
+                return True
+            # a future merge set up: two equal v tiles now adjacent
+            for rr in range(n):
+                for cc in range(n):
+                    if g[rr][cc] != v:
+                        continue
+                    for dr, dc in ((0,1),(1,0)):
+                        r2, c2 = rr+dr, cc+dc
+                        if r2 < n and c2 < n and g[r2][c2] == v:
+                            return True
+        return False
+
     def _stuck_score(self, r, c):
         """How 'stuck' is the tile at (r,c)? Higher = more stuck; None if not.
-        A tile counts as stuck only when it is genuinely trapped:
-          - it is a LOW tile (<= a quarter of the board's max, so 2/4 amid big
-            tiles) - high tiles are never 'stuck' in a useful sense,
-          - it has NO orthogonal neighbor of equal value (can't merge now),
-          - it has NO empty orthogonal neighbor (can't slide sideways),
-          - it cannot slide to an empty cell along its own row OR column
-            (nothing to move toward), AND
-          - all its neighbors are strictly larger (it can't absorb them)."""
+        A tile is stuck only when it's a LOW tile that genuinely cannot merge
+        now or after any single move (verified by simulation)."""
         n = self.size
         v = self.grid[r][c]
         if v == 0:
             return None
         board_max = self.max_tile() or v
-        # only low tiles relative to the board are meaningfully "stuck"
+        # only low tiles relative to the board are meaningfully 'stuck'
         if v * 4 > board_max:
             return None
-        neigh_vals = []
-        occupied = 0; total = 0
+        # must have no empty orthogonal neighbour (otherwise it can just slide)
         for dr, dc in ((1,0),(-1,0),(0,1),(0,-1)):
             rr, cc = r+dr, c+dc
-            if 0 <= rr < n and 0 <= cc < n:
-                total += 1
-                nv = self.grid[rr][cc]
-                if nv != 0:
-                    occupied += 1
-                    neigh_vals.append(nv)
-                    if nv == v:
-                        return None          # can merge -> not stuck
-        if occupied < total:
-            return None                      # empty neighbor -> can move
-        if not neigh_vals or not all(x > v for x in neigh_vals):
+            if 0 <= rr < n and 0 <= cc < n and self.grid[rr][cc] == 0:
+                return None
+        # the real test: can it merge now or soon? if yes -> not stuck
+        if self._tile_can_merge_soon(r, c):
             return None
-        # can it slide toward any empty cell in its row or column? if so, the
-        # tile isn't really trapped - a move in that direction shifts it.
-        for cc in range(n):
-            if cc != c and self.grid[r][cc] == 0:
-                return None                  # empty cell in same row
-        for rr in range(n):
-            if rr != r and self.grid[rr][c] == 0:
-                return None                  # empty cell in same column
-        # genuinely trapped. score by how low + how boxed + how central.
+        # genuinely trapped: score by lowness, how boxed, and centrality
+        neigh = []
+        for dr, dc in ((1,0),(-1,0),(0,1),(0,-1)):
+            rr, cc = r+dr, c+dc
+            if 0 <= rr < n and 0 <= cc < n and self.grid[rr][cc] != 0:
+                neigh.append(self.grid[rr][cc])
+        if not neigh:
+            return None
         lowness = board_max / v
-        surround = min(neigh_vals) / v
+        surround = min(neigh) / v
         edge = (r == 0 or r == n-1) + (c == 0 or c == n-1)
         centrality = 1.0 + (0 if edge >= 2 else (0.5 if edge == 1 else 1.0))
         return lowness * surround * centrality

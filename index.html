@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="he">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>2049</title>
+<style>
+  :root{
+    --bg:#faf8ef; --board:#bbada0; --empty:#cdc1b4; --dark:#776e65;
+    --light:#f9f6f2; --btn:#8f7a66; --accent:#ed7c42; --card:#eee4d6;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:var(--bg);font-family:'Segoe UI',
+    Arial,'Helvetica Neue',sans-serif;color:var(--dark);
+    overscroll-behavior:none;touch-action:manipulation;}
+  body[dir="rtl"]{direction:rtl;}
+  #app{max-width:560px;margin:0 auto;padding:12px;position:relative;}
+  .hidden{display:none !important;}
+  .row{display:flex;align-items:center;}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:8px;}
+
+  /* ---- header ---- */
+  .top{display:flex;justify-content:space-between;align-items:flex-start;
+    margin-bottom:10px;}
+  .title{font-size:52px;font-weight:800;color:var(--dark);line-height:1;}
+  .scores{display:flex;gap:8px;}
+  .scorebox{background:var(--board);border-radius:8px;padding:6px 14px;
+    text-align:center;color:var(--light);min-width:80px;}
+  .scorebox .lbl{font-size:11px;letter-spacing:1px;text-transform:uppercase;
+    color:#eee4da;}
+  .scorebox .val{font-size:22px;font-weight:800;}
+
+  .toolbar{display:flex;justify-content:space-between;align-items:center;
+    margin-bottom:10px;}
+  .btn{background:var(--btn);color:var(--light);padding:9px 16px;
+    font-size:15px;font-weight:700;}
+  .selwrap{display:flex;align-items:center;gap:6px;}
+  .selbox{background:var(--board);color:var(--light);border-radius:8px;
+    padding:6px 10px;font-weight:700;display:flex;align-items:center;gap:8px;}
+  .arrows{display:flex;flex-direction:column;}
+  .arrows button{background:none;color:var(--light);font-size:9px;line-height:1;
+    padding:0 2px;}
+  .iconbtn{background:var(--board);color:var(--light);border-radius:8px;
+    width:38px;height:38px;font-size:18px;display:flex;align-items:center;
+    justify-content:center;}
+
+  /* ---- board ---- */
+  #boardwrap{position:relative;direction:ltr;}
+  #board{background:var(--board);border-radius:10px;padding:12px;
+    position:relative;touch-action:none;direction:ltr;}
+  .grid-bg{display:grid;gap:12px;direction:ltr;}
+  .cell{background:var(--empty);border-radius:6px;}
+  #tiles{position:absolute;top:12px;left:12px;right:12px;bottom:12px;
+    direction:ltr;}
+  .tile{position:absolute;border-radius:6px;display:flex;align-items:center;
+    justify-content:center;font-weight:800;
+    transition:transform .12s ease, opacity .12s ease;}
+  .tile.pop{animation:pop .16s ease;}
+  @keyframes pop{0%{transform:scale(.6)}100%{transform:scale(1)}}
+  .tile.merged{animation:merge .16s ease;}
+  @keyframes merge{0%{transform:scale(1)}50%{transform:scale(1.18)}
+    100%{transform:scale(1)}}
+
+  /* overlay (game over / win) */
+  .overlay{position:absolute;inset:0;background:rgba(250,248,239,.72);
+    border-radius:10px;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;z-index:20;}
+  .overlay h2{font-size:40px;margin:0 0 6px;color:var(--dark);}
+  .overlay p{font-size:18px;margin:0 0 16px;color:var(--dark);}
+
+  /* bottom bar */
+  .bottombar{display:flex;justify-content:space-between;align-items:center;
+    margin-top:10px;color:var(--board);font-size:13px;}
+  .bottombar .icons{display:flex;gap:8px;}
+  .bottombar .bicon{background:var(--empty);border-radius:5px;width:34px;
+    height:26px;display:flex;align-items:center;justify-content:center;
+    font-size:14px;color:var(--dark);}
+  .tipbanner{background:#fae8cd;border-radius:10px;padding:7px 14px;
+    margin-top:8px;text-align:center;font-size:13px;color:var(--dark);
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    box-shadow:0 2px 6px rgba(80,60,40,.15);}
+  .tipbanner .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);
+    flex:none;}
+
+  /* mobile cheat buttons */
+  #cheatbar{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;
+    margin-top:10px;}
+  #cheatbar button{background:var(--card);color:var(--dark);padding:8px 10px;
+    font-size:12px;font-weight:700;border:2px solid transparent;}
+  #cheatbar button.armed{background:var(--accent);color:var(--light);}
+  #cheatbar button:active{background:var(--btn);color:var(--light);}
+
+  /* ---- settings / preferences screens ---- */
+  .screen{position:relative;}
+  .schead{background:var(--board);color:var(--light);border-radius:10px;
+    padding:14px 18px;display:flex;justify-content:space-between;
+    align-items:center;margin-bottom:14px;}
+  .schead .h{font-size:22px;font-weight:800;}
+  .scard{background:var(--card);border-radius:14px;padding:12px 16px;
+    margin-bottom:12px;display:flex;justify-content:space-between;
+    align-items:center;box-shadow:0 2px 5px rgba(80,60,40,.12);}
+  .scard .lbl{font-size:16px;font-weight:700;}
+  .opts{display:flex;gap:8px;}
+  .opt{background:var(--empty);color:var(--dark);padding:8px 14px;
+    font-weight:700;border-radius:8px;font-size:14px;}
+  .opt.sel{background:var(--accent);color:var(--light);}
+  .prefbtn{display:block;margin:18px auto 6px;background:var(--btn);
+    color:var(--light);padding:12px 22px;font-size:16px;font-weight:700;}
+  .prefhint{text-align:center;color:var(--board);font-size:12px;}
+  .resetrow{display:flex;gap:12px;margin:8px 0;}
+  .resetrow button{flex:1;background:var(--empty);color:var(--dark);
+    padding:10px;font-size:13px;font-weight:700;}
+  .aboutcard{background:#f5efe5;border-radius:18px;padding:16px;margin-top:8px;
+    box-shadow:0 2px 6px rgba(80,60,40,.12);}
+  .statuspill{border-radius:10px;padding:10px 14px;display:flex;
+    align-items:center;justify-content:space-between;font-size:13px;
+    margin-bottom:12px;}
+  .statuspill .badge{width:22px;height:22px;border-radius:50%;color:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:13px;}
+  .ghbtn{display:block;width:100%;background:var(--btn);color:var(--light);
+    padding:11px;font-size:15px;font-weight:700;text-align:center;
+    text-decoration:none;border-radius:8px;}
+  .byline{text-align:center;font-size:12px;color:var(--board);margin-top:12px;}
+  .byline a{color:var(--accent);text-decoration:none;font-weight:700;}
+  .byline img{width:26px;height:26px;border-radius:50%;vertical-align:middle;
+    margin:0 6px;}
+  .ver{text-align:center;font-size:12px;color:var(--board);margin-top:10px;}
+
+  /* preferences (cheaters refuge) */
+  .subtitle{text-align:center;color:var(--board);font-size:12px;
+    margin-bottom:14px;}
+  .modesel{display:flex;align-items:center;gap:8px;margin-bottom:14px;}
+  .modesel .name{flex:1;background:var(--empty);border-radius:10px;padding:10px;
+    text-align:center;font-weight:700;}
+  .modesel button{background:var(--btn);color:var(--light);width:42px;
+    height:40px;font-size:16px;font-weight:700;}
+  .checkrow{background:var(--card);border-radius:10px;padding:10px 14px;
+    display:flex;justify-content:space-between;align-items:center;
+    margin-bottom:8px;font-size:13px;}
+  .checkbox{width:22px;height:22px;border-radius:5px;background:var(--empty);
+    display:flex;align-items:center;justify-content:center;color:var(--light);
+    font-size:14px;}
+  .checkbox.on{background:var(--accent);}
+  .cheatrow{background:#f3ece1;border-radius:12px;padding:10px 14px;
+    margin-bottom:10px;display:flex;justify-content:space-between;
+    align-items:center;box-shadow:0 2px 4px rgba(80,60,40,.1);gap:10px;}
+  .cheatrow .info{flex:1;min-width:0;}
+  .cheatrow .t{font-weight:700;font-size:15px;}
+  .cheatrow .t .tag{font-size:11px;font-weight:700;margin-inline-start:8px;}
+  .cheatrow .d{font-size:11px;color:var(--board);white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;}
+  .keybox{background:var(--empty);border-radius:8px;min-width:90px;
+    padding:8px 10px;text-align:center;font-size:13px;font-weight:700;
+    color:var(--dark);flex:none;}
+  .keybox.listening{background:var(--accent);color:var(--light);}
+  .keybox.empty{color:var(--board);}
+  .clicknote{text-align:center;color:var(--board);font-size:12px;margin-top:8px;}
+
+  /* dialogs */
+  .dim{position:fixed;inset:0;background:rgba(30,26,22,.7);z-index:100;
+    display:flex;align-items:center;justify-content:center;}
+  .dialog{background:var(--bg);border-radius:16px;padding:24px;max-width:420px;
+    width:88%;text-align:center;border-top:6px solid var(--accent);}
+  .dialog.green{border-top-color:#3caa6e;}
+  .dialog h3{margin:.2em 0;font-size:22px;}
+  .dialog .accent{color:var(--accent);font-weight:700;}
+  .dialog .green-check{width:44px;height:44px;border-radius:50%;
+    background:#3caa6e;color:#fff;display:flex;align-items:center;
+    justify-content:center;font-size:24px;margin:0 auto 10px;}
+  .dialog .btns{display:flex;gap:14px;justify-content:center;margin-top:18px;}
+  .dialog .btns button{padding:11px 26px;font-size:15px;font-weight:700;
+    border-radius:10px;}
+  .btn-accent{background:var(--accent);color:var(--light);}
+  .btn-btn{background:var(--btn);color:var(--light);}
+  .btn-green{background:#3caa6e;color:#fff;}
+
+  .toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);
+    background:var(--btn);color:var(--light);padding:12px 22px;
+    border-radius:10px;z-index:120;text-align:center;font-size:14px;
+    box-shadow:0 3px 10px rgba(0,0,0,.2);white-space:pre-line;}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+const STRINGS = {"he": {"score": "ניקוד", "best": "שיא", "new_game": "משחק חדש", "settings": "הגדרות", "menu": "תפריט", "play": "שחק", "quit": "יציאה", "back": "חזרה", "subtitle": "המהדורה המשוכללת", "you_win": "הגעת ל-2048!", "keep_going": "המשך  •  משחק חדש", "game_over": "המשחק נגמר", "press_new": "לחץ Enter למשחק חדש", "tips": "טיפ: השתמש ב-← ↑ → ↓ למשחק!", "grid_size": "גודל לוח", "language": "שפה", "game_mode": "מצב משחק", "assist_keys": "מקשי עזרה נסתרים", "click_cycle": "לחץ על תיבת מקש כדי להחליף", "press_key": "לחץ מקש...", "click_to_set": "לחץ על תיבה ואז על מקש במקלדת. Backspace לניקוי.", "hold": "החזק", "tap": "לחיצה", "none": "ללא", "hebrew": "עברית", "english": "English", "mode_infinite": "מצב אינסופי", "mode_target": "מצב שבירת שיא", "sound_on": "קול דלוק", "sound_off": "קול כבוי", "sound": "צלילים", "on": "דלוק", "off": "כבוי", "win_mode": "מצב ניצחון", "show_tips": "הצג עצות", "reset_settings": "אפס הגדרות", "reset_score": "אפס שיא", "reset_settings_q": "לאפס את כל ההגדרות לברירת המחדל?", "reset_score_q": "לאפס את השיא האישי?", "yes": "כן", "no": "לא", "done_reset": "אופס בהצלחה", "tips_list": ["שמור את האריח הגבוה בפינה ואל תזיז אותו", "נסה לשמור שורה אחת מלאה ומסודרת", "בנה שרשרת מספרים יורדת לאורך שורה", "הזז בעיקר לשני כיוונים קבועים", "אל תמלא את הלוח – השאר מקום לתמרון"], "tip_stuck": "יש אריח נמוך תקוע – נסה לשחרר אותו", "tip_full": "הלוח מתמלא! מזג אריחים בדחיפות", "tip_corner": "שמור את האריח הגבוה בפינה", "tip_lost_corner": "האריח הגבוה יצא מהפינה – החזר אותו!", "tip_good_corner": "יופי! החזרת את הגבוה לפינה", "tip_good_clear": "יפה מאוד! שחררת את הלוח", "tip_good_merge": "מצוין! מיזוג גדול", "tip_good_space": "יפה! פינית הרבה מקום", "infinite": "אינסופי", "target": "שבירת שיא", "preferences": "העדפות", "prefs_hint": "הגדרות מתקדמות", "prefs_title": "מקלט הרמאים והנוכלים", "prefs_sub": "כאן מתאספים כל אלו שלא מספיק טובים בזכות עצמם", "persist_cheats": "שמור רמאויות בין הפעלות", "count_best": "חשב רמאויות בשיא", "credit": "נוצר על ידי Claude • BeniaBot", "about": "אודות", "opened_by": "פותח על ידי", "up_to_date": "האפליקציה מעודכנת לגרסה האחרונה", "update_ready": "גרסה חדשה זמינה להורדה", "check_again": "בדוק שוב", "checking": "בודק...", "visit_github": "בקר בעמוד ה-GitHub", "download_update": "הורד גרסה חדשה", "version_lbl": "גרסה", "update_avail": "עדכון זמין!", "confess_title": "רגע אחד...", "confess_body": "כדי לשמור הגדרות רמאות, עליך להודות:", "confess_line": "\"אני מרמה כי אני לא מספיק טוב\"", "confess_yes": "אני מודה", "confess_no": "לעולם לא!", "confess_rejected": "אז שוב לאימונים. ההגדרות לא נשמרו.", "praise_title": "כל הכבוד!", "praise_body": "בחרת לבטל את הרמאות ולהתמודד כמו גבר!", "praise_body2": "זה מרשים. השינוי נשמר אוטומטית.", "praise_ok": "תודה!", "praise_toast": "יאאלה, לשחק 'על אמת'\nרק אל תתייאש מהר מדי!", "mode_names": ["מצב 1 - רגיל", "מצב 2 - שליטה ב-2/4", "מצב 3 - מנקה", "מצב 4 - ערכת מלאה"], "actions": {"force_2": "האריח הבא יהיה 2", "force_4": "האריח הבא יהיה 4", "spawn_corner": "אריח חדש בשוליים", "clean_stuck": "נקה אריח תקוע", "undo": "בטל מהלך"}, "action_detail": {"force_2": "החזק במהלך – האריח שיופיע יהיה 2 ולא 4 (שומר על לוח נקי)", "force_4": "החזק במהלך – האריח שיופיע יהיה 4 (צובר נקודות מהר)", "spawn_corner": "החזק במהלך – האריח החדש יופיע בשוליים ולא במרכז", "clean_stuck": "לחיצה – מעלים אריח נמוך שתקוע בין גבוהים", "undo": "לחיצה – מחזיר את הלוח לפני המהלך האחרון"}}, "en": {"score": "SCORE", "best": "BEST", "new_game": "New Game", "settings": "Settings", "menu": "Menu", "play": "Play", "quit": "Quit", "back": "Back", "subtitle": "enhanced edition", "you_win": "You reached 2048!", "keep_going": "Keep going  •  New game", "game_over": "Game over", "press_new": "Press Enter for new game", "tips": "Tips: use ← ↑ → ↓ to play!", "grid_size": "Grid size", "language": "Language", "game_mode": "Game mode", "assist_keys": "Hidden assist keys", "click_cycle": "Click a key box to cycle keys.", "press_key": "Press a key...", "click_to_set": "Click a box, then press any key. Backspace to clear.", "hold": "hold", "tap": "tap", "none": "None", "hebrew": "עברית", "english": "English", "mode_infinite": "Infinite mode", "mode_target": "Beat-best mode", "sound_on": "Sound on", "sound_off": "Sound off", "sound": "Sound", "on": "On", "off": "Off", "win_mode": "Win mode", "infinite": "Infinite", "target": "Beat best", "show_tips": "Show tips", "reset_settings": "Reset settings", "reset_score": "Reset best", "reset_settings_q": "Reset all settings to default?", "reset_score_q": "Reset your personal best?", "yes": "Yes", "no": "No", "done_reset": "Reset done", "tips_list": ["Keep your highest tile in a corner and don't move it", "Try to keep one full, ordered row", "Build a descending chain along a row", "Mostly swipe in just two fixed directions", "Don't fill the board - leave room to maneuver"], "tip_stuck": "A low tile is stuck - try to free it", "tip_full": "Board is filling up! Merge tiles urgently", "tip_corner": "Keep your highest tile in a corner", "tip_lost_corner": "Your highest tile left the corner - bring it back!", "tip_good_corner": "Nice! You got the highest back to a corner", "tip_good_clear": "Great! You freed up the board", "tip_good_merge": "Excellent! Big merge", "tip_good_space": "Nice! You cleared lots of space", "preferences": "Preferences", "prefs_hint": "Advanced settings", "prefs_title": "Refuge of Cheats & Crooks", "prefs_sub": "Where everyone who isn't good enough on their own gathers", "persist_cheats": "Keep cheats between sessions", "count_best": "Count cheats in best", "credit": "Made by Claude • BeniaBot", "about": "About", "opened_by": "Opened by", "up_to_date": "The app is up to date", "update_ready": "A new version is available", "check_again": "Check again", "checking": "Checking...", "visit_github": "Visit the GitHub page", "download_update": "Download new version", "version_lbl": "Version", "update_avail": "Update available!", "confess_title": "One moment...", "confess_body": "To save cheat settings, you must admit:", "confess_line": "\"I cheat because I'm not good enough\"", "confess_yes": "I admit it", "confess_no": "Never!", "confess_rejected": "Back to practice then. Settings not saved.", "praise_title": "Respect!", "praise_body": "You chose to drop the cheats and play like a champ!", "praise_body2": "That's impressive. Your change was saved automatically.", "praise_ok": "Thanks!", "praise_toast": "Go play 'for real'\nJust don't give up too fast!", "mode_names": ["Mode 1 - Classic", "Mode 2 - 2/4 Control", "Mode 3 - Cleaner", "Mode 4 - Full Kit"], "actions": {"force_2": "Next tile will be 2", "force_4": "Next tile will be 4", "spawn_corner": "New tile at the edge", "clean_stuck": "Clear a stuck tile", "undo": "Undo a move"}, "action_detail": {"force_2": "Hold during a move - new tile spawns as 2, not 4 (keeps board tidy)", "force_4": "Hold during a move - new tile spawns as 4 (scores faster)", "spawn_corner": "Hold during a move - new tile appears at the edge, not the middle", "clean_stuck": "Tap - removes a low tile trapped between higher ones", "undo": "Tap - restores the board to before your last move"}}};
+// ============================================================
+//  2049 - browser version. Same gameplay as the Python game.
+// ============================================================
+"use strict";
+
+const TILE_COLORS = {
+  2:"#eee4da",4:"#ede0c8",8:"#f2b179",16:"#f59563",32:"#f67c5f",
+  64:"#f65e3b",128:"#edcf72",256:"#edcc61",512:"#edc850",
+  1024:"#edc53f",2048:"#edc22e",4096:"#3c3a32",8192:"#3c3a32"
+};
+const tileColor = v => TILE_COLORS[v] || "#3c3a32";
+const tileText  = v => (v===2||v===4) ? "#776e65" : "#f9f6f2";
+const tileFont  = v => v<100?"32px":v<1000?"26px":"20px";
+
+const RESERVED = new Set(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight",
+  "w","a","s","d","W","A","S","D","Escape"," "]);
+const ACTIONS = ["force_2","force_4","spawn_corner","clean_stuck","undo"];
+const HOLD = new Set(["force_2","force_4","spawn_corner"]);
+
+// ---- config / persistence ----
+const CFG_KEY = "cfg2049";
+function defaultCfg(){
+  return {config_version:2, grid_size:4, language:"he", active_profile:0,
+    highscore:0, sound:true, infinite:true, show_tips:false,
+    persist_cheats:false, count_cheats_in_best:false,
+    profiles:[
+      {map:{}},
+      {map:{force_4:"Shift"}},
+      {map:{clean_stuck:"Shift", undo:"Control"}},
+      {map:{force_4:"Shift", clean_stuck:"c", undo:"z", spawn_corner:"Alt"}}
+    ]};
+}
+function loadCfg(){
+  let c = defaultCfg();
+  try{
+    const s = JSON.parse(localStorage.getItem(CFG_KEY));
+    if(s){ Object.assign(c, s);
+      if(!c.profiles || !c.profiles.length) c.profiles = defaultCfg().profiles; }
+  }catch(e){}
+  return c;
+}
+function saveCfg(c){ try{ localStorage.setItem(CFG_KEY, JSON.stringify(c)); }catch(e){} }
+
+// detect touch device -> show cheat buttons instead of keyboard
+const IS_TOUCH = ('ontouchstart' in window) ||
+  navigator.maxTouchPoints>0 || window.matchMedia("(pointer:coarse)").matches;
+
+// ============================================================
+//  Board logic (mirrors the Python Board)
+// ============================================================
+class Board{
+  constructor(size){ this.size=size; this.grid=Array.from({length:size},
+    ()=>Array(size).fill(0)); this.score=0; }
+  clone(){ const b=new Board(this.size);
+    b.grid=this.grid.map(r=>r.slice()); b.score=this.score; return b; }
+  emptyCells(){ const o=[]; for(let r=0;r<this.size;r++)
+    for(let c=0;c<this.size;c++) if(this.grid[r][c]===0) o.push([r,c]); return o; }
+  maxTile(){ let m=0; for(const row of this.grid) for(const v of row) if(v>m)m=v;
+    return m; }
+  spawn(forceValue=null, preferEdge=false){
+    let cells=this.emptyCells(); if(!cells.length) return null;
+    if(preferEdge){ const e=cells.filter(([r,c])=>r===0||r===this.size-1||
+      c===0||c===this.size-1); if(e.length) cells=e; }
+    const [r,c]=cells[Math.floor(Math.random()*cells.length)];
+    const val=forceValue?forceValue:(Math.random()<0.1?4:2);
+    this.grid[r][c]=val; return [r,c,val];
+  }
+  _lineMoves(line){
+    const entries=[]; for(let i=0;i<line.length;i++) if(line[i]!==0)
+      entries.push([line[i],i]);
+    const newLine=Array(line.length).fill(0); const moves=[]; let dest=0,i=0;
+    while(i<entries.length){
+      const [v,src]=entries[i];
+      if(i+1<entries.length && entries[i+1][0]===v){
+        newLine[dest]=v*2; moves.push([dest,[src,entries[i+1][1]],true,v*2]); i+=2;
+      }else{ newLine[dest]=v; moves.push([dest,[src],false,v]); i+=1; }
+      dest++;
+    }
+    return [newLine,moves];
+  }
+  move(direction){
+    const n=this.size; let changed=false, gain=0; const anims=[], merges=[];
+    if(direction==="left"||direction==="right"){
+      for(let r=0;r<n;r++){
+        const line=this.grid[r].slice();
+        const oriented = direction==="left"?line.slice():line.slice().reverse();
+        const [newLine,moves]=this._lineMoves(oriented);
+        const back = direction==="left"?(p=>p):(p=>n-1-p);
+        for(const [dest,srcs,merged,val] of moves){
+          for(const s of srcs) anims.push({from:[r,back(s)],to:[r,back(dest)],
+            value:oriented[s],merged,new_value:val});
+          if(merged){ gain+=val; merges.push([r,back(dest),val]); }
+        }
+        const final = direction==="left"?newLine:newLine.slice().reverse();
+        if(JSON.stringify(final)!==JSON.stringify(line)) changed=true;
+        this.grid[r]=final;
+      }
+    }else{
+      for(let c=0;c<n;c++){
+        const line=[]; for(let r=0;r<n;r++) line.push(this.grid[r][c]);
+        const oriented = direction==="up"?line.slice():line.slice().reverse();
+        const [newLine,moves]=this._lineMoves(oriented);
+        const back = direction==="up"?(p=>p):(p=>n-1-p);
+        for(const [dest,srcs,merged,val] of moves){
+          for(const s of srcs) anims.push({from:[back(s),c],to:[back(dest),c],
+            value:oriented[s],merged,new_value:val});
+          if(merged){ gain+=val; merges.push([back(dest),c,val]); }
+        }
+        const final = direction==="up"?newLine:newLine.slice().reverse();
+        const orig=[]; for(let r=0;r<n;r++) orig.push(this.grid[r][c]);
+        if(JSON.stringify(final)!==JSON.stringify(orig)) changed=true;
+        for(let r=0;r<n;r++) this.grid[r][c]=final[r];
+      }
+    }
+    if(changed) this.score+=gain;
+    return {changed,anims,merges};
+  }
+  canMove(){
+    if(this.emptyCells().length) return true;
+    const n=this.size;
+    for(let r=0;r<n;r++) for(let c=0;c<n;c++){
+      const v=this.grid[r][c];
+      if(c+1<n && this.grid[r][c+1]===v) return true;
+      if(r+1<n && this.grid[r+1][c]===v) return true;
+    }
+    return false;
+  }
+  // ---- stuck detection via real simulation ----
+  _simulate(direction){ const b=this.clone(); b.move(direction); return b.grid; }
+  _tileCanMergeSoon(r,c){
+    const n=this.size, v=this.grid[r][c];
+    if(v===0) return true;
+    for(const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const rr=r+dr,cc=c+dc;
+      if(rr>=0&&rr<n&&cc>=0&&cc<n&&this.grid[rr][cc]===v) return true;
+    }
+    let curCount=0; for(const row of this.grid) for(const x of row) if(x===v)curCount++;
+    for(const d of ["left","right","up","down"]){
+      const g=this._simulate(d);
+      if(JSON.stringify(g)===JSON.stringify(this.grid)) continue;
+      let nc=0; for(const row of g) for(const x of row) if(x===v)nc++;
+      if(nc<curCount) return true;
+      if(g[r][c]!==v) return true;
+      for(let rr=0;rr<n;rr++) for(let cc=0;cc<n;cc++){
+        if(g[rr][cc]!==v) continue;
+        for(const [dr,dc] of [[0,1],[1,0]]){
+          const r2=rr+dr,c2=cc+dc;
+          if(r2<n&&c2<n&&g[r2][c2]===v) return true;
+        }
+      }
+    }
+    return false;
+  }
+  stuckScore(r,c){
+    const n=this.size, v=this.grid[r][c];
+    if(v===0) return null;
+    const bmax=this.maxTile()||v;
+    if(v*4>bmax) return null;
+    for(const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const rr=r+dr,cc=c+dc;
+      if(rr>=0&&rr<n&&cc>=0&&cc<n&&this.grid[rr][cc]===0) return null;
+    }
+    if(this._tileCanMergeSoon(r,c)) return null;
+    const neigh=[];
+    for(const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const rr=r+dr,cc=c+dc;
+      if(rr>=0&&rr<n&&cc>=0&&cc<n&&this.grid[rr][cc]!==0) neigh.push(this.grid[rr][cc]);
+    }
+    if(!neigh.length) return null;
+    const lowness=bmax/v, surround=Math.min(...neigh)/v;
+    const edge=(r===0||r===n-1?1:0)+(c===0||c===n-1?1:0);
+    const centrality=1.0+(edge>=2?0:(edge===1?0.5:1.0));
+    return lowness*surround*centrality;
+  }
+  removeStuckLow(){
+    const n=this.size; let best=null;
+    for(let r=0;r<n;r++) for(let c=0;c<n;c++){
+      const s=this.stuckScore(r,c);
+      if(s!==null && (best===null||s>best[0])) best=[s,r,c];
+    }
+    if(best){ this.grid[best[1]][best[2]]=0; return [best[1],best[2]]; }
+    return null;
+  }
+  anyMergeAvailable(){
+    const n=this.size;
+    for(let r=0;r<n;r++) for(let c=0;c<n;c++){
+      const v=this.grid[r][c]; if(v===0) continue;
+      if(c+1<n&&this.grid[r][c+1]===v) return true;
+      if(r+1<n&&this.grid[r+1][c]===v) return true;
+    }
+    return false;
+  }
+}
+
+// ============================================================
+//  Game / UI controller
+// ============================================================
+class Game{
+  constructor(){
+    this.cfg = loadCfg();
+    this.app = document.getElementById("app");
+    this.state = "game";
+    this.capturing = null;
+    this.cheatDirty = false;
+    this.entryCheatOn = false; this.entryProfile = 0; this.profSnapshot=null;
+    this.cheatUsed = false;
+    this.tipNow = null; this.tipCooldown=0;
+    this.prevCornerOk=null; this.prevStuck=null; this.prevMax=0; this.prevEmpties=null;
+    this.heldKeys = new Set();
+    this.animating=false;
+    this.audioCtx=null;
+    this.newGame();
+    this.bindGlobalKeys();
+    this.render();
+  }
+  L(k){ return STRINGS[this.cfg.language][k]; }
+  isRTL(){ return this.cfg.language==="he"; }
+  profile(){ return this.cfg.profiles[this.cfg.active_profile]; }
+  modeName(){ return this.L("mode_names")[this.cfg.active_profile]; }
+
+  newGame(){
+    this.board = new Board(this.cfg.grid_size);
+    this.board.spawn(); this.board.spawn();
+    this.history=[]; this.won=false; this.keepGoing=false;
+    this.cheatUsed=false;
+    this.prevCornerOk=null; this.prevStuck=null; this.prevMax=0; this.prevEmpties=null;
+    this.tipNow=null;
+  }
+
+  // ---------- cheat state ----------
+  activeCheatOn(){ const m=this.profile().map;
+    return Object.values(m).some(v=>typeof v==="string" && v.length>0); }
+  keyForAction(a){ return this.profile().map[a] || null; }
+
+  // ---------- highscore ----------
+  updateHighscore(){
+    const cheating = this.cheatUsed || this.activeCheatOn();
+    if(cheating && !this.cfg.count_cheats_in_best) return;
+    if(this.board.score>this.cfg.highscore){
+      this.cfg.highscore=this.board.score; saveCfg(this.cfg);
+    }
+  }
+
+  // ---------- sound (WebAudio) ----------
+  ensureAudio(){ if(!this.audioCtx){ try{
+    this.audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
+    // browsers start the context suspended until a user gesture
+    if(this.audioCtx && this.audioCtx.state==="suspended"){
+      this.audioCtx.resume().catch(()=>{}); } }
+  beep(freq, dur=0.08, type="sine", vol=0.15){
+    if(!this.cfg.sound) return; this.ensureAudio(); if(!this.audioCtx) return;
+    const t=this.audioCtx.currentTime;
+    const o=this.audioCtx.createOscillator(), g=this.audioCtx.createGain();
+    o.type=type; o.frequency.value=freq;
+    g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+    o.connect(g); g.connect(this.audioCtx.destination); o.start(t); o.stop(t+dur);
+  }
+  playMerge(v){ // pitch rises with value
+    const scale=[261.63,293.66,329.63,349.23,392,440,493.88,523.25,587.33,
+      659.25,698.46,783.99,880,987.77,1046.5,1174.66];
+    const idx=Math.min(scale.length-1, Math.max(0, Math.round(Math.log2(v))-1));
+    this.beep(scale[idx],0.12,"triangle",0.18);
+  }
+  playSpawn(){ this.beep(180,0.05,"sine",0.08); }
+  playWin(){ [523,659,784].forEach((f,i)=>setTimeout(()=>this.beep(f,0.18,"triangle",0.2),i*90)); }
+
+  // ---------- movement ----------
+  heldSpawnParams(){
+    let fv=null, pe=false;
+    const k2=this.keyForAction("force_2"); if(k2&&this.heldKeys.has(k2)) fv=2;
+    const k4=this.keyForAction("force_4"); if(k4&&this.heldKeys.has(k4)) fv=4;
+    const ke=this.keyForAction("spawn_corner"); if(ke&&this.heldKeys.has(ke)) pe=true;
+    if(fv!==null||pe) this.cheatUsed=true;
+    return [fv,pe];
+  }
+  handleMove(direction){
+    if(this.animating) return;
+    if(!this.board.canMove()) return;
+    const prev=this.board.clone();
+    const {changed,anims,merges}=this.board.move(direction);
+    if(!changed) return;
+    this.history.push(prev); if(this.history.length>20) this.history.shift();
+    let [fv,pe]=this.heldSpawnParams();
+    if(IS_TOUCH){ const [tfv,tpe]=this.touchHeldParams();
+      if(tfv!==null) fv=tfv; if(tpe) pe=true; }
+    const spawned=this.board.spawn(fv,pe);
+    if(IS_TOUCH) this.clearTouchArm();
+    this.updateHighscore();
+    if(merges.length){ let hv=0; for(const m of merges) hv=Math.max(hv,m[2]);
+      this.playMerge(hv); } else this.playSpawn();
+    if(!this.won && this.board.maxTile()>=2048){ this.won=true; this.playWin();
+      if(this.cfg.infinite) this.keepGoing=true; }
+    this.checkTipEvents();
+    // lightweight update (no full DOM rebuild) unless game-over/win overlay needed
+    if((this.won && !this.keepGoing && !this.cfg.infinite) || !this.board.canMove())
+      this.render();
+    else
+      this.updateGameView();
+  }
+  updateGameView(){
+    // refresh only the tiles and score numbers - avoids the full-screen flash
+    const b=this.board;
+    const sEls=document.querySelectorAll(".scorebox .val");
+    if(sEls.length>=2){
+      sEls[0].textContent=b.score;
+      sEls[1].textContent=Math.max(this.cfg.highscore, b.score);
+    }
+    this.layoutTiles();
+    this.renderTip();
+    // reflect armed touch cheats
+    if(IS_TOUCH && this._touchArm){
+      document.querySelectorAll("#cheatbar button").forEach(btn=>{
+        btn.classList.toggle("armed", !!this._touchArm[btn.dataset.cheat]); });
+    }
+  }
+  // ---------- tap cheats ----------
+  doTapAction(action){
+    if(this.animating) return;
+    let pos=null; const prev=this.board.clone();
+    if(action==="undo"){
+      if(this.history.length){ this.board=this.history.pop(); this.cheatUsed=true;
+        this.render(); }
+      return;
+    } else if(action==="clean_stuck"){ pos=this.board.removeStuckLow(); }
+    if(pos){ this.cheatUsed=true; this.history.push(prev);
+      this.updateHighscore(); this.render(); }
+  }
+
+  // ---------- tips ----------
+  maxInCorner(){ const b=this.board,n=b.size,mx=b.maxTile();
+    return [b.grid[0][0],b.grid[0][n-1],b.grid[n-1][0],b.grid[n-1][n-1]].includes(mx); }
+  hasStuck(){ const b=this.board,n=b.size;
+    for(let r=0;r<n;r++) for(let c=0;c<n;c++) if(b.stuckScore(r,c)!==null) return true;
+    return false; }
+  urgentTip(){ const b=this.board,n=b.size, empties=b.emptyCells().length;
+    if(empties<=2 && !b.anyMergeAvailable()) return this.L("tip_full");
+    if(this.hasStuck()) return this.L("tip_stuck");
+    if(!this.maxInCorner() && b.maxTile()>=64) return this.L("tip_lost_corner");
+    return null; }
+  pickTip(){
+    const b=this.board,n=b.size, empties=b.emptyCells().length, total=n*n;
+    const mx=b.maxTile();
+    if(empties<=2 && !b.anyMergeAvailable()) return this.L("tip_full");
+    if(this.hasStuck()) return this.L("tip_stuck");
+    if(mx>=64 && !this.maxInCorner()) return this.L("tip_corner");
+    const tips=this.L("tips_list"); let idx;
+    if(empties>=total*0.6) idx=3;
+    else if(!this.maxInCorner()) idx=0;
+    else if(empties<=total*0.35) idx=1; else idx=2;
+    return tips[idx%tips.length];
+  }
+  showTip(text,secs=4.0){ if(this.cfg.show_tips){ this.tipNow={text,until:Date.now()+secs*1000}; } }
+  saveTipState(co,st,mx,em){ this.prevCornerOk=co; this.prevStuck=st;
+    this.prevMax=mx; this.prevEmpties=em; }
+  checkTipEvents(){
+    if(!this.cfg.show_tips) return;
+    const b=this.board, co=this.maxInCorner(), st=this.hasStuck();
+    const mx=b.maxTile(), em=b.emptyCells().length;
+    const done=()=>{ this.saveTipState(co,st,mx,em); };
+    if(this.prevCornerOk===false && co && mx>=64){ this.showTip(this.L("tip_good_corner")); return done(); }
+    if(this.prevCornerOk===true && !co && mx>=64){ this.showTip(this.L("tip_lost_corner")); return done(); }
+    if(this.prevStuck===true && !st){ this.showTip(this.L("tip_good_clear")); return done(); }
+    if(this.prevStuck===false && st){ this.showTip(this.L("tip_stuck")); return done(); }
+    if(this.prevMax && mx>this.prevMax && mx>=128){ this.showTip(this.L("tip_good_merge")); return done(); }
+    if(this.prevEmpties!==null && em-this.prevEmpties>=3){ this.showTip(this.L("tip_good_space")); return done(); }
+    done();
+  }
+  tickTips(){
+    if(!this.cfg.show_tips){ if(this.tipNow){this.tipNow=null;this.renderTip();} return; }
+    if(this.tipNow){
+      const u=this.urgentTip();
+      if(u && this.tipNow.text!==u){ this.tipNow={text:u,until:Date.now()+5000}; this.renderTip(); return; }
+      if(Date.now()>this.tipNow.until){ this.tipNow=null; this.tipCooldown=Date.now()+8000; this.renderTip(); }
+    } else {
+      const u=this.urgentTip();
+      if(u){ this.tipNow={text:u,until:Date.now()+5000}; this.renderTip(); return; }
+      if(Date.now()>this.tipCooldown){ this.tipNow={text:this.pickTip(),until:Date.now()+4500};
+        this.tipCooldown=Date.now()+8000; this.renderTip(); }
+    }
+  }
+  renderTip(){
+    const el=document.getElementById("tipbanner"); if(!el) return;
+    if(this.tipNow){ el.classList.remove("hidden");
+      el.querySelector(".txt").textContent=this.tipNow.text; }
+    else el.classList.add("hidden");
+  }
+
+  // ---------- preferences enter/leave (confession/praise) ----------
+  enterPreferences(){
+    this.profSnapshot=JSON.parse(JSON.stringify(this.cfg.profiles));
+    this.entryProfile=this.cfg.active_profile;
+    this.entryCheatOn=this.activeCheatOn();
+    this.cheatDirty=false; this.state="preferences"; this.render();
+  }
+  enforceMode1Clean(){ if(this.cfg.active_profile===0 &&
+    Object.keys(this.cfg.profiles[0].map).length){ this.cfg.profiles[0].map={};
+      this.cheatDirty=true; } }
+  leavePreferences(){
+    const nowOn=this.activeCheatOn(), wasOn=this.entryCheatOn;
+    const profChanged=this.cfg.active_profile!==this.entryProfile;
+    if(!wasOn && nowOn){ this.showConfession(); }
+    else if(wasOn && !nowOn){ saveCfg(this.cfg); this.cheatDirty=false; this.showPraise(); }
+    else { if(this.cheatDirty||profChanged){ saveCfg(this.cfg); this.cheatDirty=false; }
+      this.state="settings"; this.render(); }
+  }
+  confessYes(){ saveCfg(this.cfg); this.cheatDirty=false; this.closeDialog();
+    this.state="settings"; this.render(); }
+  confessNo(){ this.cfg.profiles=JSON.parse(JSON.stringify(this.profSnapshot));
+    this.cfg.active_profile=this.entryProfile; this.cheatDirty=false;
+    this.closeDialog(); this.toast(this.L("confess_rejected")); this.state="settings"; this.render(); }
+  praiseOk(){ this.closeDialog(); this.toast(this.L("praise_toast"));
+    this.state="settings"; this.render(); }
+
+  // ---------- key display ----------
+  keyDisplay(k){
+    if(!k) return this.L("none");
+    const map={"Shift":"Shift","Control":"Ctrl","Alt":"Alt"," ":"Space"};
+    if(map[k]) return map[k];
+    return k.length===1?k.toUpperCase():k;
+  }
+
+  // ---------- global keyboard ----------
+  bindGlobalKeys(){
+    // unlock audio on the very first user gesture (browser autoplay policy)
+    const unlock=()=>{ this.ensureAudio();
+      if(this.audioCtx && this.audioCtx.state==="suspended") this.audioCtx.resume().catch(()=>{});
+      window.removeEventListener("keydown",unlock);
+      window.removeEventListener("pointerdown",unlock);
+      window.removeEventListener("touchstart",unlock); };
+    window.addEventListener("keydown",unlock);
+    window.addEventListener("pointerdown",unlock);
+    window.addEventListener("touchstart",unlock);
+    document.addEventListener("keydown",(e)=>{
+      // key capture in preferences
+      if(this.capturing!==null){
+        e.preventDefault();
+        let k=e.key;
+        if(k==="Backspace"||k==="Delete"){ delete this.profile().map[this.capturing];
+          this.cheatDirty=true; this.capturing=null; this.render(); return; }
+        if(RESERVED.has(k)){ return; }
+        // normalize modifier keys
+        if(k==="Shift"||k==="Control"||k==="Alt"){}
+        else if(k.length===1) k=k.toLowerCase();
+        // remove dup
+        for(const a of Object.keys(this.profile().map))
+          if(this.profile().map[a]===k) delete this.profile().map[a];
+        this.profile().map[this.capturing]=k;
+        this.cheatDirty=true; this.capturing=null; this.render(); return;
+      }
+      if(this.state!=="game") return;
+      // track held keys for hold-cheats
+      let hk=e.key;
+      if(hk==="Shift"||hk==="Control"||hk==="Alt"){} else if(hk.length===1) hk=hk.toLowerCase();
+      this.heldKeys.add(hk);
+      // tap cheats
+      for(const a of ACTIONS){ if(!HOLD.has(a)){ const k=this.keyForAction(a);
+        if(k && hk===k){ e.preventDefault(); this.doTapAction(a); return; } } }
+      // game over -> Enter
+      if(!this.board.canMove() && (e.key==="Enter")){ this.newGame(); this.render(); return; }
+      if(this.won && !this.keepGoing && (e.key==="Enter"||e.key===" ")) this.keepGoing=true;
+      if(e.key==="ArrowLeft"||hk==="a") this.handleMove("left");
+      else if(e.key==="ArrowRight"||hk==="d") this.handleMove("right");
+      else if(e.key==="ArrowUp"||hk==="w") this.handleMove("up");
+      else if(e.key==="ArrowDown"||hk==="s") this.handleMove("down");
+    });
+    document.addEventListener("keyup",(e)=>{
+      let hk=e.key; if(hk==="Shift"||hk==="Control"||hk==="Alt"){}
+      else if(hk.length===1) hk=hk.toLowerCase();
+      this.heldKeys.delete(hk);
+    });
+    // touch swipe on the board
+    let sx=0,sy=0,active=false;
+    document.addEventListener("touchstart",(e)=>{
+      const b=document.getElementById("board"); if(!b||this.state!=="game")return;
+      const t=e.touches[0]; sx=t.clientX; sy=t.clientY; active=true;
+    },{passive:true});
+    document.addEventListener("touchend",(e)=>{
+      if(!active||this.state!=="game")return; active=false;
+      const t=e.changedTouches[0]; const dx=t.clientX-sx, dy=t.clientY-sy;
+      if(Math.abs(dx)<24 && Math.abs(dy)<24) return;
+      if(!this.board.canMove()){ this.newGame(); this.render(); return; }
+      if(Math.abs(dx)>Math.abs(dy)) this.handleMove(dx>0?"right":"left");
+      else this.handleMove(dy>0?"down":"up");
+    },{passive:true});
+  }
+
+  // ---------- toast + dialogs ----------
+  toast(text){
+    const old=document.querySelector(".toast"); if(old) old.remove();
+    const t=document.createElement("div"); t.className="toast"; t.textContent=text;
+    document.body.appendChild(t); setTimeout(()=>t.remove(),3200);
+  }
+  closeDialog(){ const d=document.querySelector(".dim"); if(d) d.remove(); }
+  showConfession(){
+    const L=k=>this.L(k);
+    const dim=document.createElement("div"); dim.className="dim";
+    dim.innerHTML=`<div class="dialog"><h3>${L("confess_title")}</h3>
+      <p>${L("confess_body")}</p><p class="accent">${L("confess_line")}</p>
+      <div class="btns"><button class="btn-btn" id="cfYes">${L("confess_yes")}</button>
+      <button class="btn-accent" id="cfNo">${L("confess_no")}</button></div></div>`;
+    document.body.appendChild(dim);
+    dim.querySelector("#cfYes").onclick=()=>this.confessYes();
+    dim.querySelector("#cfNo").onclick=()=>this.confessNo();
+  }
+  showPraise(){
+    const L=k=>this.L(k);
+    const dim=document.createElement("div"); dim.className="dim";
+    dim.innerHTML=`<div class="dialog green"><div class="green-check">\u2713</div>
+      <h3 style="color:#3caa6e">${L("praise_title")}</h3>
+      <p>${L("praise_body")}</p><p style="font-size:13px;color:#bbada0">${L("praise_body2")}</p>
+      <div class="btns"><button class="btn-green" id="prOk">${L("praise_ok")}</button></div></div>`;
+    document.body.appendChild(dim);
+    dim.querySelector("#prOk").onclick=()=>this.praiseOk();
+  }
+  showConfirm(question, action){
+    const L=k=>this.L(k);
+    const dim=document.createElement("div"); dim.className="dim";
+    dim.innerHTML=`<div class="dialog"><p style="font-size:17px">${question}</p>
+      <div class="btns"><button class="btn-accent" id="cy">${L("yes")}</button>
+      <button class="btn-btn" id="cn">${L("no")}</button></div></div>`;
+    document.body.appendChild(dim);
+    dim.querySelector("#cy").onclick=()=>{ this.closeDialog(); action(); };
+    dim.querySelector("#cn").onclick=()=>this.closeDialog();
+  }
+
+  // ============================================================
+  //  RENDER
+  // ============================================================
+  render(){
+    const rtl = this.isRTL();
+    this.app.dir = rtl?"rtl":"ltr";
+    document.body.dir = rtl?"rtl":"ltr";
+    if(this.state==="game") this.renderGame();
+    else if(this.state==="settings") this.renderSettings();
+    else if(this.state==="preferences") this.renderPreferences();
+  }
+
+  renderGame(){
+    const L=k=>this.L(k), b=this.board, n=b.size;
+    const shownBest=Math.max(this.cfg.highscore, b.score);
+    const gap=12, boardInner=560-2*12-2*12; // approx; use % based grid instead
+    let html=`<div class="screen">
+      <div class="top">
+        <div class="title">2049</div>
+        <div class="scores">
+          <div class="scorebox"><div class="lbl">${L("score")}</div><div class="val">${b.score}</div></div>
+          <div class="scorebox"><div class="lbl">${L("best")}</div><div class="val">${shownBest}</div></div>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button class="btn" id="toSettings">${L("settings")}</button>
+        <div class="selwrap">
+          <div class="selbox"><div class="arrows"><button id="gridUp">\u25b2</button>
+            <button id="gridDown">\u25bc</button></div><span>${n}\u00d7${n}</span></div>
+          <button class="iconbtn" id="refresh">\u21bb</button>
+        </div>
+      </div>
+      <div id="boardwrap"><div id="board">
+        <div class="grid-bg" id="gridbg" style="grid-template-columns:repeat(${n},1fr);"></div>
+        <div id="tiles"></div>`;
+    // overlay
+    if(this.won && !this.keepGoing && !this.cfg.infinite)
+      html+=`<div class="overlay"><h2>${L("you_win")}</h2><p>${L("keep_going")}</p>
+        <button class="btn" id="ovKeep">${L("keep_going")}</button></div>`;
+    else if(!b.canMove())
+      html+=`<div class="overlay"><h2>${L("game_over")}</h2><p>${L("press_new")}</p>
+        <button class="btn" id="ovNew">${L("new_game")}</button></div>`;
+    html+=`</div></div>
+      <div id="tipbanner" class="tipbanner hidden"><span class="dot"></span><span class="txt"></span></div>
+      <div class="bottombar">
+        <div class="icons"><div class="bicon" id="sndIcon">${this.cfg.sound?"\u{1f50a}":"\u{1f507}"}</div>
+          <div class="bicon" id="modeIcon">${this.cfg.infinite?"\u221e":"\u{1f3af}"}</div></div>
+        <div>${L("tips")}</div>
+      </div>`;
+    // cheat buttons on touch devices (hidden but present)
+    if(IS_TOUCH){
+      html+=`<div id="cheatbar">`;
+      for(const a of ACTIONS){ const armed=this.keyForAction(a);
+        html+=`<button data-cheat="${a}" class="${armed?'armed':''}">${L("actions")[a]}</button>`; }
+      html+=`</div>`;
+    }
+    html+=`</div>`;
+    this.app.innerHTML=html;
+    // build grid background cells
+    const gb=document.getElementById("gridbg");
+    for(let i=0;i<n*n;i++){ const c=document.createElement("div"); c.className="cell"; gb.appendChild(c); }
+    this.layoutTiles();
+    this.renderTip();
+    // events
+    document.getElementById("toSettings").onclick=()=>{this.state="settings";this.render();};
+    document.getElementById("gridUp").onclick=()=>this.changeGrid(1);
+    document.getElementById("gridDown").onclick=()=>this.changeGrid(-1);
+    document.getElementById("refresh").onclick=()=>{this.newGame();this.render();};
+    document.getElementById("sndIcon").onclick=()=>{this.cfg.sound=!this.cfg.sound;saveCfg(this.cfg);this.render();};
+    document.getElementById("modeIcon").onclick=()=>{this.cfg.infinite=!this.cfg.infinite;saveCfg(this.cfg);if(this.cfg.infinite)this.keepGoing=true;this.render();};
+    const ovNew=document.getElementById("ovNew"); if(ovNew) ovNew.onclick=()=>{this.newGame();this.render();};
+    const ovKeep=document.getElementById("ovKeep"); if(ovKeep) ovKeep.onclick=()=>{this.keepGoing=true;this.render();};
+    if(IS_TOUCH){
+      document.querySelectorAll("#cheatbar button").forEach(btn=>{
+        const a=btn.dataset.cheat;
+        if(HOLD.has(a)){
+          // tap toggles a one-move arm for this hold-cheat
+          btn.onclick=()=>{ this._touchArm=this._touchArm||{};
+            this._touchArm[a]=!this._touchArm[a];
+            btn.classList.toggle("armed", this._touchArm[a]); };
+        } else {
+          btn.onclick=()=>this.doTapAction(a);
+        }
+      });
+    }
+  }
+  // touch hold-cheats: read arms directly when spawning
+  touchHeldParams(){
+    let fv=null, pe=false;
+    if(this._touchArm){
+      if(this._touchArm.force_2) fv=2;
+      if(this._touchArm.force_4) fv=4;
+      if(this._touchArm.spawn_corner) pe=true;
+    }
+    if(fv!==null||pe) this.cheatUsed=true;
+    return [fv,pe];
+  }
+  clearTouchArm(){ if(this._touchArm){ this._touchArm={}; 
+    document.querySelectorAll("#cheatbar button.armed").forEach(b=>b.classList.remove("armed")); } }
+
+  layoutTiles(){
+    const n=this.board.size;
+    const board=document.getElementById("board");
+    const tilesEl=document.getElementById("tiles");
+    if(!board||!tilesEl) return;
+    const pad=12, gap=12;
+    const inner=board.clientWidth-2*pad;
+    const cell=(inner-gap*(n-1))/n;
+    const gb=document.getElementById("gridbg");
+    gb.style.gap=gap+"px";
+    gb.querySelectorAll(".cell").forEach(c=>{ c.style.height=cell+"px"; });
+    // square board: height = padding + cells + gaps
+    board.style.height=(2*pad + n*cell + (n-1)*gap)+"px";
+    tilesEl.innerHTML="";
+    for(let r=0;r<n;r++) for(let c=0;c<n;c++){
+      const v=this.board.grid[r][c]; if(v===0) continue;
+      const t=document.createElement("div"); t.className="tile";
+      t.style.width=cell+"px"; t.style.height=cell+"px";
+      t.style.transform=`translate(${c*(cell+gap)}px,${r*(cell+gap)}px)`;
+      t.style.background=tileColor(v); t.style.color=tileText(v);
+      t.style.fontSize=tileFont(v);
+      t.textContent=v;
+      tilesEl.appendChild(t);
+    }
+  }
+
+  changeGrid(delta){
+    const sizes=[4,5,6]; let i=sizes.indexOf(this.cfg.grid_size);
+    i=(i+delta+sizes.length)%sizes.length; this.cfg.grid_size=sizes[i];
+    saveCfg(this.cfg); this.newGame(); this.render();
+  }
+
+  optRow(label, opts, cur, cb){
+    let h=`<div class="scard"><span class="lbl">${label}</span><div class="opts">`;
+    opts.forEach((o,i)=>{ h+=`<button class="opt ${o.val===cur?'sel':''}" data-i="${i}">${o.txt}</button>`; });
+    h+=`</div></div>`;
+    return {h,cb,opts};
+  }
+
+  renderSettings(){
+    const L=k=>this.L(k);
+    const rows=[
+      this.optRow(L("grid_size"),[{val:4,txt:"4\u00d74"},{val:5,txt:"5\u00d75"},{val:6,txt:"6\u00d76"}],this.cfg.grid_size,v=>{this.cfg.grid_size=v;saveCfg(this.cfg);this.newGame();}),
+      this.optRow(L("language"),[{val:"he",txt:L("hebrew")},{val:"en",txt:L("english")}],this.cfg.language,v=>{this.cfg.language=v;saveCfg(this.cfg);}),
+      this.optRow(L("sound"),[{val:true,txt:L("on")},{val:false,txt:L("off")}],this.cfg.sound,v=>{this.cfg.sound=v;saveCfg(this.cfg);}),
+      this.optRow(L("win_mode"),[{val:true,txt:L("infinite")},{val:false,txt:L("target")}],this.cfg.infinite,v=>{this.cfg.infinite=v;saveCfg(this.cfg);}),
+      this.optRow(L("show_tips"),[{val:true,txt:L("on")},{val:false,txt:L("off")}],this.cfg.show_tips,v=>{this.cfg.show_tips=v;saveCfg(this.cfg);}),
+    ];
+    let html=`<div class="screen">
+      <div class="schead"><button class="btn" id="back">${L("back")}</button>
+        <div class="h">${L("settings")}</div></div>`;
+    rows.forEach((r,i)=>{ html+=r.h.replace('class="scard"',`class="scard" data-row="${i}"`); });
+    html+=`<div class="resetrow">
+        <button id="rSettings">${L("reset_settings")}</button>
+        <button id="rScore">${L("reset_score")}</button></div>
+      <button class="prefbtn" id="toPrefs">${L("preferences")}</button>
+      <div class="prefhint">${L("prefs_hint")}</div>
+      <div class="aboutcard">
+        <div class="statuspill" style="background:#d8ece4">
+          <span>${L("up_to_date")}</span>
+          <span class="badge" style="background:#3caa6e">\u2713</span></div>
+        <a class="ghbtn" href="https://github.com/BeniaBot/2049" target="_blank">${L("visit_github")}</a>
+        <div class="byline">${L("opened_by")}<img src="avatar.png" alt="">
+          <a href="https://github.com/BeniaBot" target="_blank">BeniaBot</a></div>
+      </div>
+      <div class="ver">v${APP_VERSION}</div>
+    </div>`;
+    this.app.innerHTML=html;
+    document.getElementById("back").onclick=()=>{this.state="game";this.render();};
+    document.getElementById("toPrefs").onclick=()=>this.enterPreferences();
+    document.getElementById("rSettings").onclick=()=>this.showConfirm(L("reset_settings_q"),()=>{
+      const hs=this.cfg.highscore; this.cfg=defaultCfg(); this.cfg.highscore=hs; saveCfg(this.cfg);
+      this.newGame(); this.toast(L("done_reset")); this.render(); });
+    document.getElementById("rScore").onclick=()=>this.showConfirm(L("reset_score_q"),()=>{
+      this.cfg.highscore=0; saveCfg(this.cfg); this.toast(L("done_reset")); this.render(); });
+    rows.forEach((r,i)=>{
+      this.app.querySelectorAll(`[data-row="${i}"] .opt`).forEach(btn=>{
+        btn.onclick=()=>{ r.cb(r.opts[+btn.dataset.i].val); this.render(); };
+      });
+    });
+  }
+
+  renderPreferences(){
+    const L=k=>this.L(k);
+    let html=`<div class="screen">
+      <div class="schead"><button class="btn" id="pBack">${L("back")}</button>
+        <div class="h">${L("prefs_title")}</div></div>
+      <div class="subtitle">${L("prefs_sub")}</div>
+      <div class="modesel"><button id="pPrev">\u2039</button>
+        <div class="name">${this.modeName()}</div><button id="pNext">\u203a</button></div>
+      <div class="checkrow"><span>${L("count_best")}</span>
+        <div class="checkbox ${this.cfg.count_cheats_in_best?'on':''}" id="cbCount">${this.cfg.count_cheats_in_best?"\u2713":""}</div></div>
+      <div style="font-weight:700;margin:10px 4px 8px">${L("assist_keys")}</div>`;
+    for(const a of ACTIONS){
+      const tag=HOLD.has(a)?L("hold"):L("tap");
+      const tagcol=HOLD.has(a)?"var(--accent)":"#6e9b6e";
+      const k=this.keyForAction(a);
+      const listening=this.capturing===a;
+      const disp=listening?L("press_key"):(k?this.keyDisplay(k):L("none"));
+      html+=`<div class="cheatrow">
+        <div class="info"><div class="t">${L("actions")[a]}
+          <span class="tag" style="color:${tagcol}">${tag}</span></div>
+          <div class="d">${L("action_detail")[a]}</div></div>
+        <div class="keybox ${listening?'listening':''} ${k?'':'empty'}" data-act="${a}">${disp}</div>
+      </div>`;
+    }
+    html+=`<div class="clicknote">${L("click_to_set")}</div></div>`;
+    this.app.innerHTML=html;
+    document.getElementById("pBack").onclick=()=>this.leavePreferences();
+    document.getElementById("pPrev").onclick=()=>{this.cfg.active_profile=(this.cfg.active_profile-1+this.cfg.profiles.length)%this.cfg.profiles.length;this.enforceMode1Clean();this.render();};
+    document.getElementById("pNext").onclick=()=>{this.cfg.active_profile=(this.cfg.active_profile+1)%this.cfg.profiles.length;this.enforceMode1Clean();this.render();};
+    document.getElementById("cbCount").onclick=()=>{this.cfg.count_cheats_in_best=!this.cfg.count_cheats_in_best;this.cheatDirty=true;this.render();};
+    this.app.querySelectorAll(".keybox[data-act]").forEach(box=>{
+      box.onclick=()=>{ this.capturing=box.dataset.act; this.render();
+        if(IS_TOUCH){ this.touchKeyPrompt(box.dataset.act); } };
+    });
+  }
+  // On touch (no keyboard): tapping a keybox cycles through a few safe keys
+  touchKeyPrompt(action){
+    const choices=["Shift","Control","Alt","q","e","z","x","c","v"];
+    const cur=this.keyForAction(action);
+    let idx=choices.indexOf(cur); idx=(idx+1)%(choices.length+1);
+    if(idx===choices.length){ delete this.profile().map[action]; }
+    else{ for(const a of Object.keys(this.profile().map))
+      if(this.profile().map[a]===choices[idx]) delete this.profile().map[a];
+      this.profile().map[action]=choices[idx]; }
+    this.cheatDirty=true; this.capturing=null; this.render();
+  }
+}
+
+const APP_VERSION="0.14.0";
+window.addEventListener("load",()=>{
+  const game=new Game();
+  window._game=game;
+  // relayout tiles on resize
+  window.addEventListener("resize",()=>{ if(game.state==="game") game.layoutTiles(); });
+  // tip ticker
+  setInterval(()=>{ if(game.state==="game") game.tickTips(); }, 500);
+});
+
+</script>
+</body>
+</html>
