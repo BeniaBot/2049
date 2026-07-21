@@ -15,7 +15,7 @@ import copy
 import math
 
 APP_NAME    = "2049"
-APP_VERSION = "0.14.0"
+APP_VERSION = "0.15.0"
 GITHUB_REPO = "BeniaBot/2049"   # owner/repo for auto-update checks
 
 # Optional RTL shaping for Hebrew. Falls back gracefully if unavailable.
@@ -492,16 +492,71 @@ class Board:
     def max_tile(self):
         return max(max(row) for row in self.grid)
 
+    def _moves_tracking(self, pos):
+        """Try all 4 directions on clones of this board (no spawn). For each
+        move that changes the board, follow the specific tile that started at
+        `pos` and report where it ended and whether it merged.
+        Returns a list of (new_board, new_pos, merged)."""
+        out = []
+        for d in ("left", "right", "up", "down"):
+            b = self.clone()
+            changed, anims, _ = b.move(d)
+            if not changed:
+                continue
+            new_pos, merged = None, False
+            for a in anims:
+                if a["from"] == pos:
+                    new_pos = a["to"]
+                    merged = a["merged"]
+                    break
+            if new_pos is None:      # tile untouched by this move
+                new_pos = pos
+            out.append((b, new_pos, merged))
+        return out
+
+    def _tile_fate(self, r, c, depth=3):
+        """Explore ALL spawn-free move sequences up to `depth`, following the
+        one tile that starts at (r,c). Returns (can_merge, can_open):
+          can_merge - some sequence merges this tile with an equal one
+          can_open  - some sequence (within depth-1) gives it an empty
+                      orthogonal neighbor (so a lucky spawn could partner it)
+        This is the ground truth for "is this tile really trapped"."""
+        start = (tuple(tuple(row) for row in self.grid), (r, c))
+        seen = {start}
+        frontier = [(self, (r, c), 0)]
+        can_merge = False
+        can_open = False
+        while frontier:
+            board, pos, d = frontier.pop()
+            # does the tile have an empty orthogonal neighbor here?
+            if not can_open and d <= depth - 1:
+                n = board.size
+                for dr, dc in ((1,0),(-1,0),(0,1),(0,-1)):
+                    rr, cc = pos[0]+dr, pos[1]+dc
+                    if 0 <= rr < n and 0 <= cc < n and board.grid[rr][cc] == 0:
+                        can_open = True
+                        break
+            if d >= depth:
+                continue
+            for nb, npos, merged in board._moves_tracking(pos):
+                if merged:
+                    can_merge = True
+                    if can_open:
+                        return True, True
+                    continue
+                key = (tuple(tuple(row) for row in nb.grid), npos)
+                if key not in seen:
+                    seen.add(key)
+                    frontier.append((nb, npos, d + 1))
+            if can_merge and can_open:
+                return True, True
+        return can_merge, can_open
+
     def _stuck_score(self, r, c):
         """How 'stuck' is the tile at (r,c)? Higher = more stuck; None if not.
-        A tile counts as stuck only when it is genuinely trapped:
-          - it is a LOW tile (<= a quarter of the board's max, so 2/4 amid big
-            tiles) - high tiles are never 'stuck' in a useful sense,
-          - it has NO orthogonal neighbor of equal value (can't merge now),
-          - it has NO empty orthogonal neighbor (can't slide sideways),
-          - it cannot slide to an empty cell along its own row OR column
-            (nothing to move toward), AND
-          - all its neighbors are strictly larger (it can't absorb them)."""
+        A tile is stuck only when DEEP SIMULATION proves it: following this
+        exact tile through every possible move sequence (3 moves ahead), it
+        can never merge - and it has no realistic rescue by a lucky spawn."""
         n = self.size
         v = self.grid[r][c]
         if v == 0:
@@ -510,36 +565,42 @@ class Board:
         # only low tiles relative to the board are meaningfully "stuck"
         if v * 4 > board_max:
             return None
+        # cheap prefilters before the expensive simulation:
         neigh_vals = []
-        occupied = 0; total = 0
         for dr, dc in ((1,0),(-1,0),(0,1),(0,-1)):
             rr, cc = r+dr, c+dc
             if 0 <= rr < n and 0 <= cc < n:
-                total += 1
                 nv = self.grid[rr][cc]
-                if nv != 0:
-                    occupied += 1
-                    neigh_vals.append(nv)
-                    if nv == v:
-                        return None          # can merge -> not stuck
-        if occupied < total:
-            return None                      # empty neighbor -> can move
+                if nv == v:
+                    return None          # can merge right now -> not stuck
+                if nv == 0:
+                    return None          # breathing room -> not stuck (yet)
+                neigh_vals.append(nv)
         if not neigh_vals or not all(x > v for x in neigh_vals):
             return None
-        # can it slide toward any empty cell in its row or column? if so, the
-        # tile isn't really trapped - a move in that direction shifts it.
-        for cc in range(n):
-            if cc != c and self.grid[r][cc] == 0:
-                return None                  # empty cell in same row
-        for rr in range(n):
-            if rr != r and self.grid[rr][c] == 0:
-                return None                  # empty cell in same column
+        # ground truth: follow the tile through every 3-move future
+        can_merge, can_open = self._tile_fate(r, c, depth=3)
+        if can_merge:
+            return None                  # a real escape exists -> not stuck
+        # it can never merge in the near future. but is a rescue realistic?
+        partner_exists = any(self.grid[rr][cc] == v
+                             for rr in range(n) for cc in range(n)
+                             if (rr, cc) != (r, c))
+        if can_open and min(neigh_vals) < v * 4:
+            # it can get air next to it AND its surroundings are soft (some
+            # neighbor is only 2x its value): in a live game, spawns and small
+            # merges routinely build a new partner beside such a tile.
+            # Awkward, but not truly stuck.
+            return None
         # genuinely trapped. score by how low + how boxed + how central.
         lowness = board_max / v
         surround = min(neigh_vals) / v
         edge = (r == 0 or r == n-1) + (c == 0 or c == n-1)
         centrality = 1.0 + (0 if edge >= 2 else (0.5 if edge == 1 else 1.0))
-        return lowness * surround * centrality
+        score = lowness * surround * centrality
+        if not partner_exists:
+            score *= 1.5                 # no partner at all = more stuck
+        return score
 
     def remove_stuck_low(self):
         n = self.size; best = None
@@ -743,12 +804,17 @@ class Game:
         self.update_available = None   # newer version string if found online
         self.update_download_url = None  # direct .exe download link if available
         self._tip_now = None           # (text, timer) current on-screen tip
-        self._tip_cooldown = 0.0       # seconds until next tip may show
+        self._tip_cooldown = 0.0       # seconds until next ambient tip
         self._tip_index = 0
         self._prev_corner_ok = None    # was max tile in a corner last move
         self._prev_stuck = None        # was there a stuck tile last move
         self._prev_max = 0             # max tile last move (for merge praise)
         self._prev_empties = None      # empty count last move (for space praise)
+        self._move_no = 0              # moves made this game (for cooldowns)
+        self._tip_last = {}            # tip key -> move number it last fired
+        self._danger_shown = False     # "board almost full" fired this episode
+        self._stuck_cache = []         # cached stuck cells, refreshed per move
+        self._last_general_tip = None  # avoid repeating the same ambient tip
         self._confirm = None           # (question, action) pending confirmation
         self.update_status = "checking"
         self._start_update_check()
@@ -897,8 +963,12 @@ class Game:
         self.cheat_used_this_game = False   # fresh game, clean slate
         self._prev_corner_ok = None; self._prev_stuck = None
         self._prev_max = 0; self._prev_empties = None
+        self._move_no = 0; self._tip_last = {}
+        self._danger_shown = False; self._stuck_cache = []
+        self._tip_now = None; self._last_general_tip = None
         if s1: self.pop_tiles[(s1[0],s1[1])] = 1.0
         if s2: self.pop_tiles[(s2[0],s2[1])] = 1.0
+        self._refresh_board_facts()
     def update_highscore(self):
         # A game "counts" for the saved best if it was cheat-free, OR the player
         # explicitly enabled "count cheats in best". Otherwise the best still
@@ -963,98 +1033,59 @@ class Game:
             if self.cfg.get("infinite", True):
                 self.keep_going = True  # auto-continue in infinite mode
         # fire responsive tips based on what just changed on the board
+        self._move_no += 1
+        self._refresh_board_facts()
         self._check_tip_events()
 
-    def _pick_tip(self):
-        """Pick the single most relevant tip for the CURRENT board, in priority
-        order. Only returns situational tips when they genuinely apply; falls
-        back to a general tip chosen to match the board, not a blind rotation."""
-        L = self.L
-        b = self.board
-        n = b.size
-        empties = len(b.empty_cells())
-        total = n * n
-        mx = b.max_tile()
-        corners = [b.grid[0][0], b.grid[0][n-1], b.grid[n-1][0], b.grid[n-1][n-1]]
+    # ------------------------------------------------------------------
+    #  Tip engine.
+    #  Facts about the board are computed ONCE per settled move and cached.
+    #  Event tips fire immediately on real transitions, each with its own
+    #  cooldown (measured in MOVES, not seconds) so nothing nags twice.
+    #  Ambient strategy tips only fill quiet gaps, never repeat back-to-back,
+    #  and never contradict the current board.
+    # ------------------------------------------------------------------
+    TIP_COOLDOWNS = {          # min moves between two showings of the same tip
+        "tip_full": 8,
+        "tip_stuck": 6,
+        "tip_lost_corner": 5,
+        "tip_good_corner": 5,
+        "tip_good_clear": 6,
+        "tip_good_merge": 4,
+        "tip_good_space": 10,
+        "tip_corner": 10,      # ambient corner reminder
+    }
 
-        # Priority 1: board almost full AND no easy merge available -> urgent.
-        can_merge = self._any_merge_available()
-        if empties <= 2 and not can_merge:
-            return L("tip_full")
-
-        # Priority 2: a genuinely stuck low tile exists (uses real detection).
-        if any(b._stuck_score(r, c) is not None
-               for r in range(n) for c in range(n)):
-            return L("tip_stuck")
-
-        # Priority 3: a strong tile has drifted out of the corners.
-        if mx >= 64 and mx not in corners:
-            return L("tip_corner")
-
-        # Otherwise: a general tip that fits the board's phase.
-        tips = L("tips_list")
-        if empties >= total * 0.6:
-            idx = 3   # early game, lots of space -> "swipe two directions"
-        elif mx not in corners:
-            idx = 0   # keep highest in a corner
-        elif empties <= total * 0.35:
-            idx = 1   # getting crowded -> keep one ordered row
-        else:
-            idx = 2   # build a descending chain
-        return tips[idx % len(tips)]
-
-    def _any_merge_available(self):
-        """True if some adjacent equal pair exists (a merge is possible)."""
+    def _refresh_board_facts(self):
+        """Recompute the expensive board facts once, after the board settled
+        (move finished / cheat applied / new game). Everything else reads the
+        cache - the deep stuck simulation never runs per-frame."""
         b = self.board; n = b.size
+        cache = []
+        for r in range(n):
+            for c in range(n):
+                s = b._stuck_score(r, c)
+                if s is not None:
+                    cache.append((r, c, s))
+        self._stuck_cache = cache
+        # cheaper facts, still handy to cache together
+        self._facts_empties = len(b.empty_cells())
+        self._facts_max = b.max_tile()
+        self._facts_corner = self._max_in_corner()
+        self._facts_merges = self._count_adjacent_pairs()
+
+    def _count_adjacent_pairs(self):
+        b = self.board; n = b.size; cnt = 0
         for r in range(n):
             for c in range(n):
                 v = b.grid[r][c]
-                if v == 0:
-                    continue
-                if c+1 < n and b.grid[r][c+1] == v:
-                    return True
-                if r+1 < n and b.grid[r+1][c] == v:
-                    return True
-        return False
+                if v == 0: continue
+                if c+1 < n and b.grid[r][c+1] == v: cnt += 1
+                if r+1 < n and b.grid[r+1][c] == v: cnt += 1
+        return cnt
 
-    def _update_tips(self, dt):
-        """Show tips that fit the board. Urgent situational tips (stuck tile,
-        board nearly full) appear promptly when they arise; general strategy
-        tips appear only occasionally so they don't nag."""
-        if not self.cfg.get("show_tips", False):
-            self._tip_now = None
-            return
-        urgent = self._urgent_tip()   # None unless a real situation applies
-        if self._tip_now:
-            # if a NEW urgent situation appears, swap to it immediately
-            if urgent and self._tip_now[0] != urgent:
-                self._tip_now = [urgent, 5.0]
-                return
-            self._tip_now[1] -= dt
-            if self._tip_now[1] <= 0:
-                self._tip_now = None
-                # urgent tips can recur soon; general tips wait longer
-                self._tip_cooldown = 8.0
-        else:
-            if urgent:
-                self._tip_now = [urgent, 5.0]; return
-            self._tip_cooldown -= dt
-            if self._tip_cooldown <= 0:
-                self._tip_now = [self._pick_tip(), 4.5]
-                self._tip_cooldown = 8.0
-
-    def _urgent_tip(self):
-        """Return an urgent situational tip if one genuinely applies, else None."""
-        L = self.L; b = self.board; n = b.size
-        empties = len(b.empty_cells())
-        if empties <= 2 and not self._any_merge_available():
-            return L("tip_full")
-        if any(b._stuck_score(r, c) is not None
-               for r in range(n) for c in range(n)):
-            return L("tip_stuck")
-        if not self._max_in_corner() and b.max_tile() >= 64:
-            return L("tip_lost_corner")
-        return None
+    def _any_merge_available(self):
+        return self._count_adjacent_pairs() > 0
 
     def _max_in_corner(self):
         b = self.board; n = b.size
@@ -1063,45 +1094,82 @@ class Game:
         return mx in corners
 
     def _has_stuck(self):
-        b = self.board; n = b.size
-        return any(b._stuck_score(r, c) is not None
-                   for r in range(n) for c in range(n))
+        return bool(self._stuck_cache)
+
+    def _tip_ready(self, key):
+        """True if this tip's per-key cooldown (in moves) has elapsed."""
+        last = self._tip_last.get(key)
+        cd = self.TIP_COOLDOWNS.get(key, 6)
+        return last is None or (self._move_no - last) >= cd
+
+    def _fire_tip(self, key, secs=4.0):
+        if not self.cfg.get("show_tips", False):
+            return False
+        self._tip_last[key] = self._move_no
+        self._tip_now = [self.L(key), secs]
+        return True
 
     def _show_tip(self, text, secs=4.0):
         if self.cfg.get("show_tips", False):
             self._tip_now = [text, secs]
 
     def _check_tip_events(self):
-        """Called right after a move settles. Fires immediate tips on state
-        TRANSITIONS - both warnings (corner lost, tile stuck) and praise
-        (corner regained, board freed, big merge). This is what makes tips
-        feel responsive and fair instead of delayed/random."""
-        if not self.cfg.get("show_tips", False):
-            return
-        L = self.L; b = self.board
-        corner_ok = self._max_in_corner()
+        """Runs right after every settled move. Detects real TRANSITIONS on
+        the board and fires exactly one tip - the most important one - with
+        per-tip cooldowns. Priority: danger > new stuck > corner lost >
+        praise (corner back / stuck cleared / new record tile / big cleanup).
+        """
+        b = self.board
+        corner_ok = self._facts_corner
         stuck = self._has_stuck()
-        mx = b.max_tile()
-        empties = len(b.empty_cells())
+        mx = self._facts_max
+        empties = self._facts_empties
+        total = b.size * b.size
+        show = self.cfg.get("show_tips", False)
 
-        # praise: got the highest back into a corner
-        if self._prev_corner_ok is False and corner_ok and mx >= 64:
-            self._show_tip(L("tip_good_corner")); self._save_tip_state(corner_ok, stuck, mx, empties); return
-        # warning: highest just left the corner
-        if self._prev_corner_ok is True and not corner_ok and mx >= 64:
-            self._show_tip(L("tip_lost_corner")); self._save_tip_state(corner_ok, stuck, mx, empties); return
-        # praise: cleared a previously stuck tile
-        if self._prev_stuck is True and not stuck:
-            self._show_tip(L("tip_good_clear")); self._save_tip_state(corner_ok, stuck, mx, empties); return
-        # warning: a tile just became stuck
-        if self._prev_stuck is False and stuck:
-            self._show_tip(L("tip_stuck")); self._save_tip_state(corner_ok, stuck, mx, empties); return
-        # praise: reached a new higher max tile (big merge)
-        if self._prev_max and mx > self._prev_max and mx >= 128:
-            self._show_tip(L("tip_good_merge")); self._save_tip_state(corner_ok, stuck, mx, empties); return
-        # praise: freed a lot of space at once (several merges)
-        if self._prev_empties is not None and empties - self._prev_empties >= 3:
-            self._show_tip(L("tip_good_space")); self._save_tip_state(corner_ok, stuck, mx, empties); return
+        fired = False
+        if show:
+            # 1) DANGER: board nearly full with almost no merges left.
+            #    Fires once per "danger episode" (resets when board breathes).
+            if empties <= 3 and self._facts_merges <= 1:
+                if not self._danger_shown and self._tip_ready("tip_full"):
+                    fired = self._fire_tip("tip_full", 5.0)
+                    self._danger_shown = True
+            elif empties >= 6:
+                self._danger_shown = False
+
+            # 2) a tile JUST became stuck -> warn immediately
+            if not fired and self._prev_stuck is False and stuck \
+                    and self._tip_ready("tip_stuck"):
+                fired = self._fire_tip("tip_stuck", 5.0)
+
+            # 3) the highest tile JUST left the corner -> warn immediately
+            if not fired and self._prev_corner_ok is True and not corner_ok \
+                    and mx >= 64 and self._tip_ready("tip_lost_corner"):
+                fired = self._fire_tip("tip_lost_corner", 4.5)
+
+            # 4) PRAISE: highest tile brought back to a corner
+            if not fired and self._prev_corner_ok is False and corner_ok \
+                    and mx >= 64 and self._tip_ready("tip_good_corner"):
+                fired = self._fire_tip("tip_good_corner")
+
+            # 5) PRAISE: a stuck tile got resolved by real play
+            #    (cheat-cleans resync state, so they never reach here)
+            if not fired and self._prev_stuck is True and not stuck \
+                    and self._tip_ready("tip_good_clear"):
+                fired = self._fire_tip("tip_good_clear")
+
+            # 6) PRAISE: built a new highest tile (128 and up feels earned)
+            if not fired and self._prev_max and mx > self._prev_max \
+                    and mx >= 128 and self._tip_ready("tip_good_merge"):
+                fired = self._fire_tip("tip_good_merge")
+
+            # 7) PRAISE: big cleanup - but only when the board WAS crowded
+            if not fired and self._prev_empties is not None \
+                    and empties - self._prev_empties >= 3 \
+                    and self._prev_empties <= total * 0.4 \
+                    and self._tip_ready("tip_good_space"):
+                fired = self._fire_tip("tip_good_space")
 
         self._save_tip_state(corner_ok, stuck, mx, empties)
 
@@ -1111,6 +1179,66 @@ class Game:
         self._prev_max = mx
         self._prev_empties = empties
 
+    def _resync_tip_state(self):
+        """Refresh facts + snapshot WITHOUT firing tips. Used after cheats so
+        the game never praises the player for what the cheat just did."""
+        self._refresh_board_facts()
+        self._save_tip_state(self._facts_corner, self._has_stuck(),
+                             self._facts_max, self._facts_empties)
+
+    def _update_tips(self, dt):
+        """Per-frame housekeeping only: tick the visible tip's timer, and in
+        long quiet stretches show an ambient strategy tip. All the heavy
+        detection lives in _check_tip_events (per move, cached facts)."""
+        if not self.cfg.get("show_tips", False):
+            self._tip_now = None
+            return
+        if self._tip_now:
+            self._tip_now[1] -= dt
+            if self._tip_now[1] <= 0:
+                self._tip_now = None
+                self._tip_cooldown = 12.0
+        else:
+            self._tip_cooldown -= dt
+            if self._tip_cooldown <= 0:
+                tip = self._pick_ambient_tip()
+                if tip:
+                    self._tip_now = [tip, 4.5]
+                self._tip_cooldown = 12.0
+
+    def _pick_ambient_tip(self):
+        """A gentle strategy tip for quiet moments. Persistent problems get a
+        reminder (with the same per-key cooldowns); otherwise a general tip
+        that matches the phase of the board and never repeats itself."""
+        L = self.L
+        b = self.board
+        n = b.size
+        empties = self._facts_empties
+        total = n * n
+        mx = self._facts_max
+
+        # persistent situations - remind, respecting move cooldowns
+        if self._has_stuck() and self._tip_ready("tip_stuck"):
+            self._tip_last["tip_stuck"] = self._move_no
+            return L("tip_stuck")
+        if mx >= 64 and not self._facts_corner and self._tip_ready("tip_corner"):
+            self._tip_last["tip_corner"] = self._move_no
+            return L("tip_corner")
+
+        # general tips by phase, no immediate repeats
+        tips = L("tips_list")
+        if empties >= total * 0.6:
+            idx = 3
+        elif empties <= total * 0.35:
+            idx = 1
+        else:
+            idx = 2
+        tip = tips[idx % len(tips)]
+        if tip == self._last_general_tip:
+            tip = tips[(idx + 1) % len(tips)]
+        self._last_general_tip = tip
+        return tip
+
     def do_tap_action(self, action):
         if self.animating: return
         prev = self.board.clone(); pos = None
@@ -1118,12 +1246,14 @@ class Game:
             if self.history:
                 self.board = self.history.pop(); self.pop_tiles = {}; self.flash = 12
                 self.cheat_used_this_game = True   # undo used -> taint
+                self._resync_tip_state()   # never praise/warn for cheat effects
             return
         elif action=="clean_stuck": pos = self.board.remove_stuck_low()
         if pos:
             self.cheat_used_this_game = True       # only taint if it did something
             self.history.append(prev); self.pop_tiles[pos] = 1.0
             self.update_highscore(); self.flash = 12
+            self._resync_tip_state()       # never praise the cheat's cleanup
 
     def board_geometry(self):
         n = self.board.size

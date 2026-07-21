@@ -11,7 +11,7 @@
 ; ============================================================
 
 #define MyAppName "2049"
-#define MyAppVersion "0.14.0"
+#define MyAppVersion "0.15.0"
 #define MyAppPublisher "BeniaBot"
 #define MyAppURL "https://github.com/BeniaBot/2049"
 #define MyAppExeName "2049.exe"
