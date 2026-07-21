@@ -948,25 +948,34 @@ class Game{
     if(IS_TOUCH) this.bindTouchZones();
   }
   bindTouchZones(){
-    // For each corner zone: HOLD cheats stay armed while the finger is down;
-    // TAP cheats fire on a quick double-tap. Zones are fully transparent.
+    // Corner zones are transparent overlays. A cheat mapped to a corner is
+    // triggered by a STATIONARY gesture there: HOLD cheats stay armed while a
+    // finger rests in the corner (even as a second finger swipes); TAP cheats
+    // fire on a quick double-tap in place. A finger that DRAGS out of the
+    // corner is a swipe - it never counts as a tap, and the board still moves.
     document.querySelectorAll("#touchzones .tz").forEach(z=>{
       const zone=z.dataset.zone;
-      let lastTap=0, holdTimer=null;
+      let lastTap=0, startX=0, startY=0, moved=false;
       z.addEventListener("touchstart",(e)=>{
-        // which cheats are mapped to this zone?
+        const t=e.touches[0]; startX=t.clientX; startY=t.clientY; moved=false;
         const holds=this.cheatsForZone(zone,true);
-        if(holds.length){ // arm hold cheats while pressed
+        if(holds.length){                 // arm hold cheats while pressed
           this._touchArm=this._touchArm||{};
           holds.forEach(a=>this._touchArm[a]=true);
         }
       },{passive:true});
+      z.addEventListener("touchmove",(e)=>{
+        const t=e.touches[0];
+        if(Math.abs(t.clientX-startX)>18 || Math.abs(t.clientY-startY)>18)
+          moved=true;                      // this is a swipe, not a tap
+      },{passive:true});
       z.addEventListener("touchend",(e)=>{
         const holds=this.cheatsForZone(zone,true);
-        if(holds.length){ // release hold arm shortly after (allow the swipe to consume it)
-          setTimeout(()=>{ if(this._touchArm){ holds.forEach(a=>this._touchArm[a]=false); } },50);
+        if(holds.length){                  // release hold arm just after the
+          // swipe consumes it (the board's touchend runs and reads the arm)
+          setTimeout(()=>{ if(this._touchArm){ holds.forEach(a=>this._touchArm[a]=false); } },60);
         }
-        // double-tap -> fire tap cheats
+        if(moved) return;                  // dragged out -> a swipe, not a tap
         const now=Date.now();
         if(now-lastTap<320){
           const taps=this.cheatsForZone(zone,false);
@@ -1150,7 +1159,7 @@ class Game{
   }
 }
 
-const APP_VERSION="0.16.0";
+const APP_VERSION="0.16.1";
 window.addEventListener("load",()=>{
   const game=new Game();
   window._game=game;

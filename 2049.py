@@ -15,7 +15,7 @@ import copy
 import math
 
 APP_NAME    = "2049"
-APP_VERSION = "0.16.0"
+APP_VERSION = "0.16.1"
 GITHUB_REPO = "BeniaBot/2049"   # owner/repo for auto-update checks
 
 # Optional RTL shaping for Hebrew. Falls back gracefully if unavailable.
