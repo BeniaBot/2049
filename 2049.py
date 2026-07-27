@@ -15,7 +15,7 @@ import copy
 import math
 
 APP_NAME    = "2049"
-APP_VERSION = "0.16.1"
+APP_VERSION = "0.17.0"
 GITHUB_REPO = "BeniaBot/2049"   # owner/repo for auto-update checks
 
 # Optional RTL shaping for Hebrew. Falls back gracefully if unavailable.
@@ -73,15 +73,17 @@ def resource_path(rel):
 CONFIG_PATH = os.path.join(user_data_dir(), "2049_config.json")
 
 # Migrate an old config that lived next to the exe (from earlier versions).
+# Newest naming first, so if both legacy files exist the most recent one wins.
 _OLD_CONFIGS = [
-    os.path.join(app_dir(), "2048plus_config.json"),
     os.path.join(app_dir(), "2049_config.json"),
+    os.path.join(app_dir(), "2048plus_config.json"),
 ]
-_OLD_CONFIG = _OLD_CONFIGS[0]
 try:
-    if os.path.exists(_OLD_CONFIG) and not os.path.exists(CONFIG_PATH):
-        import shutil
-        shutil.copy2(_OLD_CONFIG, CONFIG_PATH)
+    for old in _OLD_CONFIGS:
+        if os.path.exists(old) and not os.path.exists(CONFIG_PATH):
+            import shutil
+            shutil.copy2(old, CONFIG_PATH)
+            break
 except Exception:
     pass
 
@@ -126,6 +128,9 @@ STRINGS = {
         "press_new":"\u05dc\u05d7\u05e5 Enter \u05dc\u05de\u05e9\u05d7\u05e7 \u05d7\u05d3\u05e9",
         "tips":"\u05d8\u05d9\u05e4: \u05d4\u05e9\u05ea\u05de\u05e9 \u05d1-\u2190 \u2191 \u2192 \u2193 \u05dc\u05de\u05e9\u05d7\u05e7!",
         "grid_size":"\u05d2\u05d5\u05d3\u05dc \u05dc\u05d5\u05d7", "language":"\u05e9\u05e4\u05d4",
+        "difficulty":"\u05e8\u05de\u05ea \u05e7\u05d5\u05e9\u05d9",
+        "diff_normal":"\u05e8\u05d2\u05d9\u05dc", "diff_hard":"\u05e7\u05e9\u05d4",
+        "diff_evil":"\u05de\u05e8\u05d5\u05e9\u05e2",
         "game_mode":"\u05de\u05e6\u05d1 \u05de\u05e9\u05d7\u05e7",
         "assist_keys":"\u05de\u05e7\u05e9\u05d9 \u05e2\u05d6\u05e8\u05d4 \u05e0\u05e1\u05ea\u05e8\u05d9\u05dd",
         "click_cycle":"\u05dc\u05d7\u05e5 \u05e2\u05dc \u05ea\u05d9\u05d1\u05ea \u05de\u05e7\u05e9 \u05db\u05d3\u05d9 \u05dc\u05d4\u05d7\u05dc\u05d9\u05e3",
@@ -146,6 +151,8 @@ STRINGS = {
         "yes":"\u05db\u05df",
         "no":"\u05dc\u05d0",
         "done_reset":"\u05d0\u05d5\u05e4\u05e1 \u05d1\u05d4\u05e6\u05dc\u05d7\u05d4",
+        "no_stuck_now":"\u05d0\u05d9\u05df \u05db\u05e8\u05d2\u05e2 \u05d0\u05e8\u05d9\u05d7 \u05e9\u05d1\u05d0\u05de\u05ea \u05ea\u05e7\u05d5\u05e2",
+        "no_undo":"\u05d0\u05d9\u05df \u05de\u05d4\u05dc\u05da \u05dc\u05d1\u05d8\u05dc",
         "tips_list":[
             "\u05e9\u05de\u05d5\u05e8 \u05d0\u05ea \u05d4\u05d0\u05e8\u05d9\u05d7 \u05d4\u05d2\u05d1\u05d5\u05d4 \u05d1\u05e4\u05d9\u05e0\u05d4 \u05d5\u05d0\u05dc \u05ea\u05d6\u05d9\u05d6 \u05d0\u05d5\u05ea\u05d5",
             "\u05e0\u05e1\u05d4 \u05dc\u05e9\u05de\u05d5\u05e8 \u05e9\u05d5\u05e8\u05d4 \u05d0\u05d7\u05ea \u05de\u05dc\u05d0\u05d4 \u05d5\u05de\u05e1\u05d5\u05d3\u05e8\u05ea",
@@ -179,7 +186,6 @@ STRINGS = {
         "download_update":"\u05d4\u05d5\u05e8\u05d3 \u05d2\u05e8\u05e1\u05d4 \u05d7\u05d3\u05e9\u05d4",
         "version_lbl":"\u05d2\u05e8\u05e1\u05d4",
         "update_avail":"\u05e2\u05d3\u05db\u05d5\u05df \u05d6\u05de\u05d9\u05df!",
-        "about":"\u05d0\u05d5\u05d3\u05d5\u05ea",
         "confess_title":"\u05e8\u05d2\u05e2 \u05d0\u05d7\u05d3...",
         "confess_body":"\u05db\u05d3\u05d9 \u05dc\u05e9\u05de\u05d5\u05e8 \u05d4\u05d2\u05d3\u05e8\u05d5\u05ea \u05e8\u05de\u05d0\u05d5\u05ea, \u05e2\u05dc\u05d9\u05da \u05dc\u05d4\u05d5\u05d3\u05d5\u05ea:",
         "confess_line":"\"\u05d0\u05e0\u05d9 \u05de\u05e8\u05de\u05d4 \u05db\u05d9 \u05d0\u05e0\u05d9 \u05dc\u05d0 \u05de\u05e1\u05e4\u05d9\u05e7 \u05d8\u05d5\u05d1\"",
@@ -218,6 +224,8 @@ STRINGS = {
         "game_over":"Game over", "press_new":"Press Enter for new game",
         "tips":"Tips: use \u2190 \u2191 \u2192 \u2193 to play!",
         "grid_size":"Grid size", "language":"Language", "game_mode":"Game mode",
+        "difficulty":"Difficulty",
+        "diff_normal":"Normal", "diff_hard":"Hard", "diff_evil":"Evil",
         "assist_keys":"Hidden assist keys", "click_cycle":"Click a key box to cycle keys.",
         "press_key":"Press a key...",
         "click_to_set":"Click a box, then press any key. Backspace to clear.",
@@ -235,6 +243,8 @@ STRINGS = {
         "yes":"Yes",
         "no":"No",
         "done_reset":"Reset done",
+        "no_stuck_now":"No genuinely stuck tile right now",
+        "no_undo":"No move to undo",
         "tips_list":[
             "Keep your highest tile in a corner and don't move it",
             "Try to keep one full, ordered row",
@@ -265,7 +275,6 @@ STRINGS = {
         "download_update":"Download new version",
         "version_lbl":"Version",
         "update_avail":"Update available!",
-        "about":"About",
         "confess_title":"One moment...",
         "confess_body":"To save cheat settings, you must admit:",
         "confess_line":"\"I cheat because I'm not good enough\"",
@@ -332,12 +341,19 @@ def key_display_name(code):
     }
     return pretty.get(name, name.upper() if len(name)==1 else name.title())
 
+# Chance per spawn that the new tile is placed adversarially (see
+# Board._evil_cell). Values are calibrated so "hard" stings and "evil" hurts.
+# Calibrated by simulation (400 games/setting): hard cuts a solid player's
+# 2048-reach rate roughly in half; evil makes 2048 nearly unreachable while
+# 512-1024 stays common. See git history / release notes for the full table.
+DIFFICULTY_EVIL_P = {"normal": 0.0, "hard": 0.30, "evil": 0.75}
+
 def default_config():
     return {
-        "config_version": 2,
+        "config_version": 3,
         "grid_size":4, "language":"he", "active_profile":0, "highscore":0,
         "sound":True, "infinite":True, "show_tips":False, "persist_cheats":False,
-        "count_cheats_in_best":False,
+        "count_cheats_in_best":False, "difficulty":"normal",
         "profiles":[
             {"map":{}},
             {"map":{"force_4":pygame.K_LSHIFT}},
@@ -347,7 +363,7 @@ def default_config():
         ],
     }
 
-CONFIG_VERSION = 2
+CONFIG_VERSION = 3
 
 # Legacy name->code map, to migrate old configs that stored key names.
 _LEGACY_KEYNAMES = {
@@ -385,13 +401,23 @@ def load_config():
             for p in cfg["profiles"]:
                 if isinstance(p.get("map"), dict):
                     p["map"] = _migrate_map(p["map"])
-            # If the config predates the built-in-modes fix, re-seed the four
-            # built-in modes so "Mode 2" etc. come with their cheats again.
+            # If the config predates the built-in-modes fix (v3 repairs configs
+            # damaged by the old exit-wipe bug too), re-seed the four built-in
+            # modes so "Mode 2" etc. come with their cheats again.
             # (User's grid/language/sound/highscore are preserved above.)
-            if old_version < 2:
+            if old_version < 3:
                 cfg["profiles"] = default_config()["profiles"]
+                cfg["active_profile"] = 0
         except Exception:
             pass
+    return cfg
+
+def finalize_config_for_quit(cfg):
+    """On exit: unless the player opted to keep cheats, restore the four
+    built-in modes to their defaults and return to honest Mode 1."""
+    if not cfg.get("persist_cheats", False):
+        cfg["profiles"] = default_config()["profiles"]
+        cfg["active_profile"] = 0
     return cfg
 
 def save_config(cfg):
@@ -415,17 +441,62 @@ class Board:
     def empty_cells(self):
         return [(r,c) for r in range(self.size)
                 for c in range(self.size) if self.grid[r][c]==0]
-    def spawn(self, force_value=None, prefer_edge=False):
+    def spawn(self, force_value=None, prefer_edge=False, evil=False):
         cells = self.empty_cells()
         if not cells: return None
         if prefer_edge:
             edge = [(r,c) for (r,c) in cells
                     if r in (0,self.size-1) or c in (0,self.size-1)]
             if edge: cells = edge
-        r,c = random.choice(cells)
         val = force_value if force_value else (4 if random.random()<0.1 else 2)
+        # evil placement runs AFTER the edge filter so the edge cheat still
+        # constrains where the adversary may strike
+        if evil and len(cells) > 1:
+            r,c = self._evil_cell(cells, val)
+        else:
+            r,c = random.choice(cells)
         self.grid[r][c] = val
         return (r,c,val)
+
+    def adjacent_pairs(self):
+        n = self.size; cnt = 0
+        for r in range(n):
+            for c in range(n):
+                v = self.grid[r][c]
+                if v == 0: continue
+                if c+1 < n and self.grid[r][c+1] == v: cnt += 1
+                if r+1 < n and self.grid[r+1][c] == v: cnt += 1
+        return cnt
+
+    def max_in_corner(self):
+        n = self.size
+        mx = self.max_tile()
+        return mx in (self.grid[0][0], self.grid[0][n-1],
+                      self.grid[n-1][0], self.grid[n-1][n-1])
+
+    def _evil_cell(self, cells, val):
+        """Depth-1 minimax: for each candidate cell, assume the player answers
+        with their BEST move (most empties/merges/corner kept) and pick the
+        cell whose best answer is WORST. Ties break randomly so evil spawns
+        don't look scripted."""
+        best = None; best_cells = []
+        for (r, c) in cells:
+            b = self.clone(); b.grid[r][c] = val
+            reply = None
+            for d in ("left", "right", "up", "down"):
+                b2 = b.clone()
+                changed, _, _ = b2.move(d)
+                if changed:
+                    q = 6*len(b2.empty_cells()) + 2*b2.adjacent_pairs() \
+                        + (2 if b2.max_in_corner() else 0)
+                    reply = q if reply is None else max(reply, q)
+            if reply is None:
+                reply = -10**9           # player has no reply -> jackpot
+            if best is None or reply < best:
+                best = reply; best_cells = [(r, c)]
+            elif reply == best:
+                best_cells.append((r, c))
+        return random.choice(best_cells)
 
     def _line_moves(self, line):
         entries = [(v,i) for i,v in enumerate(line) if v!=0]
@@ -492,6 +563,36 @@ class Board:
     def max_tile(self):
         return max(max(row) for row in self.grid)
 
+    def in_danger(self):
+        """Nearly full AND no single move buys real air (3+ empties) or fresh
+        merge chances (2+ pairs) -> the player is genuinely cornered."""
+        if len(self.empty_cells()) > 3:
+            return False
+        for d in ("left", "right", "up", "down"):
+            b = self.clone()
+            changed, _, _ = b.move(d)
+            if changed and (len(b.empty_cells()) >= 3 or b.adjacent_pairs() >= 2):
+                return False             # an escape move exists
+        return True
+
+    def edge_ordered(self):
+        """True if the max tile sits in a corner AND the full row or column
+        running away from that corner is completely filled and non-increasing
+        (the classic 'ordered edge' structure is already built)."""
+        n = self.size; mx = self.max_tile()
+        def ordered(line):
+            return all(line) and all(line[i] >= line[i+1] for i in range(n-1))
+        for cr in (0, n-1):
+            for cc in (0, n-1):
+                if self.grid[cr][cc] != mx:
+                    continue
+                row = self.grid[cr][:] if cc == 0 else self.grid[cr][::-1]
+                col = [self.grid[r][cc] for r in range(n)]
+                if cr != 0: col = col[::-1]
+                if ordered(row) or ordered(col):
+                    return True
+        return False
+
     def _moves_tracking(self, pos):
         """Try all 4 directions on clones of this board (no spawn). For each
         move that changes the board, follow the specific tile that started at
@@ -552,61 +653,107 @@ class Board:
                 return True, True
         return can_merge, can_open
 
-    def _stuck_score(self, r, c):
+    def blocked_pair_value(self, r, c):
+        """Merges this tile is directly preventing: the nearest non-empty
+        neighbors on both sides along the row (only empties between, by
+        construction) that are EQUAL to each other and != v would merge if
+        this tile vanished. Same for the column. Returns the sum of such
+        blocked pair values (0, one, or both)."""
+        n = self.size; v = self.grid[r][c]; total = 0
+        left = right = up = down = None
+        for cc in range(c-1, -1, -1):
+            if self.grid[r][cc]: left = self.grid[r][cc]; break
+        for cc in range(c+1, n):
+            if self.grid[r][cc]: right = self.grid[r][cc]; break
+        if left is not None and right is not None and left == right and left != v:
+            total += left
+        for rr in range(r-1, -1, -1):
+            if self.grid[rr][c]: up = self.grid[rr][c]; break
+        for rr in range(r+1, n):
+            if self.grid[rr][c]: down = self.grid[rr][c]; break
+        if up is not None and down is not None and up == down and up != v:
+            total += up
+        return total
+
+    def freedom(self):
+        """Number of directions whose move changes the board."""
+        cnt = 0
+        for d in ("left", "right", "up", "down"):
+            b = self.clone()
+            changed, _, _ = b.move(d)
+            if changed: cnt += 1
+        return cnt
+
+    def freedom_without(self, r, c, base=None):
+        """How many extra move directions open up if this tile vanished.
+        `base` lets callers hoist self.freedom() out of a whole-board scan."""
+        if base is None:
+            base = self.freedom()
+        b = self.clone(); b.grid[r][c] = 0
+        return max(0, b.freedom() - base)
+
+    def _stuck_score(self, r, c, base_freedom=None):
         """How 'stuck' is the tile at (r,c)? Higher = more stuck; None if not.
-        A tile is stuck only when DEEP SIMULATION proves it: following this
-        exact tile through every possible move sequence (3 moves ahead), it
-        can never merge - and it has no realistic rescue by a lucky spawn."""
+        v2: a tile is a problem when it's buried under strictly bigger tiles
+        with no simulated escape, OR it directly blocks a big equal pair from
+        merging (even with air around), OR the board is down to its last
+        direction and removing this tile would unlock another. Exact order
+        matters - the cheap structural tests gate the expensive sim, so the
+        per-move scan stays fast even on crowded 6x6 boards."""
         n = self.size
         v = self.grid[r][c]
         if v == 0:
             return None
-        board_max = self.max_tile() or v
-        # only low tiles relative to the board are meaningfully "stuck"
-        if v * 4 > board_max:
-            return None
-        # cheap prefilters before the expensive simulation:
-        neigh_vals = []
+        mx = self.max_tile() or v
+        if v * 4 > mx:
+            return None                  # only low-relative tiles
+        neigh = []
         for dr, dc in ((1,0),(-1,0),(0,1),(0,-1)):
             rr, cc = r+dr, c+dc
             if 0 <= rr < n and 0 <= cc < n:
-                nv = self.grid[rr][cc]
-                if nv == v:
-                    return None          # can merge right now -> not stuck
-                if nv == 0:
-                    return None          # breathing room -> not stuck (yet)
-                neigh_vals.append(nv)
-        if not neigh_vals or not all(x > v for x in neigh_vals):
-            return None
+                neigh.append(self.grid[rr][cc])
+        if any(nv == v for nv in neigh):
+            return None                  # mergeable right now
+        boxed = all(nv != 0 for nv in neigh)
+        blocked_v = self.blocked_pair_value(r, c)
+        # cheap structural gates - only three archetypes justify the deep sim:
+        buried = boxed and all(nv > v for nv in neigh)  # walled in by bigger
+        if base_freedom is None:
+            base_freedom = self.freedom()
+        jam_possible = boxed and base_freedom <= 1      # board nearly locked
+        if not (buried or jam_possible or blocked_v >= 4 * v):
+            return None                  # cheap out - no simulation
         # ground truth: follow the tile through every 3-move future
         can_merge, can_open = self._tile_fate(r, c, depth=3)
         if can_merge:
-            return None                  # a real escape exists -> not stuck
-        # it can never merge in the near future. but is a rescue realistic?
-        partner_exists = any(self.grid[rr][cc] == v
-                             for rr in range(n) for cc in range(n)
-                             if (rr, cc) != (r, c))
-        if can_open and min(neigh_vals) < v * 4:
-            # it can get air next to it AND its surroundings are soft (some
-            # neighbor is only 2x its value): in a live game, spawns and small
-            # merges routinely build a new partner beside such a tile.
-            # Awkward, but not truly stuck.
+            return None                  # proven escape exists
+        soft = boxed and min(neigh) < v * 4
+        rescuable = can_open and soft    # air + soft walls -> realistic rescue
+        fd = self.freedom_without(r, c, base_freedom)
+        problem = (buried and not rescuable) or (blocked_v >= 4 * v) \
+                  or (jam_possible and fd > 0)
+        if not problem:
             return None
-        # genuinely trapped. score by how low + how boxed + how central.
-        lowness = board_max / v
-        surround = min(neigh_vals) / v
-        edge = (r == 0 or r == n-1) + (c == 0 or c == n-1)
+        # score by how low + how blocking + how freeing + how central
+        lowness = mx / v
+        edge = (r in (0, n-1)) + (c in (0, n-1))
         centrality = 1.0 + (0 if edge >= 2 else (0.5 if edge == 1 else 1.0))
-        score = lowness * surround * centrality
-        if not partner_exists:
-            score *= 1.5                 # no partner at all = more stuck
+        score = lowness * centrality + 3.0 * blocked_v / v + 2.0 * fd
+        if boxed:
+            score += lowness * (min(neigh) / v)
+        partner = any(self.grid[rr][cc] == v
+                      for rr in range(n) for cc in range(n)
+                      if (rr, cc) != (r, c))
+        if not partner:
+            score *= 1.3                 # no partner anywhere = more stuck
         return score
 
     def remove_stuck_low(self):
         n = self.size; best = None
+        base = self.freedom()            # hoisted: same for every candidate
         for r in range(n):
             for c in range(n):
-                s = self._stuck_score(r, c)
+                s = self._stuck_score(r, c, base)
                 if s is not None and (best is None or s > best[0]):
                     best = (s, r, c)
         if best:
@@ -992,6 +1139,11 @@ class Game:
             self.cheat_used_this_game = True   # taint the score
         return fv, pe
 
+    def roll_evil(self):
+        """Rolled once per spawn: does the difficulty make THIS spawn evil?"""
+        p = DIFFICULTY_EVIL_P.get(self.cfg.get("difficulty", "normal"), 0)
+        return p > 0 and random.random() < p
+
     def handle_move(self, direction):
         if self.state!="game" or self.animating: return
         if self.won and not self.keep_going: return
@@ -1018,7 +1170,8 @@ class Game:
         self.pending_merges = []
         if self.pending_spawn is not None:
             fv, pe = self.pending_spawn
-            s = self.board.spawn(force_value=fv, prefer_edge=pe)
+            s = self.board.spawn(force_value=fv, prefer_edge=pe,
+                                 evil=self.roll_evil())
             if s: self.pop_tiles[(s[0],s[1])] = 1.0
             self.pending_spawn = None
         self.update_highscore()
@@ -1062,9 +1215,10 @@ class Game:
         cache - the deep stuck simulation never runs per-frame."""
         b = self.board; n = b.size
         cache = []
+        base = b.freedom()               # hoisted: same for every candidate
         for r in range(n):
             for c in range(n):
-                s = b._stuck_score(r, c)
+                s = b._stuck_score(r, c, base)
                 if s is not None:
                     cache.append((r, c, s))
         self._stuck_cache = cache
@@ -1073,25 +1227,20 @@ class Game:
         self._facts_max = b.max_tile()
         self._facts_corner = self._max_in_corner()
         self._facts_merges = self._count_adjacent_pairs()
+        # danger only simulates when empties <= 3, so it's cheap to cache too
+        self._facts_danger = b.in_danger()
+        self._facts_ordered = b.edge_ordered()
 
+    # thin delegates - the logic lives on Board so cheats/tips/evil spawns
+    # all share one implementation
     def _count_adjacent_pairs(self):
-        b = self.board; n = b.size; cnt = 0
-        for r in range(n):
-            for c in range(n):
-                v = b.grid[r][c]
-                if v == 0: continue
-                if c+1 < n and b.grid[r][c+1] == v: cnt += 1
-                if r+1 < n and b.grid[r+1][c] == v: cnt += 1
-        return cnt
+        return self.board.adjacent_pairs()
 
     def _any_merge_available(self):
         return self._count_adjacent_pairs() > 0
 
     def _max_in_corner(self):
-        b = self.board; n = b.size
-        mx = b.max_tile()
-        corners = [b.grid[0][0], b.grid[0][n-1], b.grid[n-1][0], b.grid[n-1][n-1]]
-        return mx in corners
+        return self.board.max_in_corner()
 
     def _has_stuck(self):
         return bool(self._stuck_cache)
@@ -1129,13 +1278,13 @@ class Game:
 
         fired = False
         if show:
-            # 1) DANGER: board nearly full with almost no merges left.
+            # 1) DANGER: board nearly full AND no move buys real air.
             #    Fires once per "danger episode" (resets when board breathes).
-            if empties <= 3 and self._facts_merges <= 1:
+            if self._facts_danger:
                 if not self._danger_shown and self._tip_ready("tip_full"):
                     fired = self._fire_tip("tip_full", 5.0)
                     self._danger_shown = True
-            elif empties >= 6:
+            elif empties >= 5:
                 self._danger_shown = False
 
             # 2) a tile JUST became stuck -> warn immediately
@@ -1225,17 +1374,22 @@ class Game:
             self._tip_last["tip_corner"] = self._move_no
             return L("tip_corner")
 
-        # general tips by phase, no immediate repeats
-        tips = L("tips_list")
-        if empties >= total * 0.6:
-            idx = 3
-        elif empties <= total * 0.35:
-            idx = 1
-        else:
-            idx = 2
-        tip = tips[idx % len(tips)]
+        # general tips matched to the ACTUAL situation; when nothing clearly
+        # applies, stay silent - silence beats a wrong tip
+        idx = None
+        if empties <= total * 0.3:
+            idx = 4                      # don't fill the board
+        elif self._facts_corner and mx >= 128 and not self._facts_ordered:
+            idx = 1                      # keep a full ordered row
+        elif self._facts_corner and mx >= 128 and self._facts_ordered:
+            idx = 2                      # build a descending chain
+        elif self._move_no < 30 and empties >= total * 0.5:
+            idx = 3                      # two fixed directions (early game)
+        if idx is None:
+            return None
+        tip = L("tips_list")[idx]
         if tip == self._last_general_tip:
-            tip = tips[(idx + 1) % len(tips)]
+            return None
         self._last_general_tip = tip
         return tip
 
@@ -1247,6 +1401,8 @@ class Game:
                 self.board = self.history.pop(); self.pop_tiles = {}; self.flash = 12
                 self.cheat_used_this_game = True   # undo used -> taint
                 self._resync_tip_state()   # never praise/warn for cheat effects
+            else:
+                self.toast = [self.L("no_undo"), 150]
             return
         elif action=="clean_stuck": pos = self.board.remove_stuck_low()
         if pos:
@@ -1254,6 +1410,8 @@ class Game:
             self.history.append(prev); self.pop_tiles[pos] = 1.0
             self.update_highscore(); self.flash = 12
             self._resync_tip_state()       # never praise the cheat's cleanup
+        else:
+            self.toast = [self.L("no_stuck_now"), 150]
 
     def board_geometry(self):
         n = self.board.size
@@ -1365,6 +1523,9 @@ class Game:
             self.screen.circle(ACCENT, (dotx, by+15), 5)
             tt = self.f_tiny.render(self.shape(txt), True, TEXT_DARK)
             self.screen.blit(tt, (self.W/2-tt.get_width()/2/self.SS, by+7))
+
+        # in-game feedback toast (e.g. "nothing to clean" / "nothing to undo")
+        self._draw_toast()
 
         if self.flash:
             self.flash -= 1
@@ -1486,33 +1647,32 @@ class Game:
         self.screen.blit(t1, t1.get_rect(center=(cx, cy-20)))
         self.screen.blit(t2, t2.get_rect(center=(cx, cy+24)))
 
-    def draw_menu(self):
-        self._sync_lang(); self.screen.fill(BG); L = self.L
-        title = self.f_title.render("2048+", True, TEXT_DARK)
-        self.screen.blit(title, title.get_rect(center=(self.W/2,120)))
-        sub = self.f_tiny.render(self.shape(L("subtitle")), True, BOARD_BG)
-        self.screen.blit(sub, sub.get_rect(center=(self.W/2,165)))
-        self.m_play = Button((self.W/2-110,220,220,52), L("play"), self.f_med)
-        self.m_settings = Button((self.W/2-110,286,220,52), L("settings"), self.f_med)
-        self.m_quit = Button((self.W/2-110,352,220,52), L("quit"), self.f_med)
-        for b in (self.m_play,self.m_settings,self.m_quit): b.draw(self.screen)
-        info = self.f_small.render(
-            self.shape(f"{self.mode_name()}   |   {self.cfg['grid_size']}x{self.cfg['grid_size']}"),
-            True, BOARD_BG)
-        self.screen.blit(info, info.get_rect(center=(self.W/2,445)))
-        best = self.f_small.render(self.shape(f"{L('best')}: {self.cfg['highscore']}"), True, BOARD_BG)
-        self.screen.blit(best, best.get_rect(center=(self.W/2,475)))
+    def _draw_toast(self):
+        """Transient top-center message card (supports multi-line via \\n).
+        Shared by the game and settings screens; run() ticks the timer."""
+        if not self.toast:
+            return
+        txt, _ = self.toast
+        lines = txt.split("\n")
+        lws = [self.f_small.size(ln)[0]/self.SS for ln in lines]
+        tw = max(lws)
+        th = 30*len(lines) + 12
+        bx = self.W/2 - (tw+40)/2
+        self.screen.rect(BTN_BG, (bx, 72, tw+40, th), border_radius=10)
+        for i, ln in enumerate(lines):
+            tt = self.f_small.render(self.shape(ln), True, TEXT_LIGHT)
+            self.screen.blit(tt, (self.W/2-tt.get_width()/2/self.SS, 80+i*28))
 
     def _settings_row(self, y, label, options, selected_val, rtl):
         """Draw one settings card: label on one side, option buttons on other.
         Buttons size to their text (with a minimum) so nothing overflows.
         options = list of (value, text). Returns list of (value, Button)."""
         M = 24
-        card_h = 64
+        card_h = 56
         card = pygame.Rect(M, y, self.W-2*M, card_h)
         self.screen.card(CARD_BG, card, radius=14, shadow=True)
         pad = 20
-        bh = 42; bgap = 10
+        bh = 38; bgap = 10
         by = y + (card_h-bh)//2
 
         # measure each button width from its text (logical units)
@@ -1547,7 +1707,6 @@ class Game:
                            text_col=TEXT_LIGHT if sel else TEXT_DARK)
                 b.draw(self.screen); result.append((val, b)); bx += bw+bgap
         return result
-        return result
 
     def draw_settings(self):
         self._sync_lang(); self.screen.fill(BG); L = self.L; rtl = self.is_rtl()
@@ -1569,53 +1728,58 @@ class Game:
         self.s_grid = self._settings_row(
             y, L("grid_size"),
             [(4,"4\u00d74"),(5,"5\u00d75"),(6,"6\u00d76")],
-            self.cfg["grid_size"], rtl); y += 70
+            self.cfg["grid_size"], rtl); y += 62
+        self.s_diff = self._settings_row(
+            y, L("difficulty"),
+            [("normal",L("diff_normal")),("hard",L("diff_hard")),
+             ("evil",L("diff_evil"))],
+            self.cfg.get("difficulty", "normal"), rtl); y += 62
         self.s_lang = self._settings_row(
             y, L("language"),
             [("he",L("hebrew")),("en",L("english"))],
-            self.cfg["language"], rtl); y += 70
+            self.cfg["language"], rtl); y += 62
         self.s_sound = self._settings_row(
             y, L("sound"),
             [(True,L("on")),(False,L("off"))],
-            self.cfg["sound"], rtl); y += 70
+            self.cfg["sound"], rtl); y += 62
         self.s_winmode = self._settings_row(
             y, L("win_mode"),
             [(True,L("infinite")),(False,L("target"))],
-            self.cfg["infinite"], rtl); y += 70
+            self.cfg["infinite"], rtl); y += 62
         self.s_tips = self._settings_row(
             y, L("show_tips"),
             [(True,L("on")),(False,L("off"))],
-            self.cfg.get("show_tips", False), rtl); y += 78
+            self.cfg.get("show_tips", False), rtl); y += 66
 
         # --- Reset buttons row (settings + high score) ---
-        rbh = 40; rgap = 12
+        rbh = 38; rgap = 12
         rbw = (self.W - 48 - rgap) / 2
         self.s_reset_settings = Button((24, y, rbw, rbh), L("reset_settings"),
                                        self.f_tiny, base=EMPTY_CELL, text_col=TEXT_DARK)
         self.s_reset_score = Button((24+rbw+rgap, y, rbw, rbh), L("reset_score"),
                                     self.f_tiny, base=EMPTY_CELL, text_col=TEXT_DARK)
         self.s_reset_settings.draw(self.screen); self.s_reset_score.draw(self.screen)
-        y += 56
+        y += 50
 
         # --- "Preferences" button (discreet - actually the cheat config) ---
         pw = self.f_small.size(L("preferences"))[0]/self.SS + 48
-        self.s_prefs = Button((self.W/2-pw/2, y, pw, 46), L("preferences"),
+        self.s_prefs = Button((self.W/2-pw/2, y, pw, 44), L("preferences"),
                               self.f_small, base=BTN_BG, text_col=TEXT_LIGHT)
         self.s_prefs.draw(self.screen)
         sub = self.f_tiny.render(self.shape(L("prefs_hint")), True, BOARD_BG)
-        self.screen.blit(sub, (self.W/2-sub.get_width()/2/self.SS, y+50))
-        y += 90
+        self.screen.blit(sub, (self.W/2-sub.get_width()/2/self.SS, y+48))
+        y += 80
 
         # --- About card (status + GitHub + author with avatar) ---
         card_y = y
-        card_h = 176
+        card_h = 150
         acard = pygame.Rect(24, card_y, self.W-48, card_h)
         self.screen.card((245, 239, 229), acard, radius=18, shadow=True)
-        iy = card_y + 16
+        iy = card_y + 12
 
         # status pill
         st = getattr(self, "update_status", "checking")
-        pill = pygame.Rect(40, iy, self.W-80, 40)
+        pill = pygame.Rect(40, iy, self.W-80, 36)
         pill_col = (216, 236, 222) if st == "latest" else (
                    (247, 224, 208) if st == "update" else (236, 230, 220))
         self.screen.rect(pill_col, pill, border_radius=10)
@@ -1647,11 +1811,11 @@ class Game:
             self.a_recheck = pygame.Rect(pill.right-14-ca.get_width()/self.SS,
                                          pill.centery-11, ca.get_width()/self.SS+8, 22)
             self.screen.blit(ca, (pill.right-14-ca.get_width()/self.SS, pill.centery-8))
-        iy += 52
+        iy += 46
 
         # GitHub button (full-width inside card). When an update is available,
         # it becomes a "Download new version" button that opens the releases page.
-        gbtn = pygame.Rect(40, iy, self.W-80, 42)
+        gbtn = pygame.Rect(40, iy, self.W-80, 38)
         if st == "update":
             self.s_github = Button(gbtn, L("download_update"), self.f_small,
                                    base=ACCENT, text_col=TEXT_LIGHT)
@@ -1660,7 +1824,7 @@ class Game:
             self.s_github = Button(gbtn, L("visit_github"), self.f_small,
                                    base=BTN_BG, text_col=TEXT_LIGHT)
             self._github_target = "repo"
-        self.s_github.draw(self.screen); iy += 54
+        self.s_github.draw(self.screen); iy += 48
 
         # author row: avatar + "opened by BeniaBot"
         by_txt = self.f_tiny.render(self.shape(L("opened_by")), True, BOARD_BG)
@@ -1694,18 +1858,7 @@ class Game:
         ver = self.f_tiny.render(f"v{APP_VERSION}", True, BOARD_BG)
         self.screen.blit(ver, (self.W/2-ver.get_width()/2/self.SS, self.H-26))
 
-        # transient toast (supports multi-line via \n)
-        if self.toast:
-            txt, _ = self.toast
-            lines = txt.split("\n")
-            lws = [self.f_small.size(ln)[0]/self.SS for ln in lines]
-            tw = max(lws)
-            th = 30*len(lines) + 12
-            bx = self.W/2 - (tw+40)/2
-            self.screen.rect(BTN_BG, (bx, 72, tw+40, th), border_radius=10)
-            for i, ln in enumerate(lines):
-                tt = self.f_small.render(self.shape(ln), True, TEXT_LIGHT)
-                self.screen.blit(tt, (self.W/2-tt.get_width()/2/self.SS, 80+i*28))
+        self._draw_toast()
 
         # confirmation dialog overlay (reset settings / reset score)
         if self._confirm:
@@ -2030,6 +2183,10 @@ class Game:
                     if self.cfg["grid_size"]!=sz:
                         self.cfg["grid_size"]=sz; save_config(self.cfg); self.new_game()
                     return
+            for val,b in self.s_diff:
+                if b.hit(e.pos):
+                    # applies immediately - next spawn already rolls the new odds
+                    self.cfg["difficulty"]=val; save_config(self.cfg); return
             for code,b in self.s_lang:
                 if b.hit(e.pos):
                     self.cfg["language"]=code; save_config(self.cfg); return
@@ -2070,6 +2227,9 @@ class Game:
         self._profiles_snapshot = copy.deepcopy(self.cfg["profiles"])
         self._entry_profile = self.cfg["active_profile"]
         self._entry_cheat_on = self._active_cheat_on()
+        # the refuge's toggles must also roll back on a refused confession
+        self._entry_persist = self.cfg.get("persist_cheats", False)
+        self._entry_countbest = self.cfg.get("count_cheats_in_best", False)
         self.cheat_dirty = False
         self.confessing = False
         self.praising = False
@@ -2125,6 +2285,11 @@ class Game:
         # also revert the active profile selection to what it was on entry
         if hasattr(self, "_entry_profile"):
             self.cfg["active_profile"] = self._entry_profile
+        # ...and the refuge toggles, so nothing sneaks past the refusal
+        if hasattr(self, "_entry_persist"):
+            self.cfg["persist_cheats"] = self._entry_persist
+        if hasattr(self, "_entry_countbest"):
+            self.cfg["count_cheats_in_best"] = self._entry_countbest
         self.cheat_dirty = False
         self.confessing = False
         self.toast = [self.L("confess_rejected"), 180]
@@ -2322,12 +2487,8 @@ class Game:
         # On quit: don't persist unconfessed cheat changes.
         if self.cheat_dirty and self._profiles_snapshot is not None:
             self.cfg["profiles"] = self._profiles_snapshot
-        # Unless the player explicitly opted to keep cheats between sessions,
-        # wipe all cheat bindings so the game starts clean next time.
-        if not self.cfg.get("persist_cheats", False):
-            for p in self.cfg["profiles"]:
-                p["map"] = {}
-            self.cfg["active_profile"] = 0
+        # Restore built-in modes (never wipe them!) unless cheats are kept.
+        self.cfg = finalize_config_for_quit(self.cfg)
         save_config(self.cfg); pygame.quit()
 
 

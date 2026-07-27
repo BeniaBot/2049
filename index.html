@@ -55,11 +55,12 @@
   .tile{position:absolute;border-radius:6px;display:flex;align-items:center;
     justify-content:center;font-weight:800;
     transition:transform .12s ease, opacity .12s ease;}
+  /* the standalone scale property composes with the inline translate() -
+     animating transform here would override the tile's position */
   .tile.pop{animation:pop .16s ease;}
-  @keyframes pop{0%{transform:scale(.6)}100%{transform:scale(1)}}
+  @keyframes pop{0%{scale:.6}100%{scale:1}}
   .tile.merged{animation:merge .16s ease;}
-  @keyframes merge{0%{transform:scale(1)}50%{transform:scale(1.18)}
-    100%{transform:scale(1)}}
+  @keyframes merge{0%{scale:1}50%{scale:1.18}100%{scale:1}}
 
   /* overlay (game over / win) */
   .overlay{position:absolute;inset:0;background:rgba(250,248,239,.72);
@@ -195,7 +196,7 @@
 <div id="app"></div>
 
 <script>
-const STRINGS = {"he": {"score": "ניקוד", "best": "שיא", "new_game": "משחק חדש", "settings": "הגדרות", "menu": "תפריט", "play": "שחק", "quit": "יציאה", "back": "חזרה", "subtitle": "המהדורה המשוכללת", "you_win": "הגעת ל-2048!", "keep_going": "המשך  •  משחק חדש", "game_over": "המשחק נגמר", "press_new": "לחץ Enter למשחק חדש", "tips": "טיפ: השתמש ב-← ↑ → ↓ למשחק!", "grid_size": "גודל לוח", "language": "שפה", "game_mode": "מצב משחק", "assist_keys": "מקשי עזרה נסתרים", "click_cycle": "לחץ על תיבת מקש כדי להחליף", "press_key": "לחץ מקש...", "click_to_set": "לחץ על תיבה ואז על מקש במקלדת. Backspace לניקוי.", "hold": "החזק", "tap": "לחיצה", "none": "ללא", "hebrew": "עברית", "english": "English", "mode_infinite": "מצב אינסופי", "mode_target": "מצב שבירת שיא", "sound_on": "קול דלוק", "sound_off": "קול כבוי", "sound": "צלילים", "on": "דלוק", "off": "כבוי", "win_mode": "מצב ניצחון", "show_tips": "הצג עצות", "reset_settings": "אפס הגדרות", "reset_score": "אפס שיא", "reset_settings_q": "לאפס את כל ההגדרות לברירת המחדל?", "reset_score_q": "לאפס את השיא האישי?", "yes": "כן", "no": "לא", "done_reset": "אופס בהצלחה", "tips_list": ["שמור את האריח הגבוה בפינה ואל תזיז אותו", "נסה לשמור שורה אחת מלאה ומסודרת", "בנה שרשרת מספרים יורדת לאורך שורה", "הזז בעיקר לשני כיוונים קבועים", "אל תמלא את הלוח – השאר מקום לתמרון"], "tip_stuck": "יש אריח נמוך תקוע – נסה לשחרר אותו", "tip_full": "הלוח מתמלא! מזג אריחים בדחיפות", "tip_corner": "שמור את האריח הגבוה בפינה", "tip_lost_corner": "האריח הגבוה יצא מהפינה – החזר אותו!", "tip_good_corner": "יופי! החזרת את הגבוה לפינה", "tip_good_clear": "יפה מאוד! שחררת את הלוח", "tip_good_merge": "מצוין! מיזוג גדול", "tip_good_space": "יפה! פינית הרבה מקום", "infinite": "אינסופי", "target": "שבירת שיא", "preferences": "העדפות", "prefs_hint": "הגדרות מתקדמות", "prefs_title": "מקלט הרמאים והנוכלים", "prefs_sub": "כאן מתאספים כל אלו שלא מספיק טובים בזכות עצמם", "persist_cheats": "שמור רמאויות בין הפעלות", "count_best": "חשב רמאויות בשיא", "credit": "נוצר על ידי Claude • BeniaBot", "about": "אודות", "opened_by": "פותח על ידי", "up_to_date": "האפליקציה מעודכנת לגרסה האחרונה", "update_ready": "גרסה חדשה זמינה להורדה", "check_again": "בדוק שוב", "checking": "בודק...", "visit_github": "בקר בעמוד ה-GitHub", "download_update": "הורד גרסה חדשה", "version_lbl": "גרסה", "update_avail": "עדכון זמין!", "confess_title": "רגע אחד...", "confess_body": "כדי לשמור הגדרות רמאות, עליך להודות:", "confess_line": "\"אני מרמה כי אני לא מספיק טוב\"", "confess_yes": "אני מודה", "confess_no": "לעולם לא!", "confess_rejected": "אז שוב לאימונים. ההגדרות לא נשמרו.", "praise_title": "כל הכבוד!", "praise_body": "בחרת לבטל את הרמאות ולהתמודד כמו גבר!", "praise_body2": "זה מרשים. השינוי נשמר אוטומטית.", "praise_ok": "תודה!", "praise_toast": "יאאלה, לשחק 'על אמת'\nרק אל תתייאש מהר מדי!", "mode_names": ["מצב 1 - רגיל", "מצב 2 - שליטה ב-2/4", "מצב 3 - מנקה", "מצב 4 - ערכת מלאה"], "actions": {"force_2": "האריח הבא יהיה 2", "force_4": "האריח הבא יהיה 4", "spawn_corner": "אריח חדש בשוליים", "clean_stuck": "נקה אריח תקוע", "undo": "בטל מהלך"}, "action_detail": {"force_2": "החזק במהלך – האריח שיופיע יהיה 2 ולא 4 (שומר על לוח נקי)", "force_4": "החזק במהלך – האריח שיופיע יהיה 4 (צובר נקודות מהר)", "spawn_corner": "החזק במהלך – האריח החדש יופיע בשוליים ולא במרכז", "clean_stuck": "לחיצה – מעלים אריח נמוך שתקוע בין גבוהים", "undo": "לחיצה – מחזיר את הלוח לפני המהלך האחרון"}, "zone_tl": "פינה שמאל למעלה", "zone_tr": "פינה ימין למעלה", "zone_bl": "פינה שמאל למטה", "zone_br": "פינה ימין למטה", "choose_zone": "בחר אזור נסתר", "zone_hold_hint": "החזק אצבע באזור בזמן החלקה", "zone_tap_hint": "הקש פעמיים באזור כדי להפעיל", "reserved_key": "המקש הזה שמור למשחק – בחר מקש אחר", "no_stuck_now": "אין כרגע אריח שבאמת תקוע", "no_undo": "אין מהלך לבטל"}, "en": {"score": "SCORE", "best": "BEST", "new_game": "New Game", "settings": "Settings", "menu": "Menu", "play": "Play", "quit": "Quit", "back": "Back", "subtitle": "enhanced edition", "you_win": "You reached 2048!", "keep_going": "Keep going  •  New game", "game_over": "Game over", "press_new": "Press Enter for new game", "tips": "Tips: use ← ↑ → ↓ to play!", "grid_size": "Grid size", "language": "Language", "game_mode": "Game mode", "assist_keys": "Hidden assist keys", "click_cycle": "Click a key box to cycle keys.", "press_key": "Press a key...", "click_to_set": "Click a box, then press any key. Backspace to clear.", "hold": "hold", "tap": "tap", "none": "None", "hebrew": "עברית", "english": "English", "mode_infinite": "Infinite mode", "mode_target": "Beat-best mode", "sound_on": "Sound on", "sound_off": "Sound off", "sound": "Sound", "on": "On", "off": "Off", "win_mode": "Win mode", "infinite": "Infinite", "target": "Beat best", "show_tips": "Show tips", "reset_settings": "Reset settings", "reset_score": "Reset best", "reset_settings_q": "Reset all settings to default?", "reset_score_q": "Reset your personal best?", "yes": "Yes", "no": "No", "done_reset": "Reset done", "tips_list": ["Keep your highest tile in a corner and don't move it", "Try to keep one full, ordered row", "Build a descending chain along a row", "Mostly swipe in just two fixed directions", "Don't fill the board - leave room to maneuver"], "tip_stuck": "A low tile is stuck - try to free it", "tip_full": "Board is filling up! Merge tiles urgently", "tip_corner": "Keep your highest tile in a corner", "tip_lost_corner": "Your highest tile left the corner - bring it back!", "tip_good_corner": "Nice! You got the highest back to a corner", "tip_good_clear": "Great! You freed up the board", "tip_good_merge": "Excellent! Big merge", "tip_good_space": "Nice! You cleared lots of space", "preferences": "Preferences", "prefs_hint": "Advanced settings", "prefs_title": "Refuge of Cheats & Crooks", "prefs_sub": "Where everyone who isn't good enough on their own gathers", "persist_cheats": "Keep cheats between sessions", "count_best": "Count cheats in best", "credit": "Made by Claude • BeniaBot", "about": "About", "opened_by": "Opened by", "up_to_date": "The app is up to date", "update_ready": "A new version is available", "check_again": "Check again", "checking": "Checking...", "visit_github": "Visit the GitHub page", "download_update": "Download new version", "version_lbl": "Version", "update_avail": "Update available!", "confess_title": "One moment...", "confess_body": "To save cheat settings, you must admit:", "confess_line": "\"I cheat because I'm not good enough\"", "confess_yes": "I admit it", "confess_no": "Never!", "confess_rejected": "Back to practice then. Settings not saved.", "praise_title": "Respect!", "praise_body": "You chose to drop the cheats and play like a champ!", "praise_body2": "That's impressive. Your change was saved automatically.", "praise_ok": "Thanks!", "praise_toast": "Go play 'for real'\nJust don't give up too fast!", "mode_names": ["Mode 1 - Classic", "Mode 2 - 2/4 Control", "Mode 3 - Cleaner", "Mode 4 - Full Kit"], "actions": {"force_2": "Next tile will be 2", "force_4": "Next tile will be 4", "spawn_corner": "New tile at the edge", "clean_stuck": "Clear a stuck tile", "undo": "Undo a move"}, "action_detail": {"force_2": "Hold during a move - new tile spawns as 2, not 4 (keeps board tidy)", "force_4": "Hold during a move - new tile spawns as 4 (scores faster)", "spawn_corner": "Hold during a move - new tile appears at the edge, not the middle", "clean_stuck": "Tap - removes a low tile trapped between higher ones", "undo": "Tap - restores the board to before your last move"}, "zone_tl": "Top-left corner", "zone_tr": "Top-right corner", "zone_bl": "Bottom-left corner", "zone_br": "Bottom-right corner", "choose_zone": "Choose a hidden zone", "zone_hold_hint": "Hold your finger in the zone while swiping", "zone_tap_hint": "Double-tap the zone to trigger", "reserved_key": "That key is reserved for gameplay - pick another", "no_stuck_now": "No genuinely stuck tile right now", "no_undo": "No move to undo"}};
+const STRINGS = {"he": {"score": "ניקוד", "best": "שיא", "new_game": "משחק חדש", "settings": "הגדרות", "menu": "תפריט", "play": "שחק", "quit": "יציאה", "back": "חזרה", "subtitle": "המהדורה המשוכללת", "you_win": "הגעת ל-2048!", "keep_going": "המשך  •  משחק חדש", "game_over": "המשחק נגמר", "press_new": "לחץ Enter למשחק חדש", "tips": "טיפ: השתמש ב-← ↑ → ↓ למשחק!", "grid_size": "גודל לוח", "language": "שפה", "game_mode": "מצב משחק", "assist_keys": "מקשי עזרה נסתרים", "click_cycle": "לחץ על תיבת מקש כדי להחליף", "press_key": "לחץ מקש...", "click_to_set": "לחץ על תיבה ואז על מקש במקלדת. Backspace לניקוי.", "hold": "החזק", "tap": "לחיצה", "none": "ללא", "hebrew": "עברית", "english": "English", "mode_infinite": "מצב אינסופי", "mode_target": "מצב שבירת שיא", "sound_on": "קול דלוק", "sound_off": "קול כבוי", "sound": "צלילים", "on": "דלוק", "off": "כבוי", "win_mode": "מצב ניצחון", "show_tips": "הצג עצות", "reset_settings": "אפס הגדרות", "reset_score": "אפס שיא", "reset_settings_q": "לאפס את כל ההגדרות לברירת המחדל?", "reset_score_q": "לאפס את השיא האישי?", "yes": "כן", "no": "לא", "done_reset": "אופס בהצלחה", "tips_list": ["שמור את האריח הגבוה בפינה ואל תזיז אותו", "נסה לשמור שורה אחת מלאה ומסודרת", "בנה שרשרת מספרים יורדת לאורך שורה", "הזז בעיקר לשני כיוונים קבועים", "אל תמלא את הלוח – השאר מקום לתמרון"], "tip_stuck": "יש אריח נמוך תקוע – נסה לשחרר אותו", "tip_full": "הלוח מתמלא! מזג אריחים בדחיפות", "tip_corner": "שמור את האריח הגבוה בפינה", "tip_lost_corner": "האריח הגבוה יצא מהפינה – החזר אותו!", "tip_good_corner": "יופי! החזרת את הגבוה לפינה", "tip_good_clear": "יפה מאוד! שחררת את הלוח", "tip_good_merge": "מצוין! מיזוג גדול", "tip_good_space": "יפה! פינית הרבה מקום", "infinite": "אינסופי", "target": "שבירת שיא", "preferences": "העדפות", "prefs_hint": "הגדרות מתקדמות", "prefs_title": "מקלט הרמאים והנוכלים", "prefs_sub": "כאן מתאספים כל אלו שלא מספיק טובים בזכות עצמם", "persist_cheats": "שמור רמאויות בין הפעלות", "count_best": "חשב רמאויות בשיא", "credit": "נוצר על ידי Claude • BeniaBot", "about": "אודות", "opened_by": "פותח על ידי", "up_to_date": "האפליקציה מעודכנת לגרסה האחרונה", "update_ready": "גרסה חדשה זמינה להורדה", "check_again": "בדוק שוב", "checking": "בודק...", "visit_github": "בקר בעמוד ה-GitHub", "download_update": "הורד גרסה חדשה", "version_lbl": "גרסה", "update_avail": "עדכון זמין!", "confess_title": "רגע אחד...", "confess_body": "כדי לשמור הגדרות רמאות, עליך להודות:", "confess_line": "\"אני מרמה כי אני לא מספיק טוב\"", "confess_yes": "אני מודה", "confess_no": "לעולם לא!", "confess_rejected": "אז שוב לאימונים. ההגדרות לא נשמרו.", "praise_title": "כל הכבוד!", "praise_body": "בחרת לבטל את הרמאות ולהתמודד כמו גבר!", "praise_body2": "זה מרשים. השינוי נשמר אוטומטית.", "praise_ok": "תודה!", "praise_toast": "יאאלה, לשחק 'על אמת'\nרק אל תתייאש מהר מדי!", "mode_names": ["מצב 1 - רגיל", "מצב 2 - שליטה ב-2/4", "מצב 3 - מנקה", "מצב 4 - ערכת מלאה"], "actions": {"force_2": "האריח הבא יהיה 2", "force_4": "האריח הבא יהיה 4", "spawn_corner": "אריח חדש בשוליים", "clean_stuck": "נקה אריח תקוע", "undo": "בטל מהלך"}, "action_detail": {"force_2": "החזק במהלך – האריח שיופיע יהיה 2 ולא 4 (שומר על לוח נקי)", "force_4": "החזק במהלך – האריח שיופיע יהיה 4 (צובר נקודות מהר)", "spawn_corner": "החזק במהלך – האריח החדש יופיע בשוליים ולא במרכז", "clean_stuck": "לחיצה – מעלים אריח נמוך שתקוע בין גבוהים", "undo": "לחיצה – מחזיר את הלוח לפני המהלך האחרון"}, "zone_tl": "פינה שמאל למעלה", "zone_tr": "פינה ימין למעלה", "zone_bl": "פינה שמאל למטה", "zone_br": "פינה ימין למטה", "choose_zone": "בחר אזור נסתר", "zone_hold_hint": "החזק אצבע באזור בזמן החלקה", "zone_tap_hint": "הקש פעמיים באזור כדי להפעיל", "reserved_key": "המקש הזה שמור למשחק – בחר מקש אחר", "no_stuck_now": "אין כרגע אריח שבאמת תקוע", "no_undo": "אין מהלך לבטל", "difficulty": "רמת קושי", "diff_normal": "רגיל", "diff_hard": "קשה", "diff_evil": "מרושע"}, "en": {"score": "SCORE", "best": "BEST", "new_game": "New Game", "settings": "Settings", "menu": "Menu", "play": "Play", "quit": "Quit", "back": "Back", "subtitle": "enhanced edition", "you_win": "You reached 2048!", "keep_going": "Keep going  •  New game", "game_over": "Game over", "press_new": "Press Enter for new game", "tips": "Tips: use ← ↑ → ↓ to play!", "grid_size": "Grid size", "language": "Language", "game_mode": "Game mode", "assist_keys": "Hidden assist keys", "click_cycle": "Click a key box to cycle keys.", "press_key": "Press a key...", "click_to_set": "Click a box, then press any key. Backspace to clear.", "hold": "hold", "tap": "tap", "none": "None", "hebrew": "עברית", "english": "English", "mode_infinite": "Infinite mode", "mode_target": "Beat-best mode", "sound_on": "Sound on", "sound_off": "Sound off", "sound": "Sound", "on": "On", "off": "Off", "win_mode": "Win mode", "infinite": "Infinite", "target": "Beat best", "show_tips": "Show tips", "reset_settings": "Reset settings", "reset_score": "Reset best", "reset_settings_q": "Reset all settings to default?", "reset_score_q": "Reset your personal best?", "yes": "Yes", "no": "No", "done_reset": "Reset done", "tips_list": ["Keep your highest tile in a corner and don't move it", "Try to keep one full, ordered row", "Build a descending chain along a row", "Mostly swipe in just two fixed directions", "Don't fill the board - leave room to maneuver"], "tip_stuck": "A low tile is stuck - try to free it", "tip_full": "Board is filling up! Merge tiles urgently", "tip_corner": "Keep your highest tile in a corner", "tip_lost_corner": "Your highest tile left the corner - bring it back!", "tip_good_corner": "Nice! You got the highest back to a corner", "tip_good_clear": "Great! You freed up the board", "tip_good_merge": "Excellent! Big merge", "tip_good_space": "Nice! You cleared lots of space", "preferences": "Preferences", "prefs_hint": "Advanced settings", "prefs_title": "Refuge of Cheats & Crooks", "prefs_sub": "Where everyone who isn't good enough on their own gathers", "persist_cheats": "Keep cheats between sessions", "count_best": "Count cheats in best", "credit": "Made by Claude • BeniaBot", "about": "About", "opened_by": "Opened by", "up_to_date": "The app is up to date", "update_ready": "A new version is available", "check_again": "Check again", "checking": "Checking...", "visit_github": "Visit the GitHub page", "download_update": "Download new version", "version_lbl": "Version", "update_avail": "Update available!", "confess_title": "One moment...", "confess_body": "To save cheat settings, you must admit:", "confess_line": "\"I cheat because I'm not good enough\"", "confess_yes": "I admit it", "confess_no": "Never!", "confess_rejected": "Back to practice then. Settings not saved.", "praise_title": "Respect!", "praise_body": "You chose to drop the cheats and play like a champ!", "praise_body2": "That's impressive. Your change was saved automatically.", "praise_ok": "Thanks!", "praise_toast": "Go play 'for real'\nJust don't give up too fast!", "mode_names": ["Mode 1 - Classic", "Mode 2 - 2/4 Control", "Mode 3 - Cleaner", "Mode 4 - Full Kit"], "actions": {"force_2": "Next tile will be 2", "force_4": "Next tile will be 4", "spawn_corner": "New tile at the edge", "clean_stuck": "Clear a stuck tile", "undo": "Undo a move"}, "action_detail": {"force_2": "Hold during a move - new tile spawns as 2, not 4 (keeps board tidy)", "force_4": "Hold during a move - new tile spawns as 4 (scores faster)", "spawn_corner": "Hold during a move - new tile appears at the edge, not the middle", "clean_stuck": "Tap - removes a low tile trapped between higher ones", "undo": "Tap - restores the board to before your last move"}, "zone_tl": "Top-left corner", "zone_tr": "Top-right corner", "zone_bl": "Bottom-left corner", "zone_br": "Bottom-right corner", "choose_zone": "Choose a hidden zone", "zone_hold_hint": "Hold your finger in the zone while swiping", "zone_tap_hint": "Double-tap the zone to trigger", "reserved_key": "That key is reserved for gameplay - pick another", "no_stuck_now": "No genuinely stuck tile right now", "no_undo": "No move to undo", "difficulty": "Difficulty", "diff_normal": "Normal", "diff_hard": "Hard", "diff_evil": "Evil"}};
 // ============================================================
 //  2049 - browser version. Same gameplay as the Python game.
 // ============================================================
@@ -215,12 +216,19 @@ const RESERVED = new Set(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight",
 const ACTIONS = ["force_2","force_4","spawn_corner","clean_stuck","undo"];
 const HOLD = new Set(["force_2","force_4","spawn_corner"]);
 
+// Chance per spawn that the new tile is placed adversarially (see
+// Board._evilCell). Values are calibrated so "hard" stings and "evil" hurts.
+// Calibrated by simulation (400 games/setting): hard roughly halves a solid
+// player's 2048-reach rate; evil makes 2048 nearly unreachable while 512-1024
+// stays common. Must match DIFFICULTY_EVIL_P in 2049.py.
+const DIFFICULTY_EVIL_P = {normal: 0.0, hard: 0.30, evil: 0.75};
+
 // ---- config / persistence ----
 const CFG_KEY = "cfg2049";
 function defaultCfg(){
-  return {config_version:2, grid_size:4, language:"he", active_profile:0,
+  return {config_version:3, grid_size:4, language:"he", active_profile:0,
     highscore:0, sound:true, infinite:true, show_tips:false,
-    persist_cheats:false, count_cheats_in_best:false,
+    persist_cheats:false, count_cheats_in_best:false, difficulty:"normal",
     profiles:[
       {map:{}},
       {map:{force_4:"Shift"}},
@@ -255,6 +263,12 @@ function loadCfg(){
           }
         }
       }
+      // parity with desktop: unless the player opted to keep cheats, every
+      // page load starts clean (like every desktop launch)
+      if(!c.persist_cheats){
+        c.profiles = defaultCfg().profiles;
+        c.active_profile = 0;
+      }
       saveCfg(c);
     }
   }catch(e){}
@@ -278,13 +292,54 @@ class Board{
     for(let c=0;c<this.size;c++) if(this.grid[r][c]===0) o.push([r,c]); return o; }
   maxTile(){ let m=0; for(const row of this.grid) for(const v of row) if(v>m)m=v;
     return m; }
-  spawn(forceValue=null, preferEdge=false){
+  spawn(forceValue=null, preferEdge=false, evil=false){
     let cells=this.emptyCells(); if(!cells.length) return null;
     if(preferEdge){ const e=cells.filter(([r,c])=>r===0||r===this.size-1||
       c===0||c===this.size-1); if(e.length) cells=e; }
-    const [r,c]=cells[Math.floor(Math.random()*cells.length)];
     const val=forceValue?forceValue:(Math.random()<0.1?4:2);
+    // evil placement runs AFTER the edge filter so the edge cheat still
+    // constrains where the adversary may strike
+    let r,c;
+    if(evil && cells.length>1) [r,c]=this._evilCell(cells,val);
+    else [r,c]=cells[Math.floor(Math.random()*cells.length)];
     this.grid[r][c]=val; return [r,c,val];
+  }
+  adjacentPairs(){
+    const n=this.size; let cnt=0;
+    for(let r=0;r<n;r++) for(let c=0;c<n;c++){
+      const v=this.grid[r][c]; if(v===0) continue;
+      if(c+1<n && this.grid[r][c+1]===v) cnt++;
+      if(r+1<n && this.grid[r+1][c]===v) cnt++;
+    }
+    return cnt;
+  }
+  maxInCorner(){
+    const n=this.size, mx=this.maxTile();
+    return [this.grid[0][0],this.grid[0][n-1],
+            this.grid[n-1][0],this.grid[n-1][n-1]].includes(mx);
+  }
+  _evilCell(cells,val){
+    // Depth-1 minimax: for each candidate cell, assume the player answers
+    // with their BEST move (most empties/merges/corner kept) and pick the
+    // cell whose best answer is WORST. Ties break randomly so evil spawns
+    // don't look scripted.
+    let best=null, bestCells=[];
+    for(const [r,c] of cells){
+      const b=this.clone(); b.grid[r][c]=val;
+      let reply=null;
+      for(const d of ["left","right","up","down"]){
+        const b2=b.clone();
+        if(b2.move(d).changed){
+          const q=6*b2.emptyCells().length + 2*b2.adjacentPairs()
+                + (b2.maxInCorner()?2:0);
+          reply = reply===null ? q : Math.max(reply,q);
+        }
+      }
+      if(reply===null) reply=-1e9;       // player has no reply -> jackpot
+      if(best===null || reply<best){ best=reply; bestCells=[[r,c]]; }
+      else if(reply===best) bestCells.push([r,c]);
+    }
+    return bestCells[Math.floor(Math.random()*bestCells.length)];
   }
   _lineMoves(line){
     const entries=[]; for(let i=0;i<line.length;i++) if(line[i]!==0)
@@ -346,6 +401,33 @@ class Board{
     }
     return false;
   }
+  inDanger(){
+    // nearly full AND no single move buys real air (3+ empties) or fresh
+    // merge chances (2+ pairs) -> the player is genuinely cornered
+    if(this.emptyCells().length>3) return false;
+    for(const d of ["left","right","up","down"]){
+      const b=this.clone();
+      if(b.move(d).changed && (b.emptyCells().length>=3 || b.adjacentPairs()>=2))
+        return false;                    // an escape move exists
+    }
+    return true;
+  }
+  edgeOrdered(){
+    // true if the max tile sits in a corner AND the full row or column
+    // running away from that corner is completely filled and non-increasing
+    // (the classic "ordered edge" structure is already built)
+    const n=this.size, mx=this.maxTile();
+    const ordered=line=>line.every(x=>x!==0) &&
+      line.every((x,i)=>i===n-1 || x>=line[i+1]);
+    for(const cr of [0,n-1]) for(const cc of [0,n-1]){
+      if(this.grid[cr][cc]!==mx) continue;
+      const row=this.grid[cr].slice(); if(cc!==0) row.reverse();
+      const col=[]; for(let r=0;r<n;r++) col.push(this.grid[r][cc]);
+      if(cr!==0) col.reverse();
+      if(ordered(row)||ordered(col)) return true;
+    }
+    return false;
+  }
   // ---- stuck detection via real simulation ----
   // ---- deep stuck detection: follow the actual tile through move futures ----
   _movesTracking(pos){
@@ -397,44 +479,86 @@ class Board{
     }
     return [canMerge,canOpen];
   }
-  stuckScore(r,c){
-    // stuck = low + boxed + PROVEN unable to merge within 3 moves +
-    //         (no air reachable OR buried under >=4x tiles)
+  blockedPairValue(r,c){
+    // merges this tile is directly preventing: the nearest non-empty
+    // neighbors on both sides along the row (only empties between, by
+    // construction) that are EQUAL to each other and != v would merge if
+    // this tile vanished. Same for the column. Returns the sum of such
+    // blocked pair values (0, one, or both).
+    const n=this.size, v=this.grid[r][c]; let total=0;
+    let left=null, right=null, up=null, down=null;
+    for(let cc=c-1;cc>=0;cc--) if(this.grid[r][cc]){ left=this.grid[r][cc]; break; }
+    for(let cc=c+1;cc<n;cc++)  if(this.grid[r][cc]){ right=this.grid[r][cc]; break; }
+    if(left!==null && right!==null && left===right && left!==v) total+=left;
+    for(let rr=r-1;rr>=0;rr--) if(this.grid[rr][c]){ up=this.grid[rr][c]; break; }
+    for(let rr=r+1;rr<n;rr++)  if(this.grid[rr][c]){ down=this.grid[rr][c]; break; }
+    if(up!==null && down!==null && up===down && up!==v) total+=up;
+    return total;
+  }
+  freedom(){
+    // number of directions whose move changes the board
+    let cnt=0;
+    for(const d of ["left","right","up","down"])
+      if(this.clone().move(d).changed) cnt++;
+    return cnt;
+  }
+  freedomWithout(r,c,base=null){
+    // how many extra move directions open up if this tile vanished.
+    // `base` lets callers hoist this.freedom() out of a whole-board scan.
+    if(base===null) base=this.freedom();
+    const b=this.clone(); b.grid[r][c]=0;
+    return Math.max(0, b.freedom()-base);
+  }
+  stuckScore(r,c,baseFreedom=null){
+    // v2: a tile is a problem when it's buried under strictly bigger tiles
+    // with no simulated escape, OR it directly blocks a big equal pair from
+    // merging (even with air around), OR the board is down to its last
+    // direction and removing this tile would unlock another. Exact order
+    // matters - the cheap structural tests gate the expensive sim, so the
+    // per-move scan stays fast even on crowded 6x6 boards.
     const n=this.size, v=this.grid[r][c];
     if(v===0) return null;
-    const bmax=this.maxTile()||v;
-    if(v*4>bmax) return null;
+    const mx=this.maxTile()||v;
+    if(v*4>mx) return null;              // only low-relative tiles
     const neigh=[];
     for(const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){
       const rr=r+dr, cc=c+dc;
-      if(rr>=0&&rr<n&&cc>=0&&cc<n){
-        const nv=this.grid[rr][cc];
-        if(nv===v) return null;      // can merge right now
-        if(nv===0) return null;      // breathing room
-        neigh.push(nv);
-      }
+      if(rr>=0&&rr<n&&cc>=0&&cc<n) neigh.push(this.grid[rr][cc]);
     }
-    if(!neigh.length || !neigh.every(x=>x>v)) return null;
+    if(neigh.some(nv=>nv===v)) return null;  // mergeable right now
+    const boxed=neigh.every(nv=>nv!==0);
+    const blockedV=this.blockedPairValue(r,c);
+    // cheap structural gates - only three archetypes justify the deep sim:
+    const buried=boxed && neigh.every(nv=>nv>v);  // walled in by bigger
+    if(baseFreedom===null) baseFreedom=this.freedom();
+    const jamPossible=boxed && baseFreedom<=1;    // board nearly locked
+    if(!(buried || jamPossible || blockedV>=4*v))
+      return null;                       // cheap out - no simulation
+    // ground truth: follow the tile through every 3-move future
     const [canMerge,canOpen]=this._tileFate(r,c,3);
-    if(canMerge) return null;        // a real escape exists
+    if(canMerge) return null;            // proven escape exists
+    const soft=boxed && Math.min(...neigh)<v*4;
+    const rescuable=canOpen && soft;     // air + soft walls -> realistic rescue
+    const fd=this.freedomWithout(r,c,baseFreedom);
+    const problem=(buried && !rescuable) || blockedV>=4*v || (jamPossible && fd>0);
+    if(!problem) return null;
+    // score by how low + how blocking + how freeing + how central
+    const lowness=mx/v;
+    const edge=(r===0||r===n-1?1:0)+(c===0||c===n-1?1:0);
+    const centrality=1.0+(edge>=2?0:(edge===1?0.5:1.0));
+    let score=lowness*centrality + 3.0*blockedV/v + 2.0*fd;
+    if(boxed) score += lowness*(Math.min(...neigh)/v);
     let partner=false;
     for(let rr=0;rr<n&&!partner;rr++) for(let cc=0;cc<n;cc++)
       if(this.grid[rr][cc]===v && !(rr===r&&cc===c)){ partner=true; break; }
-    if(canOpen && Math.min(...neigh)<v*4){
-      // air + soft surroundings: a partner can realistically be built there
-      return null;
-    }
-    const lowness=bmax/v, surround=Math.min(...neigh)/v;
-    const edge=(r===0||r===n-1?1:0)+(c===0||c===n-1?1:0);
-    const centrality=1.0+(edge>=2?0:(edge===1?0.5:1.0));
-    let score=lowness*surround*centrality;
-    if(!partner) score*=1.5;
+    if(!partner) score*=1.3;             // no partner anywhere = more stuck
     return score;
   }
   removeStuckLow(){
     const n=this.size; let best=null;
+    const base=this.freedom();           // hoisted: same for every candidate
     for(let r=0;r<n;r++) for(let c=0;c<n;c++){
-      const s=this.stuckScore(r,c);
+      const s=this.stuckScore(r,c,base);
       if(s!==null && (best===null||s>best[0])) best=[s,r,c];
     }
     if(best){ this.grid[best[1]][best[2]]=0; return [best[1],best[2]]; }
@@ -468,6 +592,7 @@ class Game{
     this.moveNo=0; this.tipLast={}; this.dangerShown=false;
     this.stuckCache=[]; this.lastGeneralTip=null;
     this.factsEmpties=0; this.factsMax=0; this.factsCorner=false; this.factsMerges=0;
+    this.factsDanger=false; this.factsOrdered=false;
     this.heldKeys = new Set();
     this.animating=false;
     this.audioCtx=null;
@@ -482,7 +607,10 @@ class Game{
 
   newGame(){
     this.board = new Board(this.cfg.grid_size);
-    this.board.spawn(); this.board.spawn();
+    this.board.spawn(); this.board.spawn();   // the initial spawns are NEVER evil
+    // cancel any in-flight move (mirrors Python: animating=False, pending_spawn=None)
+    if(this._finalizeTimer){ clearTimeout(this._finalizeTimer); this._finalizeTimer=null; }
+    this.animating=false;
     this.history=[]; this.won=false; this.keepGoing=false;
     this.cheatUsed=false;
     this.prevCornerOk=null; this.prevStuck=null; this.prevMax=0; this.prevEmpties=null;
@@ -522,7 +650,7 @@ class Game{
   playMerge(v){ // pitch rises with value
     const scale=[261.63,293.66,329.63,349.23,392,440,493.88,523.25,587.33,
       659.25,698.46,783.99,880,987.77,1046.5,1174.66];
-    const idx=Math.min(scale.length-1, Math.max(0, Math.round(Math.log2(v))-1));
+    const idx=Math.min(scale.length-1, Math.max(0, Math.round(Math.log2(v))-2));
     this.beep(scale[idx],0.12,"triangle",0.18);
   }
   playSpawn(){ this.beep(180,0.05,"sine",0.08); }
@@ -537,18 +665,55 @@ class Game{
     if(fv!==null||pe) this.cheatUsed=true;
     return [fv,pe];
   }
+  rollEvil(){
+    // rolled once per spawn: does the difficulty make THIS spawn evil?
+    const p=DIFFICULTY_EVIL_P[this.cfg.difficulty||"normal"]||0;
+    return p>0 && Math.random()<p;
+  }
   handleMove(direction){
-    if(this.animating) return;
+    if(this.animating) return;           // input during the slide is dropped
     if(!this.board.canMove()) return;
     const prev=this.board.clone();
     const {changed,anims,merges}=this.board.move(direction);
     if(!changed) return;
     this.history.push(prev); if(this.history.length>40) this.history.shift();
+    // capture spawn params NOW - keys may be released during the animation
     let [fv,pe]=this.heldSpawnParams();
     if(IS_TOUCH){ const [tfv,tpe]=this.touchHeldParams();
-      if(tfv!==null) fv=tfv; if(tpe) pe=true; }
-    const spawned=this.board.spawn(fv,pe);
-    if(IS_TOUCH) this.clearTouchArm();
+      if(tfv!==null) fv=tfv; if(tpe) pe=true; this.clearTouchArm(); }
+    this.animating=true;
+    this.animateSlide(anims);
+    this._finalizeTimer=setTimeout(()=>{ this._finalizeTimer=null;
+      this.finalizeMove(fv,pe,merges); },130);
+  }
+  animateSlide(anims){
+    // rebuild the tile layer at the FROM positions, force a reflow, then move
+    // every tile to its TO position so the CSS transition (.12s) slides them
+    const board=document.getElementById("board");
+    const tilesEl=document.getElementById("tiles");
+    if(this.state!=="game"||!board||!tilesEl) return;
+    const n=this.board.size, pad=12, gap=12;
+    const inner=board.clientWidth-2*pad;
+    const cell=(inner-gap*(n-1))/n;
+    tilesEl.innerHTML="";
+    const pos=([r,c])=>`translate(${c*(cell+gap)}px,${r*(cell+gap)}px)`;
+    const divs=[];
+    for(const a of anims){
+      const t=document.createElement("div"); t.className="tile";
+      t.style.width=cell+"px"; t.style.height=cell+"px";
+      t.style.transform=pos(a.from);
+      t.style.background=tileColor(a.value); t.style.color=tileText(a.value);
+      t.style.fontSize=tileFont(a.value);
+      t.textContent=a.value;
+      tilesEl.appendChild(t); divs.push([t,a]);
+    }
+    void tilesEl.offsetHeight;           // force reflow so the transition runs
+    for(const [t,a] of divs) t.style.transform=pos(a.to);
+  }
+  finalizeMove(fv,pe,merges){
+    // the board settles here: spawn, sound, win check, tips - then re-render.
+    // the evil roll happens at spawn time, exactly like the Python version
+    const spawned=this.board.spawn(fv,pe,this.rollEvil());
     this.updateHighscore();
     if(merges.length){ let hv=0; for(const m of merges) hv=Math.max(hv,m[2]);
       this.playMerge(hv); } else this.playSpawn();
@@ -557,21 +722,23 @@ class Game{
     this.moveNo++;
     this.refreshBoardFacts();
     this.checkTipEvents();
+    this.animating=false;
     // lightweight update (no full DOM rebuild) unless game-over/win overlay needed
     if((this.won && !this.keepGoing && !this.cfg.infinite) || !this.board.canMove())
       this.render();
     else
-      this.updateGameView();
+      this.updateGameView(spawned,merges);
   }
-  updateGameView(){
+  updateGameView(spawned=null,merges=null){
     // refresh only the tiles and score numbers - avoids the full-screen flash
+    if(this.state!=="game") return;      // board already mutated; skip DOM work
     const b=this.board;
     const sEls=document.querySelectorAll(".scorebox .val");
     if(sEls.length>=2){
       sEls[0].textContent=b.score;
       sEls[1].textContent=Math.max(this.cfg.highscore, b.score);
     }
-    this.layoutTiles();
+    this.layoutTiles(spawned,merges);
     this.renderTip();
   }
   // ---------- tap cheats ----------
@@ -605,17 +772,10 @@ class Game{
     tip_full:8, tip_stuck:6, tip_lost_corner:5, tip_good_corner:5,
     tip_good_clear:6, tip_good_merge:4, tip_good_space:10, tip_corner:10
   };
-  maxInCorner(){ const b=this.board,n=b.size,mx=b.maxTile();
-    return [b.grid[0][0],b.grid[0][n-1],b.grid[n-1][0],b.grid[n-1][n-1]].includes(mx); }
-  countAdjacentPairs(){
-    const b=this.board,n=b.size; let cnt=0;
-    for(let r=0;r<n;r++) for(let c=0;c<n;c++){
-      const v=b.grid[r][c]; if(v===0) continue;
-      if(c+1<n&&b.grid[r][c+1]===v) cnt++;
-      if(r+1<n&&b.grid[r+1][c]===v) cnt++;
-    }
-    return cnt;
-  }
+  // thin delegates - the logic lives on Board so cheats/tips/evil spawns
+  // all share one implementation
+  maxInCorner(){ return this.board.maxInCorner(); }
+  countAdjacentPairs(){ return this.board.adjacentPairs(); }
   refreshBoardFacts(){
     const b=this.board,n=b.size, cache=[];
     for(let r=0;r<n;r++) for(let c=0;c<n;c++){
@@ -627,6 +787,9 @@ class Game{
     this.factsMax=b.maxTile();
     this.factsCorner=this.maxInCorner();
     this.factsMerges=this.countAdjacentPairs();
+    // danger only simulates when empties <= 3, so it's cheap to cache too
+    this.factsDanger=b.inDanger();
+    this.factsOrdered=b.edgeOrdered();
   }
   hasStuck(){ return this.stuckCache.length>0; }
   tipReady(key){
@@ -647,12 +810,12 @@ class Game{
     const total=this.board.size*this.board.size;
     let fired=false;
     if(this.cfg.show_tips){
-      // 1) danger: board nearly full, almost no merges - once per episode
-      if(em<=3 && this.factsMerges<=1){
+      // 1) danger: board nearly full AND no move buys real air - once per episode
+      if(this.factsDanger){
         if(!this.dangerShown && this.tipReady("tip_full")){
           fired=this.fireTip("tip_full",5.0); this.dangerShown=true;
         }
-      } else if(em>=6){ this.dangerShown=false; }
+      } else if(em>=5){ this.dangerShown=false; }
       // 2) a tile just became stuck
       if(!fired && this.prevStuck===false && st && this.tipReady("tip_stuck"))
         fired=this.fireTip("tip_stuck",5.0);
@@ -693,11 +856,16 @@ class Game{
     if(mx>=64 && !this.factsCorner && this.tipReady("tip_corner")){
       this.tipLast["tip_corner"]=this.moveNo; return L("tip_corner");
     }
-    const tips=L("tips_list"); let idx;
-    if(empties>=total*0.6) idx=3;
-    else if(empties<=total*0.35) idx=1; else idx=2;
-    let tip=tips[idx%tips.length];
-    if(tip===this.lastGeneralTip) tip=tips[(idx+1)%tips.length];
+    // general tips matched to the ACTUAL situation; when nothing clearly
+    // applies, stay silent - silence beats a wrong tip
+    let idx=null;
+    if(empties<=total*0.3) idx=4;        // don't fill the board
+    else if(this.factsCorner && mx>=128 && !this.factsOrdered) idx=1; // keep a full ordered row
+    else if(this.factsCorner && mx>=128 && this.factsOrdered) idx=2;  // build a descending chain
+    else if(this.moveNo<30 && empties>=total*0.5) idx=3; // two fixed directions (early game)
+    if(idx===null) return null;
+    const tip=L("tips_list")[idx];
+    if(tip===this.lastGeneralTip) return null;
     this.lastGeneralTip=tip;
     return tip;
   }
@@ -728,6 +896,9 @@ class Game{
     this.profSnapshot=JSON.parse(JSON.stringify(this.cfg.profiles));
     this.entryProfile=this.cfg.active_profile;
     this.entryCheatOn=this.activeCheatOn();
+    // the refuge's toggles must also roll back on a refused confession
+    this.entryPersist=this.cfg.persist_cheats;
+    this.entryCountBest=this.cfg.count_cheats_in_best;
     this.cheatDirty=false; this.state="preferences"; this.render();
   }
   enforceMode1Clean(){ if(this.cfg.active_profile===0 &&
@@ -745,7 +916,11 @@ class Game{
   confessYes(){ saveCfg(this.cfg); this.cheatDirty=false; this.closeDialog();
     this.state="settings"; this.render(); }
   confessNo(){ this.cfg.profiles=JSON.parse(JSON.stringify(this.profSnapshot));
-    this.cfg.active_profile=this.entryProfile; this.cheatDirty=false;
+    this.cfg.active_profile=this.entryProfile;
+    // ...and the refuge toggles, so nothing sneaks past the refusal
+    this.cfg.persist_cheats=this.entryPersist;
+    this.cfg.count_cheats_in_best=this.entryCountBest;
+    this.cheatDirty=false;
     this.closeDialog(); this.toast(this.L("confess_rejected")); this.state="settings"; this.render(); }
   praiseOk(){ this.closeDialog(); this.toast(this.L("praise_toast"));
     this.state="settings"; this.render(); }
@@ -817,6 +992,8 @@ class Game{
       else if(hk.length===1) hk=hk.toLowerCase();
       this.heldKeys.delete(hk);
     });
+    // focus loss eats keyup events - drop all held keys so none stay stale
+    window.addEventListener("blur",()=>this.heldKeys.clear());
     // touch swipe on the board
     let sx=0,sy=0,active=false;
     document.addEventListener("touchstart",(e)=>{
@@ -1007,7 +1184,8 @@ class Game{
   }
   clearTouchArm(){ if(this._touchArm){ this._touchArm={}; } }
 
-  layoutTiles(){
+  layoutTiles(spawned=null,merges=null){
+    if(this.state!=="game") return;      // never touch a screen we're not on
     const n=this.board.size;
     const board=document.getElementById("board");
     const tilesEl=document.getElementById("tiles");
@@ -1029,6 +1207,8 @@ class Game{
       t.style.background=tileColor(v); t.style.color=tileText(v);
       t.style.fontSize=tileFont(v);
       t.textContent=v;
+      if(spawned && spawned[0]===r && spawned[1]===c) t.classList.add("pop");
+      else if(merges && merges.some(m=>m[0]===r&&m[1]===c)) t.classList.add("merged");
       tilesEl.appendChild(t);
     }
   }
@@ -1050,6 +1230,8 @@ class Game{
     const L=k=>this.L(k);
     const rows=[
       this.optRow(L("grid_size"),[{val:4,txt:"4\u00d74"},{val:5,txt:"5\u00d75"},{val:6,txt:"6\u00d76"}],this.cfg.grid_size,v=>{this.cfg.grid_size=v;saveCfg(this.cfg);this.newGame();}),
+      // applies immediately - the next spawn already rolls the new odds
+      this.optRow(L("difficulty"),[{val:"normal",txt:L("diff_normal")},{val:"hard",txt:L("diff_hard")},{val:"evil",txt:L("diff_evil")}],this.cfg.difficulty||"normal",v=>{this.cfg.difficulty=v;saveCfg(this.cfg);}),
       this.optRow(L("language"),[{val:"he",txt:L("hebrew")},{val:"en",txt:L("english")}],this.cfg.language,v=>{this.cfg.language=v;saveCfg(this.cfg);}),
       this.optRow(L("sound"),[{val:true,txt:L("on")},{val:false,txt:L("off")}],this.cfg.sound,v=>{this.cfg.sound=v;saveCfg(this.cfg);}),
       this.optRow(L("win_mode"),[{val:true,txt:L("infinite")},{val:false,txt:L("target")}],this.cfg.infinite,v=>{this.cfg.infinite=v;saveCfg(this.cfg);}),
@@ -1094,6 +1276,8 @@ class Game{
       <div class="subtitle">${L("prefs_sub")}</div>
       <div class="modesel"><button id="pPrev">\u2039</button>
         <div class="name">${this.modeName()}</div><button id="pNext">\u203a</button></div>
+      <div class="checkrow"><span>${L("persist_cheats")}</span>
+        <div class="checkbox ${this.cfg.persist_cheats?'on':''}" id="cbPersist">${this.cfg.persist_cheats?"\u2713":""}</div></div>
       <div class="checkrow"><span>${L("count_best")}</span>
         <div class="checkbox ${this.cfg.count_cheats_in_best?'on':''}" id="cbCount">${this.cfg.count_cheats_in_best?"\u2713":""}</div></div>
       <div style="font-weight:700;margin:10px 4px 8px">${L("assist_keys")}</div>`;
@@ -1115,6 +1299,7 @@ class Game{
     document.getElementById("pBack").onclick=()=>this.leavePreferences();
     document.getElementById("pPrev").onclick=()=>{this.cfg.active_profile=(this.cfg.active_profile-1+this.cfg.profiles.length)%this.cfg.profiles.length;this.enforceMode1Clean();this.render();};
     document.getElementById("pNext").onclick=()=>{this.cfg.active_profile=(this.cfg.active_profile+1)%this.cfg.profiles.length;this.enforceMode1Clean();this.render();};
+    document.getElementById("cbPersist").onclick=()=>{this.cfg.persist_cheats=!this.cfg.persist_cheats;this.cheatDirty=true;this.render();};
     document.getElementById("cbCount").onclick=()=>{this.cfg.count_cheats_in_best=!this.cfg.count_cheats_in_best;this.cheatDirty=true;this.render();};
     this.app.querySelectorAll(".keybox[data-act]").forEach(box=>{
       box.onclick=(ev)=>{ ev.stopPropagation();
@@ -1159,7 +1344,7 @@ class Game{
   }
 }
 
-const APP_VERSION="0.16.1";
+const APP_VERSION="0.17.0";
 window.addEventListener("load",()=>{
   const game=new Game();
   window._game=game;
