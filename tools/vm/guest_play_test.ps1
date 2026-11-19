@@ -83,18 +83,25 @@ try {
   Check 'a long run of real key presses moved the board' ($s1.moves -ge 40) ("moves " + $s1.moves + ", score " + $s1.score)
   Check 'honest play is not marked as cheating' (-not $s1.cheat_used)
 
-  # 2) fast bursts: 12 keys 30 ms apart - none may be lost
+  # 2) fast bursts: 12 keys 30 ms apart - none may be lost. The game's input
+  # trace (TWENTY49_TRACE_INPUT, tests only) tells a key that never arrived
+  # from one whose direction the rules ignore on that board: counting moves
+  # alone could not (12 -> 9 on a filling board was all blocked keys).
+  $tr = Join-Path $out 'burst_trace.txt'
+  $env:TWENTY49_TRACE = $tr; $env:TWENTY49_TRACE_INPUT = '1'
   Start-Process 'C:\bench\2049.exe' | Out-Null; $h = Wait-Window 60; Start-Sleep -Seconds 2
   $before = (Saved).moves
-  # left/right in turn: on a board in mid-game both are open almost always (a key on a
-  # blocked direction is ignored by the rules - with left/down/right/down that made 12 -> 9
-  # on a fair board; checked headless: every key reached the game, every open one moved)
-  foreach ($k in 'left','right','left','right','left','right','left','right','left','right','left','right') { Tap $h $k 30 }
+  foreach ($k in 'left','down','right','down','left','down','right','down','left','down','right','down') { Tap $h $k 30 }
   Start-Sleep -Seconds 1
   Close-Game $h
+  Remove-Item Env:TWENTY49_TRACE, Env:TWENTY49_TRACE_INPUT -ErrorAction SilentlyContinue
   $s2 = Saved
-  Check 'fast key bursts are not swallowed' (($s2.moves - $before) -ge 11) ("12 fast keys -> " + ($s2.moves - $before) + " moves")
-
+  $tl = @(Get-Content $tr -ErrorAction SilentlyContinue)
+  $arrived = @($tl | Where-Object { $_ -match 'keydown (left|right|down)$' }).Count
+  $moved = @($tl | Where-Object { $_ -match 'move (left|right|down) moved' }).Count
+  $blocked = @($tl | Where-Object { $_ -match 'move (left|right|down) blocked' }).Count
+  Check 'fast key bursts are not swallowed' ($arrived -eq 12 -and ($moved + $blocked) -eq 12 -and ($s2.moves - $before) -eq $moved) `
+    ("12 fast keys: {0} arrived, {1} moved, {2} blocked by the rules; saved moves +{3}" -f $arrived, $moved, $blocked, ($s2.moves - $before))
   # 3) assists: undo (Z), smart tile (hold X), clean (C)
   Start-Process 'C:\bench\2049.exe' | Out-Null; $h = Wait-Window 60; Start-Sleep -Seconds 2
   Tap $h 'left' 300; Tap $h 'z' 400
