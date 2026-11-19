@@ -710,7 +710,13 @@ class Game{
   onKey(e){
     if(this.capturing!==null && this.state!=="preferences") this.capturing=null;
     if(this.capturing!==null){ e.preventDefault(); this.captureKey(e.key); return; }
-    if(document.querySelector(".dim")) return;
+    if(document.querySelector(".dim")){
+      if(e.key==="Escape"){                // Esc = the safe answer of any dialog
+        const pick=document.querySelector("#cfNo,#prOk,#cn,#pkCancel");
+        if(pick) pick.click(); else this.closeDialog();
+      }
+      return;
+    }
     if(this.state!=="game") return;
     const k=this.normKey(e.key);
     this.heldKeys.add(k);
