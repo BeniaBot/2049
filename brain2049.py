@@ -498,7 +498,12 @@ def stuck_kind(b, n, i):
                     return ("chain", mx)
     if not in_corner and i in corners(n) \
             and any(b[j] == mx for j in neighbours(i, n)):
-        return ("corner", mx)
+        # not while the biggest tiles are about to merge: the board is in
+        # flux (review round 3: "the 4 took the 64's corner" next to 64|64)
+        about_to_merge = any(b[k] == mx and any(b[j] == mx for j in neighbours(k, n))
+                             for k in range(n * n))
+        if not about_to_merge:
+            return ("corner", mx)
     return None
 
 
@@ -834,6 +839,7 @@ class Coach:
                                      max_moves=3))
         elif not a.corner and a.max_rank >= 6 \
                 and self.off_corner >= OFF_CORNER_MOVES \
+                and (self.corner_told is None or m - self.corner_told > 8) \
                 and self._ready("tip_corner_goal"):
             # out of a corner for a while: say so only when ONE move fixes it
             into = [x for x in a.values if a.keeps_corner(x)]

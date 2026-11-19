@@ -373,8 +373,18 @@
       }
     }
     if (!inCorner && cs.indexOf(i) >= 0) {
-      var nb = neighbours(i, n);
-      for (j = 0; j < nb.length; j++) if (b[nb[j]] === mx) return ["corner", mx];
+      var nb = neighbours(i, n), nextToMax = false;
+      for (j = 0; j < nb.length; j++) if (b[nb[j]] === mx) nextToMax = true;
+      if (nextToMax) {
+        // not while the biggest tiles are about to merge (board in flux)
+        var aboutToMerge = false;
+        for (var t = 0; t < n * n && !aboutToMerge; t++) {
+          if (b[t] !== mx) continue;
+          var nt = neighbours(t, n);
+          for (j = 0; j < nt.length; j++) if (b[nt[j]] === mx) aboutToMerge = true;
+        }
+        if (!aboutToMerge) return ["corner", mx];
+      }
     }
     return null;
   }
@@ -642,6 +652,7 @@
         }
       }
     } else if (!a.corner && a.maxRank >= 6 && this.offCorner >= OFF_CORNER_MOVES &&
+               (this.cornerTold === null || m - this.cornerTold > 8) &&
                this.ready("tip_corner_goal")) {
       // out of a corner for a while: say so only when ONE move fixes it
       var into = a.legal.filter(function (x) { return a.keepsCorner(x); });
