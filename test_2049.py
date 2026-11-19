@@ -213,8 +213,36 @@ class TestCoach(unittest.TestCase):
         self.assertTrue(tip is None or tip.key != "tip_stuck")   # no flicker tips
         tip = c.on_move(B.LEFT, ident(self.STUCK), ana(self.STUCK))
         self.assertIsNotNone(tip)
-        self.assertEqual(tip.key, "tip_stuck")
-        self.assertEqual(tip.params, {"value": 4, "place": "edge_top"})
+        self.assertEqual(tip.key, "tip_stuck_chain")
+        self.assertEqual(tip.params, {"value": 4, "big": 256, "place": "edge_top"})
+
+    def test_messy_board_gets_no_stuck_tip(self):
+        # a player's screenshot (19.11): the 64 sits in the middle, boxed in;
+        # calling 'the 8 in the right column' stuck was nonsense
+        board = [[4, 16, 2, 4], [8, 4, 64, 8], [4, 16, 4, 2], [2, 0, 0, 0]]
+        self.assertEqual(ana(board).stuck, set())
+        c = self.fresh(board)
+        for _ in range(3):
+            tip = c.on_move(B.LEFT, ident(board), ana(board))
+            self.assertTrue(tip is None or not tip.key.startswith("tip_stuck"))
+
+    def test_blocker_between_equal_pair_is_named_as_such(self):
+        board = [[256, 2, 256, 128], [8, 4, 16, 32], [0, 4, 32, 4], [2, 0, 0, 2]]
+        c = self.fresh(board)
+        c.on_move(B.LEFT, ident(board), ana(board))
+        tip = c.on_move(B.LEFT, ident(board), ana(board))
+        self.assertEqual(tip.key, "tip_stuck_block")
+        self.assertEqual((tip.params["value"], tip.params["big"]), (2, 256))
+
+    def test_corner_goal_only_when_one_move_does_it(self):
+        off = [[8, 16, 4, 4], [4, 32, 8, 32], [2, 16, 64, 4], [2, 8, 128, 0]]
+        c = self.fresh(off)
+        tip = None
+        for _ in range(B.OFF_CORNER_MOVES + 1):
+            tip = c.on_move(B.UP, ident(off), ana(off)) or tip
+        self.assertIsNotNone(tip)
+        self.assertEqual(tip.key, "tip_corner_goal")
+        self.assertEqual(tip.params, {"value": 128, "dir": B.RIGHT})
 
     def test_trap_tip_points_to_safety_and_expires(self):
         trap = [[2, 8, 2, 8], [16, 32, 16, 4], [8, 64, 128, 2], [16, 32, 0, 4]]

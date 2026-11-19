@@ -49,7 +49,7 @@ def summary(a, tip):
         "safety": [a.safety.get(d) for d in B.DIRS],
         "deadly": list(a.deadly), "corner": a.corner,
         "harms": [[h, i] for h, i in a.harms], "problem": a.problem,
-        "stuck": sorted(a.stuck), "safest": a.safest(),
+        "stuck": sorted(a.stuck), "kinds": sorted([[k, list(v)] for k, v in a.stuck_info.items()]), "safest": a.safest(),
         "tip": None if tip is None else [tip.key, tip.params, tip.track],
     }
 

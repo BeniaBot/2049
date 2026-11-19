@@ -347,6 +347,39 @@
     }
     return false;
   }
+  /* = brain2049.stuck_kind: ["block"|"chain"|"corner", bigRank] or null */
+  function stuckKind(b, n, i) {
+    var v = b[i];
+    if (v === 0) return null;
+    var r = Math.floor(i / n), c = i % n, k, j, lines = [[], []];
+    for (k = 0; k < n; k++) { lines[0].push(r * n + k); lines[1].push(k * n + c); }
+    for (var L = 0; L < 2; L++) {
+      var line = lines[L], pos = line.indexOf(i), left = 0, right = 0;
+      for (j = pos - 1; j >= 0; j--) if (b[line[j]]) { left = b[line[j]]; break; }
+      for (j = pos + 1; j < n; j++) if (b[line[j]]) { right = b[line[j]]; break; }
+      if (left && left === right && left >= v + 2 && left >= 5) return ["block", left];
+    }
+    var mx = maxOf(b);
+    if (v >= mx || mx < 6) return null;
+    var cs = corners(n), inCorner = false, q;
+    for (q = 0; q < 4; q++) if (b[cs[q]] === mx) inCorner = true;
+    for (q = 0; q < 4; q++) {
+      var ci = cs[q];
+      if (b[ci] !== mx) continue;
+      var el = edgeLines(ci, n);
+      for (var e = 0; e < 2; e++) {
+        var ln = el[e], kk = ln.indexOf(i);
+        if (kk > 0 && kk < n - 1 && b[ln[kk - 1]] > v && b[ln[kk + 1]] > v) return ["chain", mx];
+      }
+    }
+    if (!inCorner && cs.indexOf(i) >= 0) {
+      var nb = neighbours(i, n);
+      for (j = 0; j < nb.length; j++) if (b[nb[j]] === mx) return ["corner", mx];
+    }
+    return null;
+  }
+  var STUCK_ORDER = { block: 0, chain: 1, corner: 2 };
+
   function placeOf(i, n) {
     var r = Math.floor(i / n), c = i % n;
     var top = r === 0, bottom = r === n - 1, left = c === 0, right = c === n - 1;
@@ -437,13 +470,18 @@
     this.harmAt = new Map();
     this.problems = new Set();
     this.stuck = new Set();
+    this.stuckInfo = new Map();
     var low = this.maxRank - 3;
     for (i = 0; i < this.harms.length; i++) {
       var h = this.harms[i][0], cell = this.harms[i][1];
       this.harmAt.set(cell, h);
       if (h >= CHEAT_T) this.problems.add(cell);
-      if (b[cell] <= low && (h >= STUCK_T || (h >= CHAIN_T && chainBreaker(b, n, cell))))
-        this.stuck.add(cell);
+      if (h < CHAIN_T) continue;
+      var kind = stuckKind(b, n, cell);
+      if (kind === null) continue;
+      if (kind[0] !== "block" && b[cell] > low) continue;
+      this.stuckInfo.set(cell, kind);
+      this.stuck.add(cell);
     }
   }
   Analysis.ofGrid = function (grid, withHarms) {
@@ -477,11 +515,13 @@
   var PRIO_OPEN = 0, PRIO_PRAISE = 1, PRIO_HINT = 2, PRIO_CORNER = 3,
       PRIO_STUCK = 4, PRIO_DANGER = 5;
   var COOLDOWN = {
-    tip_stuck: 5, tip_corner_lost: 6, tip_corner_back: 6, tip_better: 8,
-    tip_good_escape: 10, tip_good_freed: 4, tip_good_corner: 6,
+    stuck: 8, tip_corner_lost: 6, tip_corner_back: 6, tip_corner_goal: 20,
+    tip_good_escape: 10, tip_good_freed: 6, tip_good_corner: 20,
     tip_good_record: 0, tip_danger: 0
   };
-  var BLUNDER_T = 2.5, RECORD_RANK = 8;
+  var RECORD_RANK = 8, OFF_CORNER_MOVES = 4;
+  var STUCK_KEYS = ["tip_stuck_block", "tip_stuck_chain", "tip_stuck_corner"];
+  function isStuckKey(k) { return STUCK_KEYS.indexOf(k) >= 0; }
 
   function Tip(key, prio, born, params, opts) {
     opts = opts || {};
@@ -496,7 +536,7 @@
   function Coach() { this.opened = false; this.reset(); }
   Coach.prototype.reset = function () {
     this.moveNo = 0; this.last = {}; this.prev = null; this.track = new Map();
-    this.danger = false; this.cornerTold = null; this.current = null;
+    this.danger = false; this.cornerTold = null; this.offCorner = 0; this.current = null;
   };
   Coach.prototype.newGame = function (a) {
     this.reset();
@@ -514,6 +554,7 @@
   };
   Coach.prototype.dismiss = function () { this.current = null; };
   Coach.prototype.ready = function (key) {
+    if (isStuckKey(key)) key = "stuck";
     var last = this.last[key];
     var cd = COOLDOWN[key] === undefined ? 5 : COOLDOWN[key];
     return last === undefined || this.moveNo - last >= cd;
@@ -523,9 +564,8 @@
     var k = tip.key;
     if (k === "tip_danger") return a.survival < DANGER_EXIT && a.hasValue(tip.params.dir);
     if (k === "tip_trap") return this.moveNo === tip.born && a.hasValue(tip.params.dir);
-    if (k === "tip_stuck") return tip.track !== null && a.problems.has(tip.track);
-    if (k === "tip_corner_lost" || k === "tip_corner_back") return !a.corner;
-    if (k === "tip_better") return this.moveNo === tip.born;
+    if (isStuckKey(k)) return tip.track !== null && a.problems.has(tip.track);
+    if (k === "tip_corner_lost" || k === "tip_corner_back" || k === "tip_corner_goal") return !a.corner;
     return true;
   };
   /* moved: Map from_cell -> [to_cell, merged] */
@@ -538,17 +578,19 @@
     this.track.forEach(function (t, cell) {
       var res = mv(cell), to = res[0], merged = res[1];
       if (a.problems.has(to)) {
-        var nt = { age: t.age + 1, told: t.told };
+        var nt = { age: t.age + 1, told: t.told, kind: t.kind };
         if (newTrack.has(to)) nt.told = nt.told || newTrack.get(to).told;
         newTrack.set(to, nt);
       } else if (t.told && merged && !cheated) {
-        freed = to;
+        freed = [to, t.kind];
       }
     });
     Array.from(a.stuck).sort(function (x, y) { return x - y; }).forEach(function (cell) {
       if (!newTrack.has(cell)) newTrack.set(cell, { age: 0, told: false });
+      newTrack.get(cell).kind = a.stuckInfo.get(cell)[0];
     });
     this.track = newTrack;
+    this.offCorner = a.corner ? 0 : this.offCorner + 1;
 
     // danger / trap
     var wasDanger = this.danger;
@@ -562,19 +604,26 @@
       cands.push(new Tip("tip_good_escape", PRIO_PRAISE, m, {}, { maxMoves: 2, kind: "praise", maxSecs: 3.5 }));
     }
 
-    // a stuck tile that stayed stuck
-    if (this.ready("tip_stuck")) {
+    // a stuck tile that stayed stuck, not right after a corner tip
+    var cornerQuiet = this.cornerTold !== null && m - this.cornerTold <= 3;
+    if (this.ready("stuck") && !cornerQuiet) {
       var bestCell = null;
+      var better = function (x, y) {        // = Python's rank(x) < rank(y)
+        var ox = STUCK_ORDER[a.stuckInfo.get(x)[0]], oy = STUCK_ORDER[a.stuckInfo.get(y)[0]];
+        if (ox !== oy) return ox < oy;
+        return -(a.harmAt.get(x) || 0) < -(a.harmAt.get(y) || 0);
+      };
       this.track.forEach(function (t, cell) {
         if (t.age >= 1 && !t.told && a.stuck.has(cell)) {
-          var h = a.harmAt.get(cell) || 0;
-          if (bestCell === null || h > (a.harmAt.get(bestCell) || 0)) bestCell = cell;
+          if (bestCell === null || better(cell, bestCell)) bestCell = cell;
         }
       });
-      if (bestCell !== null)
-        cands.push(new Tip("tip_stuck", PRIO_STUCK, m,
-          { value: Math.pow(2, a.b[bestCell]), place: placeOf(bestCell, a.n) },
+      if (bestCell !== null) {
+        var info = a.stuckInfo.get(bestCell);
+        cands.push(new Tip("tip_stuck_" + info[0], PRIO_STUCK, m,
+          { value: Math.pow(2, a.b[bestCell]), big: Math.pow(2, info[1]), place: placeOf(bestCell, a.n) },
           { maxMoves: 6, track: bestCell }));
+      }
     }
 
     // the biggest tile left its corner
@@ -592,18 +641,23 @@
           cands.push(new Tip("tip_corner_back", PRIO_CORNER, m, { value: Math.pow(2, a.maxRank), dir: bd }, { maxMoves: 3 }));
         }
       }
+    } else if (!a.corner && a.maxRank >= 6 && this.offCorner >= OFF_CORNER_MOVES &&
+               this.ready("tip_corner_goal")) {
+      // out of a corner for a while: say so only when ONE move fixes it
+      var into = a.legal.filter(function (x) { return a.keepsCorner(x); });
+      if (into.length) {
+        var gd = into[0];
+        for (var g = 1; g < into.length; g++) if (a.values[into[g]] > a.values[gd]) gd = into[g];
+        cands.push(new Tip("tip_corner_goal", PRIO_CORNER, m, { value: Math.pow(2, a.maxRank), dir: gd }, { maxMoves: 2 }));
+      }
     } else if (p && !p.corner && a.corner && this.cornerTold !== null &&
                m - this.cornerTold <= 6 && !cheated && this.ready("tip_good_corner")) {
       cands.push(new Tip("tip_good_corner", PRIO_PRAISE, m, { value: Math.pow(2, a.maxRank) }, { maxMoves: 2, kind: "praise", maxSecs: 3.5 }));
     }
 
-    // a clear blunder
-    if (p && p.hasValue(d) && p.best !== null && d !== p.best &&
-        p.regret(d) >= BLUNDER_T && this.ready("tip_better"))
-      cands.push(new Tip("tip_better", PRIO_HINT, m, { dir: p.best }, { maxMoves: 0 }));
-
     // earned praise
-    if (freed !== null && this.ready("tip_good_freed"))
+    if (freed !== null && (freed[1] === "block" || freed[1] === "chain") && a.corner &&
+        !a.deadly.length && this.ready("tip_good_freed"))
       cands.push(new Tip("tip_good_freed", PRIO_PRAISE, m, {}, { maxMoves: 2, kind: "praise", maxSecs: 3.5 }));
     if (p && a.maxRank > p.maxRank && a.maxRank >= RECORD_RANK && !cheated)
       cands.push(new Tip("tip_good_record", PRIO_PRAISE, m, { value: Math.pow(2, a.maxRank) }, { maxMoves: 2, kind: "praise", maxSecs: 3.5 }));
@@ -618,9 +672,10 @@
       if (cur === null || top.prio >= cur.prio) {
         if (!(cur !== null && cur.key === top.key && sameParams(cur.params, top.params))) {
           cur = top;
-          this.last[top.key] = m;
-          if (top.key === "tip_stuck") this.track.get(top.track).told = true;
-          if (top.key === "tip_corner_lost" || top.key === "tip_corner_back") this.cornerTold = m;
+          this.last[isStuckKey(top.key) ? "stuck" : top.key] = m;
+          if (isStuckKey(top.key)) this.track.get(top.track).told = true;
+          if (top.key === "tip_corner_lost" || top.key === "tip_corner_back" ||
+              top.key === "tip_corner_goal") this.cornerTold = m;
         }
       }
     }
@@ -636,7 +691,7 @@
     bestMove: bestMove, positionValue: positionValue, pickDepth: pickDepth,
     survival: survival, moveSurvival: moveSurvival, harmUnit: harmUnit,
     tileHarms: tileHarms, chainBreaker: chainBreaker, placeOf: placeOf,
-    maxInCorner: maxInCorner, bestSpawn: bestSpawn,
+    maxInCorner: maxInCorner, bestSpawn: bestSpawn, stuckKind: stuckKind,
     Analysis: Analysis, Coach: Coach, Tip: Tip,
     DANGER_ENTER: DANGER_ENTER, DANGER_EXIT: DANGER_EXIT, CHEAT_T: CHEAT_T
   };

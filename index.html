@@ -258,9 +258,11 @@ he: {
   tip_open:"טיפ: בחר פינה לאריח הגבוה ושמור אותו שם",
   tip_danger:"מצב קשה – המהלך הבטוח ביותר: {dir}",
   tip_trap:"זהירות: {bad} עלול לגמור את המשחק · בטוח: {dir}",
-  tip_stuck:"ה-{value} {place} תקוע – בנה לידו {value} כדי לשחרר אותו",
+  tip_stuck_block:"ה-{value} {place} חוסם את שני ה-{big} מלהתמזג",
+  tip_stuck_chain:"ה-{value} {place} שובר את השרשרת של ה-{big} – נסה לבנות לידו {value}",
+  tip_stuck_corner:"ה-{value} תפס את הפינה של ה-{big}",
   tip_corner_lost:"ה-{value} יצא מהפינה – {dir} היה שומר אותו שם",
-  tip_corner_back:"החזר את ה-{value} לפינה: {dir}", tip_better:"{dir} היה מהלך טוב יותר כאן",
+  tip_corner_back:"החזר את ה-{value} לפינה: {dir}", tip_corner_goal:"העבר את ה-{value} לפינה: {dir}",
   tip_good_escape:"יפה! יצאת מהמצב הקשה", tip_good_freed:"יפה מאוד! שחררת את האריח התקוע",
   tip_good_corner:"יופי, ה-{value} חזר לפינה", tip_good_record:"מצוין! הגעת ל-{value}",
   places:{corner_tl:"בפינה השמאלית העליונה", corner_tr:"בפינה הימנית העליונה",
@@ -307,9 +309,11 @@ en: {
   tip_open:"Tip: pick a corner for your biggest tile and keep it there",
   tip_danger:"Tight spot - safest move: {dir}",
   tip_trap:"Careful: {bad} may end the game · safe: {dir}",
-  tip_stuck:"The {value} {place} is stuck - build a {value} next to it",
+  tip_stuck_block:"The {value} {place} keeps your two {big}s from merging",
+  tip_stuck_chain:"The {value} {place} breaks your {big}'s chain - build another {value} next to it",
+  tip_stuck_corner:"The {value} took your {big}'s corner",
   tip_corner_lost:"Your {value} left the corner - {dir} would have kept it",
-  tip_corner_back:"Bring your {value} back to the corner: {dir}", tip_better:"{dir} was a better move here",
+  tip_corner_back:"Bring your {value} back to the corner: {dir}", tip_corner_goal:"Move your {value} into a corner: {dir}",
   tip_good_escape:"Nice - you got out of that tight spot", tip_good_freed:"Great - you freed the stuck tile",
   tip_good_corner:"Good - your {value} is back in the corner", tip_good_record:"Excellent - you reached {value}!",
   places:{corner_tl:"in the top-left corner", corner_tr:"in the top-right corner",
@@ -634,6 +638,7 @@ class Game{
     if(p.dir!==undefined) f.dir=arrow(p.dir);
     if(p.bad) f.bad=p.bad.map(arrow).join(" ");
     if(p.value!==undefined) f.value=String(p.value);
+    if(p.big!==undefined) f.big=String(p.big);
     if(p.place) f.place=esc(this.L("places")[p.place]||"");
     return esc(this.L(t.key)).replace(/\{(\w+)\}/g,(m,k)=>f[k]!==undefined?f[k]:m);
   }

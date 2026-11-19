@@ -461,6 +461,50 @@ def chain_breaker(b, n, i):
     return False
 
 
+def stuck_kind(b, n, i):
+    """Why a low tile counts as stuck - in the three situations a player
+    recognises at a glance - or None:
+      ("block", v):  it sits between two equal tiles of v (>= 4x itself,
+                     32+) in its row or column, keeping them from merging
+      ("chain", v):  the biggest tile v holds a corner and this tile is a
+                     dip in the row/column running out of that corner
+      ("corner", v): it occupies a corner right next to the biggest tile v
+                     (which is not in a corner itself)
+    Reviewing simulated games tip by tip showed that anything else called
+    'stuck' - e.g. small tiles around a biggest tile sitting in the middle
+    of a messy board - reads as nonsense to a player."""
+    v = b[i]
+    if v == 0:
+        return None
+    r, c = divmod(i, n)
+    # block: nearest non-empty neighbours on both sides along a line
+    for line in ([r * n + k for k in range(n)], [k * n + c for k in range(n)]):
+        k = line.index(i)
+        left = next((b[j] for j in reversed(line[:k]) if b[j]), 0)
+        right = next((b[j] for j in line[k + 1:] if b[j]), 0)
+        if left and left == right and left >= v + 2 and left >= 5:
+            return ("block", left)
+    mx = max(b)
+    if v >= mx or mx < 6:
+        return None          # corner talk starts at 64 - earlier it is noise
+    in_corner = any(b[ci] == mx for ci in corners(n))
+    for ci in corners(n):
+        if b[ci] != mx:
+            continue
+        for line in edge_lines(ci, n):
+            if i in line:
+                k = line.index(i)
+                if 0 < k < n - 1 and b[line[k - 1]] > v and b[line[k + 1]] > v:
+                    return ("chain", mx)
+    if not in_corner and i in corners(n) \
+            and any(b[j] == mx for j in neighbours(i, n)):
+        return ("corner", mx)
+    return None
+
+
+STUCK_ORDER = {"block": 0, "chain": 1, "corner": 2}
+
+
 def place_of(i, n):
     """Where a cell is, in words the UI can localize."""
     r, c = divmod(i, n)
@@ -563,12 +607,22 @@ class Analysis:
             self.harms = [(h / self.unit, i) for h, i in tile_harms(b, n, 1)]
         self.harm_at = {i: h for h, i in self.harms}
         self.problems = {i for h, i in self.harms if h >= CHEAT_T}
-        # "stuck" (what a tip may call stuck) is for clearly LOW tiles - at
-        # most 1/8 of the top tile; the assist may still take up to 1/4
+        # "stuck" (what a tip may call stuck): a tile that really hurts
+        # (harm) AND sits in one of the three situations a player sees at a
+        # glance (stuck_kind). Chain/corner cases are for clearly low tiles,
+        # at most 1/8 of the top tile; the assist may still take up to 1/4.
         low = self.max_rank - 3
-        self.stuck = {i for h, i in self.harms
-                      if b[i] <= low and (h >= STUCK_T or
-                                          (h >= CHAIN_T and chain_breaker(b, n, i)))}
+        self.stuck_info = {}
+        for h, i in self.harms:
+            if h < CHAIN_T:
+                continue
+            kind = stuck_kind(b, n, i)
+            if kind is None:
+                continue
+            if kind[0] != "block" and b[i] > low:
+                continue
+            self.stuck_info[i] = kind
+        self.stuck = set(self.stuck_info)
 
     @classmethod
     def of_grid(cls, grid, harms=True):
@@ -629,12 +683,13 @@ PRIO_OPEN, PRIO_PRAISE, PRIO_HINT, PRIO_CORNER, PRIO_STUCK, PRIO_DANGER = \
     range(6)
 
 COOLDOWN = {             # moves between two tips of the same key
-    "tip_stuck": 5, "tip_corner_lost": 6, "tip_corner_back": 6,
-    "tip_better": 8, "tip_good_escape": 10, "tip_good_freed": 4,
-    "tip_good_corner": 6, "tip_good_record": 0, "tip_danger": 0,
+    "stuck": 8, "tip_corner_lost": 6, "tip_corner_back": 6,
+    "tip_corner_goal": 20, "tip_good_escape": 10, "tip_good_freed": 6,
+    "tip_good_corner": 20, "tip_good_record": 0, "tip_danger": 0,
 }
-BLUNDER_T = 2.5          # regret (harm units) that earns a "better move" tip
 RECORD_RANK = 8          # praise new records from 256 up
+OFF_CORNER_MOVES = 4     # biggest tile out of a corner this long -> corner tip
+STUCK_KEYS = ("tip_stuck_block", "tip_stuck_chain", "tip_stuck_corner")
 
 
 class Coach:
@@ -649,6 +704,7 @@ class Coach:
         self.track = {}              # cell -> {"age", "told"}
         self.danger = False
         self.corner_told = None      # move number of the last corner tip
+        self.off_corner = 0          # moves the biggest tile spent off a corner
         self.current = None
 
     # ---- lifecycle ------------------------------------------------------
@@ -674,6 +730,7 @@ class Coach:
         self.current = None
 
     def _ready(self, key):
+        key = "stuck" if key in STUCK_KEYS else key
         last = self.last.get(key)
         return last is None or self.move_no - last >= COOLDOWN.get(key, 5)
 
@@ -686,12 +743,10 @@ class Coach:
             return a.survival < DANGER_EXIT and tip.params["dir"] in a.values
         if k == "tip_trap":
             return self.move_no == tip.born and tip.params["dir"] in a.values
-        if k == "tip_stuck":
+        if k in STUCK_KEYS:
             return tip.track is not None and tip.track in a.problems
-        if k in ("tip_corner_lost", "tip_corner_back"):
+        if k in ("tip_corner_lost", "tip_corner_back", "tip_corner_goal"):
             return not a.corner
-        if k == "tip_better":
-            return self.move_no == tip.born
         return True
 
     # ---- the per-move step ---------------------------------------------
@@ -716,11 +771,13 @@ class Coach:
                     nt["told"] = nt["told"] or new_track[to]["told"]
                 new_track[to] = nt
             elif t["told"] and merged and not cheated:
-                freed = to                       # the player merged it away
+                freed = (to, t.get("kind"))      # the player merged it away
         for cell in sorted(a.stuck):             # sorted: same order as the JS port
             if cell not in new_track:
                 new_track[cell] = {"age": 0, "told": False}
+            new_track[cell]["kind"] = a.stuck_info[cell][0]
         self.track = new_track
+        self.off_corner = 0 if a.corner else self.off_corner + 1
 
         # -- danger ------------------------------------------------------------
         was_danger = self.danger
@@ -740,17 +797,21 @@ class Coach:
             cands.append(Tip("tip_good_escape", PRIO_PRAISE, m, max_moves=2,
                              kind="praise", max_secs=3.5))
 
-        # -- a stuck tile that stayed stuck (not a one-move flicker) ----------
-        if self._ready("tip_stuck"):
+        # -- a stuck tile that stayed stuck (not a one-move flicker), and
+        #    not right on the heels of a corner tip about the same trouble --
+        corner_quiet = self.corner_told is not None and m - self.corner_told <= 3
+        if self._ready("stuck") and not corner_quiet:
             best_cell = None
+            def rank(cell):
+                return (STUCK_ORDER[a.stuck_info[cell][0]], -a.harm_at.get(cell, 0))
             for cell, t in self.track.items():
                 if t["age"] >= 1 and not t["told"] and cell in a.stuck:
-                    h = a.harm_at.get(cell, 0)
-                    if best_cell is None or h > a.harm_at.get(best_cell, 0):
+                    if best_cell is None or rank(cell) < rank(best_cell):
                         best_cell = cell
             if best_cell is not None:
-                cands.append(Tip("tip_stuck", PRIO_STUCK, m,
-                                 {"value": 1 << a.b[best_cell],
+                kind, big = a.stuck_info[best_cell]
+                cands.append(Tip("tip_stuck_" + kind, PRIO_STUCK, m,
+                                 {"value": 1 << a.b[best_cell], "big": 1 << big,
                                   "place": place_of(best_cell, a.n)},
                                  max_moves=6, track=best_cell))
 
@@ -771,6 +832,16 @@ class Coach:
                     cands.append(Tip("tip_corner_back", PRIO_CORNER, m,
                                      {"value": 1 << a.max_rank, "dir": bd},
                                      max_moves=3))
+        elif not a.corner and a.max_rank >= 6 \
+                and self.off_corner >= OFF_CORNER_MOVES \
+                and self._ready("tip_corner_goal"):
+            # out of a corner for a while: say so only when ONE move fixes it
+            into = [x for x in a.values if a.keeps_corner(x)]
+            if into:
+                gd = max(into, key=lambda x: a.values[x])
+                cands.append(Tip("tip_corner_goal", PRIO_CORNER, m,
+                                 {"value": 1 << a.max_rank, "dir": gd},
+                                 max_moves=2))
         elif p is not None and not p.corner and a.corner \
                 and self.corner_told is not None \
                 and m - self.corner_told <= 6 and not cheated \
@@ -779,15 +850,12 @@ class Coach:
                              {"value": 1 << a.max_rank}, max_moves=2,
                              kind="praise", max_secs=3.5))
 
-        # -- a clear blunder ----------------------------------------------------
-        if p is not None and d in p.values and p.best is not None \
-                and d != p.best and p.regret(d) >= BLUNDER_T \
-                and self._ready("tip_better"):
-            cands.append(Tip("tip_better", PRIO_HINT, m, {"dir": p.best},
-                             max_moves=0))
-
         # -- earned praise --------------------------------------------------------
-        if freed is not None and self._ready("tip_good_freed"):
+        # freed: only for a blocker / chain breaker, and only if the board
+        # really is in shape afterwards (the review caught praise for moves
+        # that had just wrecked the structure)
+        if freed is not None and freed[1] in ("block", "chain") and a.corner \
+                and not a.deadly and self._ready("tip_good_freed"):
             cands.append(Tip("tip_good_freed", PRIO_PRAISE, m,
                              max_moves=2, kind="praise", max_secs=3.5))
         if p is not None and a.max_rank > p.max_rank \
@@ -808,10 +876,11 @@ class Coach:
                 if not (cur is not None and cur.key == top.key
                         and cur.params == top.params):
                     cur = top
-                    self.last[top.key] = m
-                    if top.key == "tip_stuck":
+                    self.last["stuck" if top.key in STUCK_KEYS else top.key] = m
+                    if top.key in STUCK_KEYS:
                         self.track[top.track]["told"] = True
-                    if top.key in ("tip_corner_lost", "tip_corner_back"):
+                    if top.key in ("tip_corner_lost", "tip_corner_back",
+                                   "tip_corner_goal"):
                         self.corner_told = m
         self.current = cur
         self.prev = a
