@@ -15,6 +15,8 @@ REM  numpy is excluded on purpose: the game no longer needs it, and it
 REM  made the one-file exe ~3x bigger and much slower to start.
 pyinstaller --onefile --windowed --name "2049" --exclude-module numpy ^
   --icon "icon.ico" ^
+  --add-data "Rubik-Bold.ttf;." ^
+  --add-data "Rubik-Medium.ttf;." ^
   --add-data "DejaVuSans.ttf;." ^
   --add-data "DejaVuSans-Bold.ttf;." ^
   --add-data "icon.ico;." ^

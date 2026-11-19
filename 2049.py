@@ -2302,6 +2302,17 @@ class Game:
         if self._confirm:
             self._draw_confirm()
 
+    def _detail_lines(self, text, max_w):
+        """An assist's description on up to two lines (it used to be cut
+        off with '...'); a third line, if any, is folded into the second."""
+        lines = self._wrap(text, self.f_tiny, max_w)
+        if len(lines) > 2:
+            lines = [lines[0], " ".join(lines[1:])]
+        out = [self.f_tiny.render(self.shape(lines[0]), True, BOARD_BG)]
+        if len(lines) > 1:
+            out.append(self._clip_text(lines[1], self.f_tiny, max_w, BOARD_BG))
+        return out
+
     def _clip_text(self, text, font, max_w_logical, color):
         """Render text truncated with an ellipsis so it fits max_w_logical
         (logical px). Returns a Surface."""
@@ -2391,7 +2402,7 @@ class Game:
         self.p_rows = []; acts = self.L("actions"); details = self.L("action_detail")
         remaining = self.H - y - 40
         row_step = max(54, remaining // len(ACTION_KEYS))
-        row_h = min(62, row_step - 8)
+        row_h = min(68, row_step - 7)
         for action in ACTION_KEYS:
             row = pygame.Rect(24, y, self.W-48, row_h)
             self.screen.card((243, 236, 225), row, radius=12, shadow=True)
@@ -2411,8 +2422,8 @@ class Game:
             keybox = pygame.Rect(0, y+(row_h-34)//2, kbw, 34)
             # the text column must never run under the key box
             text_pad = 16
-            title_y = y + 9
-            detail_y = y + 31
+            title_y = y + 7
+            detail_y = y + 29
             # available width for the text column (between edge and key box)
             avail = self.W - 40 - kbw - 24 - text_pad
             if rtl:
@@ -2426,16 +2437,16 @@ class Game:
                 tgx = text_right - tt.get_width()/self.SS - 10 - tg.get_width()/self.SS
                 self.screen.blit(tg, (tgx, title_y+2))
                 # detail (clipped to avail width)
-                dsurf = self._clip_text(detail, self.f_tiny, avail, BOARD_BG)
-                self.screen.blit(dsurf, (text_right-dsurf.get_width()/self.SS, detail_y))
+                for i, dsurf in enumerate(self._detail_lines(detail, avail)):
+                    self.screen.blit(dsurf, (text_right-dsurf.get_width()/self.SS, detail_y + 16*i))
             else:
                 keybox.x = self.W-40-kbw
                 tt = self.f_small.render(self.shape(desc), True, TEXT_DARK)
                 self.screen.blit(tt, (40, title_y))
                 tg = self.f_tiny.render(self.shape(tag), True, tagcol)
                 self.screen.blit(tg, (40+tt.get_width()/self.SS+10, title_y+2))
-                dsurf = self._clip_text(detail, self.f_tiny, avail, BOARD_BG)
-                self.screen.blit(dsurf, (40, detail_y))
+                for i, dsurf in enumerate(self._detail_lines(detail, avail)):
+                    self.screen.blit(dsurf, (40, detail_y + 16*i))
             box_col = ACCENT if listening else EMPTY_CELL
             self.screen.rect(box_col, keybox, border_radius=8)
             txt_col = (TEXT_LIGHT if listening else
