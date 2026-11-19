@@ -29,13 +29,27 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 OUT = sys.argv[1]
 TARGET = sys.argv[2] if len(sys.argv) > 2 else os.path.join(ROOT, "2049.py")
+# optional: a game state to start from (same board in every run, so two
+# builds can be compared pixel for pixel); otherwise a brand-new game
+PRESET = sys.argv[3] if len(sys.argv) > 3 else None
 os.makedirs(OUT, exist_ok=True)
+
+# a fresh, private data folder: never the leftovers of an earlier session
+import shutil
+import tempfile
+DATA_ROOT = tempfile.mkdtemp(prefix="2049_rw_")
+os.makedirs(os.path.join(DATA_ROOT, "2049"), exist_ok=True)
+if PRESET:
+    shutil.copy(PRESET, os.path.join(DATA_ROOT, "2049", "2049_game.json"))
+ENV = dict(os.environ, APPDATA=DATA_ROOT)
+# Python finds per-user packages (pygame) through APPDATA - keep that path
+ENV.setdefault("PYTHONUSERBASE", os.path.join(os.environ.get("APPDATA", ""), "Python"))
 
 
 def launch():
     if TARGET.endswith(".py"):
-        return subprocess.Popen([sys.executable, TARGET], cwd=ROOT)
-    return subprocess.Popen([TARGET], cwd=os.path.dirname(TARGET))
+        return subprocess.Popen([sys.executable, TARGET], cwd=ROOT, env=ENV)
+    return subprocess.Popen([TARGET], cwd=os.path.dirname(TARGET), env=ENV)
 
 
 def find_window(pid=None, timeout=20):
