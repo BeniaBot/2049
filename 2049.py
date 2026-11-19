@@ -31,6 +31,9 @@ def _trace(label):
         except Exception:
             pass
 _trace("python + imports ready")
+# and, with TWENTY49_TRACE_INPUT too, every key, every move and every slow
+# frame (the clean-machine burst test reads this)
+_TRACE_INPUT = bool(_TRACE) and bool(os.environ.get("TWENTY49_TRACE_INPUT"))
 
 APP_NAME    = "2049"
 APP_VERSION = "0.19.0"
@@ -1621,11 +1624,15 @@ class Game:
 
     def handle_move(self, direction):
         if self.state != "game":
+            if _TRACE_INPUT: _trace("move %s ignored: %s screen" % (direction, self.state))
             return
         self._finish_now()
-        if self.won and not self.keep_going: return
+        if self.won and not self.keep_going:
+            if _TRACE_INPUT: _trace("move %s ignored: win screen" % direction)
+            return
         probe = self.board.clone()
         changed, orig_anims, _ = probe.move(direction)
+        if _TRACE_INPUT: _trace("move %s %s" % (direction, "moved" if changed else "blocked"))
         if not changed: return
         prev = self.board.clone()
         cheated = False
@@ -2675,6 +2682,8 @@ class Game:
         self.cheat_dirty = True
 
     def handle_event(self, e):
+        if _TRACE_INPUT and e.type == pygame.KEYDOWN:
+            _trace("keydown %s" % pygame.key.name(e.key))
         if e.type==pygame.QUIT: self.running = False; return
         if e.type == getattr(pygame, "WINDOWFOCUSGAINED", -1):
             self.hotkeys.suppress(); return
@@ -3207,7 +3216,12 @@ class Game:
                 for e in events: self.handle_event(e)
                 if not self.running:
                     break
+                t_frame = time.perf_counter()
                 self.frame(min(dt, 0.1))
+                if _TRACE_INPUT:
+                    ms = (time.perf_counter() - t_frame) * 1000
+                    if ms > 40:
+                        _trace("slow frame %.0f ms" % ms)
                 if not getattr(self, "_first_frame", False):
                     self._first_frame = True
                     _trace("first frame on screen")
