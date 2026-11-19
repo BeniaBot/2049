@@ -157,7 +157,40 @@ function judgeTip(ev) {
   const notes = [];
   let verdict = "OK";
   const worse = v => { if (v === "WRONG" || (v === "DOUBTFUL" && verdict === "OK")) verdict = v; };
-  if (k === "tip_danger" || k === "tip_trap" || k === "tip_corner_back" || k === "tip_corner_goal") {
+  // the moves that put the biggest tile into a corner, best first (deep)
+  const intoCorner = (b, except) => {
+    const ds = [0, 1, 2, 3].filter(d => d !== except && B.move(b, n, d)[0] !== b &&
+                                        B.maxInCorner(B.move(b, n, d)[0], n));
+    if (ds.length < 2) return ds;
+    const dv = deepValues(b, n, 3, 1e-4);
+    return ds.sort((x, y) => dv[y] - dv[x]);
+  };
+  if (k === "tip_corner_goal" || k === "tip_corner_made" || (k === "tip_corner_lost" && P.dir === undefined)) {
+    // general corner tips (0.18.1+) name no move; they claim a situation.
+    if (k === "tip_corner_goal") {
+      // "you can get it back now": the best way back is not clearly worse
+      // than the best move on the board
+      const ways = intoCorner(nb);
+      if (!ways.length) { worse("WRONG"); notes.push("no move puts it into a corner"); }
+      else {
+        const e = examine(nb, n, ways[0], ev.id);
+        const v = verdictOf(e);
+        worse(v);
+        notes.push("best way back " + DIRN[ways[0]] + ": " + v + "  (deep best " + DIRN[e.deepBest] +
+                   ", play-outs best " + DIRN[e.poBest] + ")\n      " + describe(e));
+      }
+    } else {
+      // "it left its corner - try to keep it there": leaving must not have
+      // been clearly better than the best move that kept it
+      const keep = intoCorner(pb, ev.played);
+      const e = examine(pb, n, keep[0], ev.id, 0.25);
+      const o = e.objections.find(o => o.x === ev.played);
+      const v = !o ? "OK" : (o.deepSays && o.poSays ? "WRONG" : "DOUBTFUL");
+      worse(v);
+      notes.push("played " + DIRN[ev.played] + " vs keeping " + DIRN[keep[0]] + ": " + v +
+                 "\n      " + describe(e));
+    }
+  } else if (k === "tip_danger" || k === "tip_trap" || k === "tip_corner_back" || k === "tip_corner_goal") {
     const e = examine(nb, n, P.dir, ev.id);
     let v = verdictOf(e);
     if (k === "tip_danger" || k === "tip_trap") {

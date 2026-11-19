@@ -525,7 +525,7 @@
   var PRIO_OPEN = 0, PRIO_PRAISE = 1, PRIO_HINT = 2, PRIO_CORNER = 3,
       PRIO_STUCK = 4, PRIO_DANGER = 5;
   var COOLDOWN = {
-    stuck: 8, tip_corner_lost: 6, tip_corner_goal: 20,
+    stuck: 8, tip_corner_lost: 6, tip_corner_made: 6, tip_corner_goal: 20,
     tip_good_escape: 10, tip_good_freed: 6, tip_good_corner: 20,
     tip_good_record: 0, tip_danger: 0
   };
@@ -576,7 +576,7 @@
     if (k === "tip_danger") return a.survival < DANGER_EXIT && a.hasValue(tip.params.dir);
     if (k === "tip_trap") return this.moveNo === tip.born && a.hasValue(tip.params.dir);
     if (isStuckKey(k)) return tip.track !== null && a.problems.has(tip.track);
-    if (k === "tip_corner_lost") return !a.corner;
+    if (k === "tip_corner_lost" || k === "tip_corner_made") return !a.corner;
     if (k === "tip_corner_goal") return !a.corner && waysBack(a).length > 0;
     return true;
   };
@@ -646,12 +646,14 @@
     // the biggest tile left its corner
     if (p && p.corner && !a.corner && a.maxRank >= 6 && p.hasValue(d)) {
       // blamed only when avoidable AND it mattered (see brain2049.py)
+      // made by this very move (a merge): built outside the corner, not "left"
+      var ckey = a.maxRank > p.maxRank ? "tip_corner_made" : "tip_corner_lost";
       var keep = p.legal.filter(function (x) { return x !== d && p.keepsCorner(x); });
-      if (keep.length && this.ready("tip_corner_lost")) {
+      if (keep.length && this.ready(ckey)) {
         var kv = p.values[keep[0]];
         for (var i = 1; i < keep.length; i++) if (p.values[keep[i]] > kv) kv = p.values[keep[i]];
         if ((kv - p.values[d]) / p.unit >= LOST_MARGIN)
-          cands.push(new Tip("tip_corner_lost", PRIO_CORNER, m, { value: Math.pow(2, a.maxRank) }, { maxMoves: 3 }));
+          cands.push(new Tip(ckey, PRIO_CORNER, m, { value: Math.pow(2, a.maxRank) }, { maxMoves: 3 }));
       }
     } else if (!a.corner && a.maxRank >= 6 && this.offCorner >= OFF_CORNER_MOVES &&
                (this.cornerTold === null || m - this.cornerTold > 8) &&
@@ -675,6 +677,7 @@
     var cur = this.current;
     if (cur && cur.track !== null) cur.track = mv(cur.track)[0];
     if (cur && !this.isValid(cur, a)) cur = null;
+    if (!a.legal.length) { cands = []; cur = null; }   // game over: the board says it all
     if (cands.length) {
       var top = cands[0];
       for (var c = 1; c < cands.length; c++) if (cands[c].prio > top.prio) top = cands[c];
@@ -683,7 +686,8 @@
           cur = top;
           this.last[isStuckKey(top.key) ? "stuck" : top.key] = m;
           if (isStuckKey(top.key)) this.track.get(top.track).told = true;
-          if (top.key === "tip_corner_lost" || top.key === "tip_corner_goal") this.cornerTold = m;
+          if (top.key === "tip_corner_lost" || top.key === "tip_corner_made" ||
+              top.key === "tip_corner_goal") this.cornerTold = m;
         }
       }
     }

@@ -179,9 +179,10 @@ STRINGS = {
         "tip_stuck_corner":"ה-{value} תפס את הפינה של ה-{big}",
         "tip_corner_lost":"ה-{value} יצא מהפינה – כדאי לשמור אותו שם",
         "tip_corner_goal":"אפשר להחזיר עכשיו את ה-{value} לפינה",
+        "tip_corner_made":"ה-{value} נוצר מחוץ לפינה – כדאי לאחד לכיוון הפינה",
         "tip_good_escape":"\u05d9\u05e4\u05d4! \u05d9\u05e6\u05d0\u05ea \u05de\u05d4\u05de\u05e6\u05d1 \u05d4\u05e7\u05e9\u05d4",
         "tip_good_freed":"\u05d9\u05e4\u05d4 \u05de\u05d0\u05d5\u05d3! \u05e9\u05d7\u05e8\u05e8\u05ea \u05d0\u05ea \u05d4\u05d0\u05e8\u05d9\u05d7 \u05d4\u05ea\u05e7\u05d5\u05e2",
-        "tip_good_corner":"\u05d9\u05d5\u05e4\u05d9, \u05d4-{value} \u05d7\u05d6\u05e8 \u05dc\u05e4\u05d9\u05e0\u05d4",
+        "tip_good_corner":"יופי, ה-{value} בפינה",
         "tip_good_record":"\u05de\u05e6\u05d5\u05d9\u05df! \u05d4\u05d2\u05e2\u05ea \u05dc-{value}",
         "places":{
             "corner_tl":"\u05d1\u05e4\u05d9\u05e0\u05d4 \u05d4\u05e9\u05de\u05d0\u05dc\u05d9\u05ea \u05d4\u05e2\u05dc\u05d9\u05d5\u05e0\u05d4", "corner_tr":"\u05d1\u05e4\u05d9\u05e0\u05d4 \u05d4\u05d9\u05de\u05e0\u05d9\u05ea \u05d4\u05e2\u05dc\u05d9\u05d5\u05e0\u05d4",
@@ -282,9 +283,10 @@ STRINGS = {
         "tip_stuck_corner":"The {value} took your {big}'s corner",
         "tip_corner_lost":"Your {value} left its corner - try to keep it there",
         "tip_corner_goal":"You can get your {value} back into a corner now",
+        "tip_corner_made":"Your {value} was made outside the corner - merge toward the corner",
         "tip_good_escape":"Nice - you got out of that tight spot",
         "tip_good_freed":"Great - you freed the stuck tile",
-        "tip_good_corner":"Good - your {value} is back in the corner",
+        "tip_good_corner":"Good - your {value} is in the corner",
         "tip_good_record":"Excellent - you reached {value}!",
         "places":{
             "corner_tl":"in the top-left corner", "corner_tr":"in the top-right corner",

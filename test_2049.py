@@ -288,6 +288,24 @@ class TestCoach(unittest.TestCase):
         self.assertEqual(tip.key, "tip_corner_lost")
         self.assertEqual(tip.params, {"value": 64})       # names no move
 
+    def test_new_top_tile_made_outside_the_corner_is_named_so(self):
+        # the two 128s merge to the LEFT: the new 256 never was in a corner,
+        # so the tip must not say it "left" one (seen in a review game)
+        before = [[4, 4, 128, 128], [0, 2, 4, 2], [0, 2, 2, 16], [0, 0, 0, 2]]
+        c = self.fresh(before)
+        moved, after = self.real_move(before, "left", (3, 3))
+        tip = c.on_move(B.LEFT, moved, ana(after))
+        self.assertIsNotNone(tip)
+        self.assertEqual(tip.key, "tip_corner_made")
+        self.assertEqual(tip.params, {"value": 256})
+
+    def test_no_tip_once_the_game_is_over(self):
+        start = [[2, 4, 2, 4], [4, 2, 4, 2], [2, 4, 2, 4], [4, 2, 4, 0]]
+        dead = [[2, 4, 2, 4], [4, 2, 4, 2], [2, 4, 2, 4], [4, 2, 4, 2]]
+        c = self.fresh(start)
+        self.assertIsNone(c.on_move(B.LEFT, ident(dead), ana(dead)))
+        self.assertIsNone(c.current)
+
     def test_corner_exit_that_hardly_matters_is_not_blamed(self):
         # an early, open board: leaving the corner costs only 0.15 units -
         # in the calibration that is where the referee once found the exit

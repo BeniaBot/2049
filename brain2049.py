@@ -688,7 +688,7 @@ PRIO_OPEN, PRIO_PRAISE, PRIO_HINT, PRIO_CORNER, PRIO_STUCK, PRIO_DANGER = \
     range(6)
 
 COOLDOWN = {             # moves between two tips of the same key
-    "stuck": 8, "tip_corner_lost": 6,
+    "stuck": 8, "tip_corner_lost": 6, "tip_corner_made": 6,
     "tip_corner_goal": 20, "tip_good_escape": 10, "tip_good_freed": 6,
     "tip_good_corner": 20, "tip_good_record": 0, "tip_danger": 0,
 }
@@ -763,7 +763,7 @@ class Coach:
             return self.move_no == tip.born and tip.params["dir"] in a.values
         if k in STUCK_KEYS:
             return tip.track is not None and tip.track in a.problems
-        if k == "tip_corner_lost":
+        if k in ("tip_corner_lost", "tip_corner_made"):
             return not a.corner
         if k == "tip_corner_goal":
             return not a.corner and bool(self._ways_back(a))
@@ -847,10 +847,13 @@ class Coach:
             # blamed only when it was avoidable AND it mattered: a move that
             # kept the corner was clearly better. A forced or sensible exit
             # gets no tip at all.
+            # If this very move MADE the biggest tile (a merge), it was never
+            # in the corner: it was built outside it - say that, not "left".
+            key = "tip_corner_made" if a.max_rank > p.max_rank else "tip_corner_lost"
             keep = [x for x in p.values if x != d and p.keeps_corner(x)]
-            if keep and self._ready("tip_corner_lost") and \
+            if keep and self._ready(key) and \
                     (max(p.values[x] for x in keep) - p.values[d]) / p.unit >= LOST_MARGIN:
-                cands.append(Tip("tip_corner_lost", PRIO_CORNER, m,
+                cands.append(Tip(key, PRIO_CORNER, m,
                                  {"value": 1 << a.max_rank}, max_moves=3))
         elif not a.corner and a.max_rank >= 6 \
                 and self.off_corner >= OFF_CORNER_MOVES \
@@ -889,6 +892,8 @@ class Coach:
             cur.track = moved.get(cur.track, (cur.track, False))[0]
         if cur is not None and not self.is_valid(cur, a):
             cur = None
+        if not a.values:                 # game over: the board says it all
+            cands, cur = [], None
         if cands:
             top = max(cands, key=lambda t: t.prio)
             if cur is None or top.prio >= cur.prio:
@@ -898,7 +903,8 @@ class Coach:
                     self.last["stuck" if top.key in STUCK_KEYS else top.key] = m
                     if top.key in STUCK_KEYS:
                         self.track[top.track]["told"] = True
-                    if top.key in ("tip_corner_lost", "tip_corner_goal"):
+                    if top.key in ("tip_corner_lost", "tip_corner_made",
+                                   "tip_corner_goal"):
                         self.corner_told = m
         self.current = cur
         self.prev = a
