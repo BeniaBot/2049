@@ -879,7 +879,24 @@ def _activate_running_window():
             hwnd = found[0]
             if user32.IsIconic(hwnd):
                 user32.ShowWindow(hwnd, 9)                  # SW_RESTORE
-            user32.SetForegroundWindow(hwnd)
+            # Windows only lets the foreground process hand over the
+            # foreground. A one-file exe runs the game in a child process,
+            # which may not have that right - so briefly share input state
+            # with the current foreground thread (the documented way).
+            kernel32 = ctypes.windll.kernel32
+            fg = user32.GetForegroundWindow()
+            me = kernel32.GetCurrentThreadId()
+            other = user32.GetWindowThreadProcessId(fg, None) if fg else 0
+            attached = bool(other and other != me
+                            and user32.AttachThreadInput(me, other, True))
+            try:
+                user32.BringWindowToTop(hwnd)
+                user32.SetForegroundWindow(hwnd)
+            finally:
+                if attached:
+                    user32.AttachThreadInput(me, other, False)
+            if user32.GetForegroundWindow() != hwnd:
+                user32.FlashWindow(hwnd, True)              # at least flag it
     except Exception:
         pass
 

@@ -130,7 +130,9 @@ def check(name, ok, info=""):
 
 before = sticky_flags()
 p1 = launch()
-hwnd = find_window(p1.pid)
+# a PyInstaller one-file exe runs the game in a child process, so the
+# window's pid is not p1.pid: look for the window itself
+hwnd = find_window(p1.pid if TARGET.endswith(".py") else None, timeout=60)
 check("window appears", hwnd is not None)
 if hwnd is None:
     p1.kill()
