@@ -155,6 +155,14 @@ def empties(b):
 # ===========================================================================
 #  Evaluation
 # ===========================================================================
+# rank**3.5 and rank**4 as tables, computed with operations that are exactly
+# rounded in every language (products and sqrt), so the browser port
+# (brain2049.js) gets bit-identical evaluations
+import math as _math
+_SUMP = [r * r * r * _math.sqrt(r) for r in range(32)]
+_MONOP = [float(r * r * r * r) for r in range(32)]
+
+
 def _line_heur(line):
     h = _HEUR.get(line)
     if h is None:
@@ -164,7 +172,7 @@ def _line_heur(line):
         prev = 0
         counter = 0
         for rank in line:
-            s += rank ** SUM_POW
+            s += _SUMP[rank]
             if rank == 0:
                 empty += 1
             else:
@@ -180,9 +188,9 @@ def _line_heur(line):
         for i in range(1, len(line)):
             a, c = line[i - 1], line[i]
             if a > c:
-                ml += a ** MONO_POW - c ** MONO_POW
+                ml += _MONOP[a] - _MONOP[c]
             else:
-                mr += c ** MONO_POW - a ** MONO_POW
+                mr += _MONOP[c] - _MONOP[a]
         h = (LOST_PENALTY + EMPTY_W * empty + MERGE_W * merges
              - MONO_W * min(ml, mr) - SUM_W * s)
         _HEUR[line] = h
@@ -347,7 +355,7 @@ def harm_unit(max_rank):
     these units so a 4x4 at 128 and a 6x6 at 4096 read on the same scale."""
     if max_rank < 2:
         return MONO_W
-    return MONO_W * (max_rank ** MONO_POW - (max_rank - 1) ** MONO_POW)
+    return MONO_W * (_MONOP[max_rank] - _MONOP[max_rank - 1])
 
 
 def tile_harms(b, n, depth=1, min_ratio=4):
@@ -709,7 +717,7 @@ class Coach:
                 new_track[to] = nt
             elif t["told"] and merged and not cheated:
                 freed = to                       # the player merged it away
-        for cell in a.stuck:
+        for cell in sorted(a.stuck):             # sorted: same order as the JS port
             if cell not in new_track:
                 new_track[cell] = {"age": 0, "told": False}
         self.track = new_track

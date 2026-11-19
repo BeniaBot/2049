@@ -791,13 +791,15 @@ class ScaledScreen:
 # ============================================================================
 #  Platform helpers: window sizing, single instance, accessibility hotkeys
 # ============================================================================
-def window_scale(w, h):
-    """Scale for the window: the display's own scaling (so 125%/150% screens
-    get a properly sized window), shrunk when needed so the whole window
-    fits the work area above the taskbar."""
-    s = 1.0
+def window_geometry(w, h):
+    """(scale, client_pos) for the window. Scale = the display's own scaling
+    (125%/150% screens get a properly sized window), shrunk when needed so
+    the WHOLE window - title bar and borders included, measured exactly -
+    fits the work area above the taskbar. client_pos centres it in that
+    work area (SDL's own centring uses the full screen, so on a small
+    screen the bottom slid under the taskbar). (1.0, None) elsewhere."""
     if sys.platform != "win32":
-        return s
+        return 1.0, None
     try:
         import ctypes
         from ctypes import wintypes
@@ -808,17 +810,29 @@ def window_scale(w, h):
             hdc = user32.GetDC(0)
             dpi = ctypes.windll.gdi32.GetDeviceCaps(hdc, 88)   # LOGPIXELSY
             user32.ReleaseDC(0, hdc)
-        dpi_scale = max(1.0, dpi / 96.0)
-        s = dpi_scale
-        rect = wintypes.RECT()
-        if user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rect), 0):
-            aw = rect.right - rect.left
-            ah = rect.bottom - rect.top
-            frame = 48 * dpi_scale          # title bar + borders
-            s = min(s, (ah - frame) / h, (aw - 24 * dpi_scale) / w)
+        wa = wintypes.RECT()
+        if not user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(wa), 0):
+            return max(1.0, dpi / 96.0), None
+        # the frame SDL gives a fixed-size window: caption, sysmenu, minimize
+        style = 0x00C00000 | 0x00080000 | 0x00020000
+        fr = wintypes.RECT(0, 0, 100, 100)
+        try:
+            user32.AdjustWindowRectExForDpi(ctypes.byref(fr), style, False, 0, dpi)
+        except Exception:
+            user32.AdjustWindowRectEx(ctypes.byref(fr), style, False, 0)
+        extra_w = (fr.right - fr.left) - 100
+        extra_h = (fr.bottom - fr.top) - 100
+        aw, ah = wa.right - wa.left, wa.bottom - wa.top
+        s = min(max(1.0, dpi / 96.0), (ah - extra_h - 8) / h, (aw - extra_w - 8) / w)
+        s = max(0.55, s)
+        cw, ch = round(w * s), round(h * s)
+        x = wa.left + (aw - cw - extra_w) // 2 - fr.left
+        y = wa.top + max(0, (ah - ch - extra_h) // 2) - fr.top
+        return s, (x, y)
     except Exception:
-        return 1.0
-    return max(0.55, s)
+        return 1.0, None
+
+
 
 
 SINGLE_INSTANCE_NAME = "BeniaBot.2049.SingleInstance"
@@ -1057,7 +1071,10 @@ class Game:
         # Window size follows the display's scaling (125%/150% screens used
         # to get a small window) and always fits the work area (a 768-px
         # laptop used to cut the bottom off).
-        self.view_scale = window_scale(self.W, self.H)
+        self.view_scale, pos = window_geometry(self.W, self.H)
+        if pos is not None:
+            os.environ.pop("SDL_VIDEO_CENTERED", None)
+            os.environ["SDL_VIDEO_WINDOW_POS"] = "%d,%d" % pos
         self.win_w = round(self.W * self.view_scale)
         self.win_h = round(self.H * self.view_scale)
         self.window = pygame.display.set_mode((self.win_w, self.win_h))
