@@ -386,14 +386,10 @@
       var nb = neighbours(i, n), nextToMax = false;
       for (j = 0; j < nb.length; j++) if (b[nb[j]] === mx) nextToMax = true;
       if (nextToMax) {
-        // not while the biggest tiles are about to merge (board in flux)
-        var aboutToMerge = false;
-        for (var t = 0; t < n * n && !aboutToMerge; t++) {
-          if (b[t] !== mx) continue;
-          var nt = neighbours(t, n);
-          for (j = 0; j < nt.length; j++) if (b[nt[j]] === mx) aboutToMerge = true;
-        }
-        if (!aboutToMerge) return ["corner", mx];
+        // only with ONE top tile (see brain2049.py)
+        var tops = 0;
+        for (var t = 0; t < n * n; t++) if (b[t] === mx) tops++;
+        if (tops === 1) return ["corner", mx];
       }
     }
     return null;
@@ -604,7 +600,9 @@
     if (k === "tip_corner_goal") return !a.corner && waysBack(a).length > 0;
     return true;
   };
+  function countOf(b, v) { var c = 0; for (var i = 0; i < b.length; i++) if (b[i] === v) c++; return c; }
   function waysBack(a) {     // = Python Coach._ways_back
+    if (countOf(a.b, a.maxRank) !== 1) return [];
     return a.legal.filter(function (x) {
       return a.bringsMaxToCorner(x) && a.deadly.indexOf(x) < 0 && a.regret(x) <= GOAL_REGRET;
     });
@@ -674,6 +672,7 @@
       // made by this very move (a merge): built outside the corner, not "left"
       var ckey = a.maxRank > p.maxRank ? "tip_corner_made" : "tip_corner_lost";
       var keep = p.legal.filter(function (x) { return x !== d && p.keepsCorner(x); });
+      if (ckey === "tip_corner_lost" && countOf(p.b, p.maxRank) !== 1) keep = [];   // see brain2049.py
       if (keep.length && this.ready(ckey)) {
         var kv = p.values[keep[0]];
         for (var i = 1; i < keep.length; i++) if (p.values[keep[i]] > kv) kv = p.values[keep[i]];

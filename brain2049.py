@@ -498,11 +498,10 @@ def stuck_kind(b, n, i):
                     return ("chain", mx)
     if not in_corner and i in corners(n) \
             and any(b[j] == mx for j in neighbours(i, n)):
-        # not while the biggest tiles are about to merge: the board is in
-        # flux (review round 3: "the 4 took the 64's corner" next to 64|64)
-        about_to_merge = any(b[k] == mx and any(b[j] == mx for j in neighbours(k, n))
-                             for k in range(n * n))
-        if not about_to_merge:
+        # only with ONE top tile: with two of them "the 128's corner" means
+        # nothing and joining them comes first (review rounds 3+4: right
+        # 74 of 75 times with one top tile, 1 of 3 with two)
+        if b.count(mx) == 1:
             return ("corner", mx)
     return None
 
@@ -812,7 +811,10 @@ class Coach:
 
     @staticmethod
     def _ways_back(a):
-        """Moves that put the biggest tile into a corner at a fair price."""
+        """Moves that put the biggest tile into a corner at a fair price
+        (only with ONE top tile - see stuck_kind)."""
+        if a.b.count(a.max_rank) != 1:
+            return []
         return [x for x in a.values if a.brings_max_to_corner(x)
                 and x not in a.deadly and a.regret(x) <= GOAL_REGRET]
 
@@ -892,7 +894,13 @@ class Coach:
             # If this very move MADE the biggest tile (a merge), it was never
             # in the corner: it was built outside it - say that, not "left".
             key = "tip_corner_made" if a.max_rank > p.max_rank else "tip_corner_lost"
+            # With two top tiles, leaving the corner to join them is often
+            # right (review rounds 3+4: 'left the corner' was right 65 of 71
+            # times with one top tile, 4 of 8 with two) - so only then. A
+            # tile just MADE from two is one tile: that case stays.
             keep = [x for x in p.values if x != d and p.keeps_corner(x)]
+            if key == "tip_corner_lost" and p.b.count(p.max_rank) != 1:
+                keep = []
             if keep and self._ready(key) and \
                     (max(p.values[x] for x in keep) - p.values[d]) / p.unit >= LOST_MARGIN:
                 cands.append(Tip(key, PRIO_CORNER, m,

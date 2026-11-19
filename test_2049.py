@@ -319,6 +319,19 @@ class TestCoach(unittest.TestCase):
         self.assertFalse(a.brings_max_to_corner(B.UP))
         self.assertEqual(B.Coach._ways_back(a), [])
 
+    def test_two_top_tiles_get_no_corner_talk(self):
+        # review round 4, both judged wrong by the referee: with two 128s
+        # "the 2 took the 128's corner" means nothing...
+        now = [[2, 32, 2, 64], [4, 16, 8, 128], [2, 0, 2, 4], [0, 2, 128, 2]]
+        b, n = B.to_ranks(now)
+        self.assertIsNone(B.stuck_kind(b, n, 15))
+        # ...and leaving the corner to bring the two 128s together was right
+        before = [[2, 16, 64, 128], [16, 8, 32, 8], [4, 16, 128, 2], [4, 8, 4, 2]]
+        c = self.fresh(before)
+        moved, after = self.real_move(before, "down", (0, 3))
+        tip = c.on_move(B.DOWN, moved, ana(after))
+        self.assertTrue(tip is None or not tip.key.startswith("tip_corner"))
+
     def test_no_tip_once_the_game_is_over(self):
         start = [[2, 4, 2, 4], [4, 2, 4, 2], [2, 4, 2, 4], [4, 2, 4, 0]]
         dead = [[2, 4, 2, 4], [4, 2, 4, 2], [2, 4, 2, 4], [4, 2, 4, 2]]
