@@ -41,9 +41,10 @@ public static class W {
 }
 '@
 [W]::SetProcessDPIAware() | Out-Null
-$K = @{ left = @(0x25,0x4B,$true); up = @(0x26,0x48,$true); right = @(0x27,0x4D,$true); down = @(0x28,0x50,$true);
+# (PowerShell names ignore case: $K would BE the $k parameter below)
+$KEYS = @{ left = @(0x25,0x4B,$true); up = @(0x26,0x48,$true); right = @(0x27,0x4D,$true); down = @(0x28,0x50,$true);
         z = @(0x5A,0x2C,$false); c = @(0x43,0x2E,$false); x = @(0x58,0x2D,$false) }
-function Tap($h, $k, [int]$gap = 120) { $v = $K[$k]; [W]::Down($h, $v[0], $v[1], $v[2]); Start-Sleep -Milliseconds 25; [W]::Up($h, $v[0], $v[1], $v[2]); Start-Sleep -Milliseconds $gap }
+function Tap($h, $k, [int]$gap = 120) { $v = $KEYS[$k]; [W]::Down($h, $v[0], $v[1], $v[2]); Start-Sleep -Milliseconds 25; [W]::Up($h, $v[0], $v[1], $v[2]); Start-Sleep -Milliseconds $gap }
 function Wait-Window([int]$secs) {
   $sw = [Diagnostics.Stopwatch]::StartNew()
   do { $h = [W]::Find(); if ($h -ne [IntPtr]::Zero) { return $h }; Start-Sleep -Milliseconds 250 } while ($sw.Elapsed.TotalSeconds -lt $secs)

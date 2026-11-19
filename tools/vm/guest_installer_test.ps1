@@ -50,7 +50,8 @@ try {
   $p = Start-Process $setup -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/CURRENTUSER','/NORESTART',('/LOG="' + (Join-Path $out 'setup2.log') + '"') -PassThru -Wait
   $logtxt = Get-Content (Join-Path $out 'setup2.log') -Raw -ErrorAction SilentlyContinue
   Check 'setup refuses while the game runs' ($p.ExitCode -ne 0) ("exit " + $p.ExitCode)
-  Check 'and says why (mutex found)' ($logtxt -match 'running|mutex|Mutex') ''
+  # the log has the localized "2049 is running" message and Setup's answer
+  Check 'because it saw the game running (AppMutex)' ($logtxt -match 'Defaulting to Cancel' -and $logtxt -match 'EAbort') ''
 
   [W]::PostMessageW($h, 0x10, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null
   Start-Sleep -Seconds 4
