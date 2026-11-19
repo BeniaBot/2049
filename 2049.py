@@ -19,6 +19,19 @@ from collections import deque
 
 import brain2049 as brain
 
+# Startup trace for the clean-machine tests: off unless TWENTY49_TRACE names
+# a file. Records how long each startup stage takes.
+_TRACE = os.environ.get("TWENTY49_TRACE")
+_T0 = time.perf_counter()
+def _trace(label):
+    if _TRACE:
+        try:
+            with open(_TRACE, "a", encoding="utf-8") as f:
+                f.write("%7.3f %s\n" % (time.perf_counter() - _T0, label))
+        except Exception:
+            pass
+_trace("python + imports ready")
+
 APP_NAME    = "2049"
 APP_VERSION = "0.18.0"
 GITHUB_REPO = "BeniaBot/2049"   # owner/repo for auto-update checks
@@ -1054,6 +1067,7 @@ class Game:
             pygame.mixer.init()
         except Exception:
             pass
+        _trace("pygame.init")
         self.cfg = load_config()
         self.SS = 2                        # supersampling factor
         self.W, self.H = 560, 780          # logical coordinate space (larger)
@@ -1078,6 +1092,11 @@ class Game:
         self.win_w = round(self.W * self.view_scale)
         self.win_h = round(self.H * self.view_scale)
         self.window = pygame.display.set_mode((self.win_w, self.win_h))
+        # paint the background at once: the window never shows black
+        # while the rest of startup finishes
+        self.window.fill(BG)
+        pygame.display.flip()
+        _trace("window shown")
         self.hotkeys = AccessibilityHotkeys()
         self.hotkeys.suppress()          # the new window has the focus
         # Load a high-res icon surface for the About screen.
@@ -1104,8 +1123,11 @@ class Game:
         self.screen = ScaledScreen(self._render_surf, self.SS)
         pygame.display.set_caption("2049")
         self.clock = pygame.time.Clock()
+        _trace("images + render surface")
         self._init_sound()
+        _trace("sound")
         self._load_fonts()
+        _trace("fonts")
         self.state = "game"
         self.board = None
         self.history = []
@@ -1144,6 +1166,7 @@ class Game:
         self._start_update_check()
         if not self._restore_game():
             self.new_game()
+        _trace("game ready")
 
     def _find_font_files(self):
         reg = None; bold = None
@@ -1172,59 +1195,85 @@ class Game:
                 continue
         return pygame.font.SysFont(None, sz, bold=bold)
     def _init_sound(self):
+        """Tones are synthesised in plain Python, lazily on first use - the
+        old numpy version pulled ~20 MB into the exe, and a one-file exe
+        unpacks (and Defender scans) all of it on every launch."""
         self.sounds = {}
+        self._merge_tones = {}
         self.sound_ok = False
         try:
-            import numpy as np
-            # Query the actual mixer format after init (set in __init__ pre_init)
             info = pygame.mixer.get_init()
-            if not info:
+            if not info or info[1] != -16:
+                pygame.mixer.quit()
                 pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
                 info = pygame.mixer.get_init()
-            sr, fmt, channels = info
-            def tone(freqs, ms, vol=0.35):
-                n = int(sr*ms/1000.0)
-                t = np.linspace(0, ms/1000.0, n, False)
-                wave = np.zeros(n)
-                for f in (freqs if isinstance(freqs,(list,tuple)) else [freqs]):
-                    wave += np.sin(f*2*np.pi*t)
-                wave /= max(1, len(freqs) if isinstance(freqs,(list,tuple)) else 1)
-                # short attack + smooth decay to avoid clicks
-                env = np.ones(n)
-                a = max(1, int(n*0.05))
-                env[:a] = np.linspace(0, 1, a)
-                env *= np.linspace(1, 0, n)**1.2
-                wave *= env * vol
-                audio = np.int16(wave*32767)
-                if channels == 2:
-                    audio = np.column_stack([audio, audio])
-                return pygame.sndarray.make_sound(np.ascontiguousarray(audio))
-            self.sounds["merge"] = tone([523, 659], 90)     # pleasant chord
-            self.sounds["spawn"] = tone(392, 55, vol=0.22)  # soft blip
-            self.sounds["win"]   = tone([523, 659, 784], 300, vol=0.4)
-            # Pitched merge tones: the higher the resulting tile, the higher the
-            # note. Chaining merges (4->8->16...) makes a rising musical scale.
-            self._merge_tones = {}
-            # Map value -> semitone step. 4 is the lowest note; each doubling
-            # goes up the C-major scale so consecutive merges sound melodic.
-            scale = [261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88,
-                     523.25, 587.33, 659.25, 698.46, 783.99, 880.00, 987.77,
-                     1046.50, 1174.66, 1318.51]  # C4 up ~ 2.5 octaves
-            v = 4; idx = 0
-            while v <= 131072 and idx < len(scale):
-                base = scale[idx]
-                # add a soft fifth above for warmth
-                self._merge_tones[v] = tone([base, base*1.5], 95, vol=0.34)
-                v *= 2; idx += 1
-            self.sound_ok = True
-        except Exception as ex:
-            self.sounds = {}
+            if info and info[1] == -16:
+                self._sr, self._channels = info[0], info[2]
+                self.sound_ok = True
+        except Exception:
             self.sound_ok = False
+
+    def _tone(self, freqs, ms, vol=0.35):
+        """A soft sine chord: short attack, smooth decay (no clicks)."""
+        import array
+        sr = self._sr
+        n = int(sr * ms / 1000.0)
+        dur = ms / 1000.0
+        a = max(1, int(n * 0.05))
+        two_pi = 2 * math.pi
+        k = len(freqs)
+        out = array.array("h")
+        for i in range(n):
+            t = i * dur / n
+            w = 0.0
+            for f in freqs:
+                w += math.sin(f * two_pi * t)
+            env = (i / (a - 1) if a > 1 else 1.0) if i < a else 1.0
+            env *= (1 - i / (n - 1)) ** 1.2 if n > 1 else 1.0
+            v = int(w / k * env * vol * 32767)
+            out.append(v)
+            if self._channels == 2:
+                out.append(v)
+        return pygame.mixer.Sound(buffer=out.tobytes())
+
+    _TONE_SPECS = {"merge": ([523, 659], 90, 0.35), "spawn": ([392], 55, 0.22),
+                   "win": ([523, 659, 784], 300, 0.4)}
+    # merge pitch rises with the tile made: 4 is the lowest note, each
+    # doubling climbs the C-major scale, so chained merges sound melodic
+    _SCALE = [261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88,
+              523.25, 587.33, 659.25, 698.46, 783.99, 880.00, 987.77,
+              1046.50, 1174.66, 1318.51]
+
+    def _sound(self, name):
+        if not self.sound_ok:
+            return None
+        s = self.sounds.get(name)
+        if s is None and name in self._TONE_SPECS:
+            try:
+                s = self.sounds[name] = self._tone(*self._TONE_SPECS[name])
+            except Exception:
+                return None
+        return s
+
+    def _merge_sound(self, value):
+        if not self.sound_ok:
+            return None
+        s = self._merge_tones.get(value)
+        if s is None:
+            idx = max(0, value.bit_length() - 3)          # 4 -> 0, 8 -> 1 ...
+            if idx >= len(self._SCALE):
+                return self._sound("merge")
+            base = self._SCALE[idx]
+            try:
+                s = self._merge_tones[value] = self._tone([base, base * 1.5], 95, 0.34)
+            except Exception:
+                return None
+        return s
 
     def play_sound(self, name):
         if not self.cfg.get("sound", True):
             return
-        s = self.sounds.get(name)
+        s = self._sound(name)
         if s:
             try: s.play()
             except Exception: pass
@@ -1233,8 +1282,7 @@ class Game:
         """Play the merge tone pitched to the resulting tile value."""
         if not self.cfg.get("sound", True):
             return
-        tones = getattr(self, "_merge_tones", {})
-        s = tones.get(value) or self.sounds.get("merge")
+        s = self._merge_sound(value) or self._sound("merge")
         if s:
             try: s.play()
             except Exception: pass
@@ -2822,6 +2870,9 @@ class Game:
                 if not self.running:
                     break
                 self.frame(min(dt, 0.1))
+                if not getattr(self, "_first_frame", False):
+                    self._first_frame = True
+                    _trace("first frame on screen")
         finally:
             self.shutdown()
 

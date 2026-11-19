@@ -7,11 +7,13 @@ REM  Then just double-click this file. The exe appears in  dist\
 REM ============================================================
 
 echo Installing dependencies (if needed)...
-python -m pip install --upgrade pygame python-bidi numpy pyinstaller
+python -m pip install --upgrade pygame python-bidi pyinstaller
 
 echo.
 echo Building 2049.exe ...
-pyinstaller --onefile --windowed --name "2049" ^
+REM  numpy is excluded on purpose: the game no longer needs it, and it
+REM  made the one-file exe ~3x bigger and much slower to start.
+pyinstaller --onefile --windowed --name "2049" --exclude-module numpy ^
   --icon "icon.ico" ^
   --add-data "DejaVuSans.ttf;." ^
   --add-data "DejaVuSans-Bold.ttf;." ^

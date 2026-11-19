@@ -105,6 +105,7 @@ try {
   Note ("OS: " + $os.Caption + " " + $os.Version + " | user: " + $env:USERNAME)
   $data = Join-Path $env:APPDATA '2049'
   Check 'clean machine: no 2049 data yet' (-not (Test-Path $data))
+  $env:TWENTY49_TRACE = Join-Path $out 'startup_trace.txt'   # the game logs its startup stages
   $before = [G]::Sticky()
 
   $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -121,7 +122,12 @@ try {
   $dpi = [G]::GetDpiForWindow($h)
   Check 'window fits the work area' ($wr.T -ge $wa.T -and $wr.B -le $wa.B + 1) ("client {0}x{1} @ {2} dpi; window y {3}..{4}; work area {5}x{6}" -f $r.R, $r.B, $dpi, $wr.T, $wr.B, ($wa.R - $wa.L), ($wa.B - $wa.T))
   $during = [G]::Sticky()
-  Check 'sticky-keys shortcut off while focused' ((($before -band 1) -ne 0) -or (($during -band 4) -eq 0)) ("{0:x} -> {1:x}" -f $before, $during)
+  $focused = ([G]::GetForegroundWindow() -eq $h)
+  if ($focused) {
+    Check 'sticky-keys shortcut off while focused' ((($before -band 1) -ne 0) -or (($during -band 4) -eq 0)) ("{0:x} -> {1:x}" -f $before, $during)
+  } else {
+    Check 'sticky-keys untouched while NOT focused' ($during -eq $before) ("{0:x} -> {1:x}" -f $before, $during)
+  }
   [G]::Shot($h, (Join-Path $out '1_start.png'))
 
   foreach ($k in @(@(0x25,0x4B), @(0x28,0x50), @(0x25,0x4B), @(0x28,0x50), @(0x27,0x4D), @(0x28,0x50), @(0x25,0x4B), @(0x28,0x50))) {

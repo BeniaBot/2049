@@ -1,1359 +1,979 @@
 <!DOCTYPE html>
-<html lang="he">
+<html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#faf8ef">
+<meta name="description" content="2049 – 2048 במהדורה משוכללת, עם מוח שמבין את הלוח">
 <title>2049</title>
+<link rel="icon" type="image/png" sizes="64x64" href="icon_64.png">
+<link rel="apple-touch-icon" href="icon_256.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#faf8ef; --board:#bbada0; --empty:#cdc1b4; --dark:#776e65;
-    --light:#f9f6f2; --btn:#8f7a66; --accent:#ed7c42; --card:#eee4d6;
+    /* the classic 2048 palette, kept exactly */
+    --bg:#faf8ef; --board:#bbada0; --cell:#cdc1b4; --ink:#776e65;
+    --light:#f9f6f2; --btn:#8f7a66; --accent:#ed7c42; --card:#f3ebe0;
+    --muted:#a39587; --line:rgba(119,110,101,.12); --green:#3caa6e;
+    --r-lg:16px; --r-md:12px; --r-sm:9px;
+    --shadow:0 1px 2px rgba(80,60,40,.06),0 6px 18px rgba(80,60,40,.08);
+    --font:'Rubik','Segoe UI',Arial,'Helvetica Neue',sans-serif;
   }
-  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  html,body{margin:0;padding:0;background:var(--bg);font-family:'Segoe UI',
-    Arial,'Helvetica Neue',sans-serif;color:var(--dark);
-    overscroll-behavior:none;touch-action:manipulation;}
-  body[dir="rtl"]{direction:rtl;}
-  #app{max-width:560px;margin:0 auto;padding:12px;position:relative;}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+    font-family:var(--font);-webkit-font-smoothing:antialiased;}
+  body{min-height:100vh;min-height:100dvh;
+    background:radial-gradient(120% 80% at 50% 0%,#fdfcf7 0%,var(--bg) 55%,#f4f0e4 100%) fixed;}
+  button{font-family:inherit;cursor:pointer;border:none;color:inherit;}
+  button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
   .hidden{display:none !important;}
-  .row{display:flex;align-items:center;}
-  button{font-family:inherit;cursor:pointer;border:none;border-radius:8px;}
 
-  /* ---- header ---- */
-  .top{display:flex;justify-content:space-between;align-items:flex-start;
-    margin-bottom:10px;}
-  .title{font-size:52px;font-weight:800;color:var(--dark);line-height:1;}
+  .screen{max-width:520px;margin:0 auto;position:relative;
+    padding:max(16px,env(safe-area-inset-top)) 16px max(18px,env(safe-area-inset-bottom));
+    min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;}
+  .screen.game{justify-content:center;touch-action:none;user-select:none;-webkit-user-select:none;}
+
+  /* ---------- header ---------- */
+  .top{display:flex;justify-content:space-between;align-items:center;gap:12px;}
+  .brand{display:flex;flex-direction:column;line-height:1;}
+  .title{font-size:clamp(46px,13vw,64px);font-weight:800;letter-spacing:-1px;color:var(--ink);}
+  .subtitle{font-size:13px;font-weight:500;color:var(--muted);margin-top:6px;}
   .scores{display:flex;gap:8px;}
-  .scorebox{background:var(--board);border-radius:8px;padding:6px 14px;
-    text-align:center;color:var(--light);min-width:80px;}
-  .scorebox .lbl{font-size:11px;letter-spacing:1px;text-transform:uppercase;
-    color:#eee4da;}
-  .scorebox .val{font-size:22px;font-weight:800;}
+  .scorebox{position:relative;background:var(--board);border-radius:var(--r-sm);
+    padding:7px 14px 8px;text-align:center;color:var(--light);min-width:78px;
+    box-shadow:inset 0 -2px 0 rgba(0,0,0,.06);}
+  .scorebox .lbl{font-size:11px;font-weight:600;letter-spacing:.6px;color:#eee4da;}
+  .scorebox .val{font-size:22px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums;}
+  .scorebox .plus{position:absolute;inset-inline:0;top:22px;font-size:20px;font-weight:700;
+    color:rgba(119,110,101,.9);pointer-events:none;animation:plus .65s ease-in forwards;}
+  @keyframes plus{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-38px)}}
 
-  .toolbar{display:flex;justify-content:space-between;align-items:center;
-    margin-bottom:10px;}
-  .btn{background:var(--btn);color:var(--light);padding:9px 16px;
-    font-size:15px;font-weight:700;}
-  .selwrap{display:flex;align-items:center;gap:6px;}
-  .selbox{background:var(--board);color:var(--light);border-radius:8px;
-    padding:6px 10px;font-weight:700;display:flex;align-items:center;gap:8px;}
-  .arrows{display:flex;flex-direction:column;}
-  .arrows button{background:none;color:var(--light);font-size:9px;line-height:1;
-    padding:0 2px;}
-  .iconbtn{background:var(--board);color:var(--light);border-radius:8px;
-    width:38px;height:38px;font-size:18px;display:flex;align-items:center;
+  .toolbar{display:flex;justify-content:space-between;align-items:center;margin:16px 0 14px;gap:8px;}
+  .btn{background:var(--btn);color:var(--light);padding:10px 18px;border-radius:var(--r-sm);
+    font-size:15px;font-weight:700;box-shadow:inset 0 -2px 0 rgba(0,0,0,.12);
+    transition:transform .08s ease,filter .15s ease;}
+  .btn:hover{filter:brightness(1.06);} .btn:active{transform:translateY(1px);}
+  .tools{display:flex;gap:8px;align-items:center;}
+  .sizesel{display:flex;align-items:center;background:var(--board);border-radius:var(--r-sm);
+    color:var(--light);font-weight:700;font-size:15px;overflow:hidden;}
+  .sizesel button{background:none;color:var(--light);width:30px;height:40px;display:flex;
+    align-items:center;justify-content:center;opacity:.85;}
+  .sizesel button:hover{opacity:1;background:rgba(255,255,255,.08);}
+  .sizesel span{min-width:38px;text-align:center;font-variant-numeric:tabular-nums;direction:ltr;}
+  .iconbtn{background:var(--board);color:var(--light);border-radius:var(--r-sm);width:40px;height:40px;
+    display:flex;align-items:center;justify-content:center;}
+  .iconbtn:hover{filter:brightness(1.06);}
+  .iconbtn svg,.sizesel svg{width:18px;height:18px;}
+
+  /* ---------- board ---------- */
+  .boardwrap{position:relative;margin:0 auto;width:100%;
+    max-width:min(100%, calc(100dvh - 300px));min-width:min(100%,260px);}
+  #board{position:relative;background:var(--board);border-radius:var(--r-lg);
+    padding:var(--gap);direction:ltr;touch-action:none;aspect-ratio:1/1;
+    box-shadow:0 10px 30px rgba(120,100,80,.18),inset 0 0 0 1px rgba(255,255,255,.06);}
+  .grid-bg{display:grid;gap:var(--gap);width:100%;height:100%;}
+  .cell{background:rgba(238,228,218,.35);border-radius:var(--r-sm);}
+  #tiles{position:absolute;inset:var(--gap);}
+  .tile{position:absolute;left:0;top:0;border-radius:var(--r-sm);display:flex;align-items:center;
+    justify-content:center;font-weight:700;font-variant-numeric:tabular-nums;line-height:1;
+    transition:transform 110ms ease-in-out;will-change:transform;z-index:2;}
+  .tile .in{width:100%;height:100%;border-radius:inherit;display:flex;align-items:center;
     justify-content:center;}
+  .tile.new .in{animation:appear .2s ease .1s backwards;}
+  .tile.merged{z-index:3;} .tile.merged .in{animation:pop .2s ease .1s backwards;}
+  .tile.ghost{z-index:1;transition:transform 110ms ease-in-out,opacity 110ms ease-in;}
+  .tile.ghost .in{transition:scale 110ms ease-in;}
+  @keyframes appear{0%{opacity:0;scale:0}100%{opacity:1;scale:1}}
+  @keyframes pop{0%{scale:0}50%{scale:1.2}100%{scale:1}}
 
-  /* ---- board ---- */
-  #boardwrap{position:relative;direction:ltr;}
-  #board{background:var(--board);border-radius:10px;padding:12px;
-    position:relative;touch-action:none;direction:ltr;}
-  .grid-bg{display:grid;gap:12px;direction:ltr;}
-  .cell{background:var(--empty);border-radius:6px;}
-  #tiles{position:absolute;top:12px;left:12px;right:12px;bottom:12px;
-    direction:ltr;}
-  .tile{position:absolute;border-radius:6px;display:flex;align-items:center;
-    justify-content:center;font-weight:800;
-    transition:transform .12s ease, opacity .12s ease;}
-  /* the standalone scale property composes with the inline translate() -
-     animating transform here would override the tile's position */
-  .tile.pop{animation:pop .16s ease;}
-  @keyframes pop{0%{scale:.6}100%{scale:1}}
-  .tile.merged{animation:merge .16s ease;}
-  @keyframes merge{0%{scale:1}50%{scale:1.18}100%{scale:1}}
+  .overlay{position:absolute;inset:0;border-radius:var(--r-lg);z-index:20;display:flex;
+    flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    background:rgba(250,248,239,.78);backdrop-filter:blur(2px);animation:fade .6s ease .25s backwards;}
+  .overlay h2{font-size:clamp(30px,8vw,44px);margin:0;font-weight:800;color:var(--ink);}
+  .overlay .btns{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}
+  .overlay .hint{font-size:13px;color:var(--muted);}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  .btn.accent{background:var(--accent);}
 
-  /* overlay (game over / win) */
-  .overlay{position:absolute;inset:0;background:rgba(250,248,239,.72);
-    border-radius:10px;display:flex;flex-direction:column;align-items:center;
-    justify-content:center;z-index:20;}
-  .overlay h2{font-size:40px;margin:0 0 6px;color:var(--dark);}
-  .overlay p{font-size:18px;margin:0 0 16px;color:var(--dark);}
+  /* ---------- coach ---------- */
+  .tiparea{min-height:58px;display:flex;align-items:flex-start;justify-content:center;padding-top:12px;}
+  .tip{display:flex;align-items:center;gap:10px;max-width:100%;background:#fbefdc;
+    border-radius:var(--r-md);padding:9px 14px;font-size:14px;font-weight:500;line-height:1.35;
+    box-shadow:var(--shadow);animation:tipin .22s ease;}
+  .tip .dot{flex:none;width:9px;height:9px;border-radius:50%;background:var(--accent);}
+  .tip.praise{background:#e2f2e6;} .tip.praise .dot{background:var(--green);}
+  .tip.info{background:#f1ebe2;} .tip.info .dot{background:var(--btn);}
+  .tip .arrow{font-weight:700;unicode-bidi:isolate;}
+  @keyframes tipin{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 
-  /* bottom bar */
-  .bottombar{display:flex;justify-content:space-between;align-items:center;
-    margin-top:10px;color:var(--board);font-size:13px;}
-  .bottombar .icons{display:flex;gap:8px;}
-  .bottombar .bicon{background:var(--empty);border-radius:5px;width:34px;
-    height:26px;display:flex;align-items:center;justify-content:center;
-    font-size:14px;color:var(--dark);}
-  .tipbanner{background:#fae8cd;border-radius:10px;padding:7px 14px;
-    margin-top:8px;text-align:center;font-size:13px;color:var(--dark);
-    display:flex;align-items:center;justify-content:center;gap:8px;
-    box-shadow:0 2px 6px rgba(80,60,40,.15);}
-  .tipbanner .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);
-    flex:none;}
+  .bottombar{display:flex;justify-content:space-between;align-items:center;gap:10px;
+    color:var(--muted);font-size:13px;}
+  .icons{display:flex;gap:8px;}
+  .bicon{background:rgba(205,193,180,.7);border-radius:var(--r-sm);width:38px;height:32px;display:flex;
+    align-items:center;justify-content:center;color:var(--ink);position:relative;z-index:6;}
+  .bicon svg{width:18px;height:18px;} .bicon.off{color:var(--muted);}
 
-  /* mobile cheat buttons */
-  #cheatbar{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;
-    margin-top:10px;}
-  #cheatbar button{background:var(--card);color:var(--dark);padding:8px 10px;
-    font-size:12px;font-weight:700;border:2px solid transparent;}
-  #cheatbar button.armed{background:var(--accent);color:var(--light);}
-  #cheatbar button:active{background:var(--btn);color:var(--light);}
-
-  /* ---- settings / preferences screens ---- */
-  .screen{position:relative;}
-  .schead{background:var(--board);color:var(--light);border-radius:10px;
-    padding:14px 18px;display:flex;justify-content:space-between;
-    align-items:center;margin-bottom:14px;}
-  .schead .h{font-size:22px;font-weight:800;}
-  .scard{background:var(--card);border-radius:14px;padding:12px 16px;
-    margin-bottom:12px;display:flex;justify-content:space-between;
-    align-items:center;box-shadow:0 2px 5px rgba(80,60,40,.12);}
-  .scard .lbl{font-size:16px;font-weight:700;}
-  .opts{display:flex;gap:8px;}
-  .opt{background:var(--empty);color:var(--dark);padding:8px 14px;
-    font-weight:700;border-radius:8px;font-size:14px;}
-  .opt.sel{background:var(--accent);color:var(--light);}
-  .prefbtn{display:block;margin:18px auto 6px;background:var(--btn);
-    color:var(--light);padding:12px 22px;font-size:16px;font-weight:700;}
-  .prefhint{text-align:center;color:var(--board);font-size:12px;}
-  .resetrow{display:flex;gap:12px;margin:8px 0;}
-  .resetrow button{flex:1;background:var(--empty);color:var(--dark);
-    padding:10px;font-size:13px;font-weight:700;}
-  .aboutcard{background:#f5efe5;border-radius:18px;padding:16px;margin-top:8px;
-    box-shadow:0 2px 6px rgba(80,60,40,.12);}
-  .statuspill{border-radius:10px;padding:10px 14px;display:flex;
-    align-items:center;justify-content:space-between;font-size:13px;
-    margin-bottom:12px;}
-  .statuspill .badge{width:22px;height:22px;border-radius:50%;color:#fff;
-    display:flex;align-items:center;justify-content:center;font-size:13px;}
-  .ghbtn{display:block;width:100%;background:var(--btn);color:var(--light);
-    padding:11px;font-size:15px;font-weight:700;text-align:center;
-    text-decoration:none;border-radius:8px;}
-  .byline{text-align:center;font-size:12px;color:var(--board);margin-top:12px;}
+  /* ---------- settings / refuge ---------- */
+  .schead{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
+  .schead h1{font-size:26px;font-weight:800;margin:0;}
+  .scard{background:var(--card);border-radius:var(--r-md);padding:12px 14px;margin-bottom:10px;
+    display:flex;justify-content:space-between;align-items:center;gap:10px;box-shadow:var(--shadow);}
+  .scard .lbl{font-size:15px;font-weight:600;}
+  .seg{display:inline-flex;background:rgba(205,193,180,.55);border-radius:10px;padding:3px;gap:2px;flex:none;}
+  .seg button{background:none;padding:7px 12px;border-radius:8px;font-size:14px;font-weight:600;
+    color:var(--ink);white-space:nowrap;transition:background .15s ease,color .15s ease;}
+  .seg button.on{background:var(--accent);color:#fff;box-shadow:0 1px 3px rgba(150,70,20,.25);}
+  .seg .ltr{direction:ltr;unicode-bidi:isolate;}
+  .resetrow{display:flex;gap:10px;margin:6px 0 4px;}
+  .resetrow button{flex:1;background:rgba(205,193,180,.55);padding:11px;border-radius:var(--r-sm);
+    font-size:13px;font-weight:600;}
+  .prefbtn{display:block;margin:20px auto 4px;}
+  .prefhint{text-align:center;color:var(--muted);font-size:12px;}
+  .aboutcard{background:#f6f0e6;border-radius:var(--r-lg);padding:14px;margin-top:18px;box-shadow:var(--shadow);}
+  .ghbtn{display:block;width:100%;text-align:center;text-decoration:none;}
+  .byline{display:flex;align-items:center;justify-content:center;gap:6px;font-size:12px;
+    color:var(--muted);margin-top:12px;}
   .byline a{color:var(--accent);text-decoration:none;font-weight:700;}
-  .byline img{width:26px;height:26px;border-radius:50%;vertical-align:middle;
-    margin:0 6px;}
-  .ver{text-align:center;font-size:12px;color:var(--board);margin-top:10px;}
+  .byline img{width:24px;height:24px;border-radius:50%;}
+  .ver{text-align:center;font-size:12px;color:var(--muted);margin-top:14px;direction:ltr;}
 
-  /* preferences (cheaters refuge) */
-  .subtitle{text-align:center;color:var(--board);font-size:12px;
-    margin-bottom:14px;}
-  .modesel{display:flex;align-items:center;gap:8px;margin-bottom:14px;}
-  .modesel .name{flex:1;background:var(--empty);border-radius:10px;padding:10px;
-    text-align:center;font-weight:700;}
-  .modesel button{background:var(--btn);color:var(--light);width:42px;
-    height:40px;font-size:16px;font-weight:700;}
-  .checkrow{background:var(--card);border-radius:10px;padding:10px 14px;
-    display:flex;justify-content:space-between;align-items:center;
-    margin-bottom:8px;font-size:13px;}
-  .checkbox{width:22px;height:22px;border-radius:5px;background:var(--empty);
-    display:flex;align-items:center;justify-content:center;color:var(--light);
-    font-size:14px;}
-  .checkbox.on{background:var(--accent);}
-  .cheatrow{background:#f3ece1;border-radius:12px;padding:10px 14px;
-    margin-bottom:10px;display:flex;justify-content:space-between;
-    align-items:center;box-shadow:0 2px 4px rgba(80,60,40,.1);gap:10px;}
+  .refsub{color:var(--muted);font-size:13px;margin:-8px 0 14px;}
+  .modesel{display:flex;align-items:center;gap:8px;margin-bottom:12px;}
+  .modesel .lbl{font-weight:700;margin-inline-end:4px;white-space:nowrap;}
+  .modesel .name{flex:1;background:var(--card);border-radius:var(--r-sm);padding:10px;text-align:center;
+    font-weight:700;box-shadow:var(--shadow);}
+  .modesel button{width:40px;height:40px;border-radius:var(--r-sm);background:var(--btn);color:var(--light);
+    display:flex;align-items:center;justify-content:center;}
+  .checkrow{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--card);
+    border-radius:var(--r-md);padding:10px 14px;margin-bottom:8px;font-size:14px;box-shadow:var(--shadow);}
+  .switch{flex:none;width:42px;height:24px;border-radius:12px;background:rgba(205,193,180,.9);position:relative;
+    transition:background .15s ease;}
+  .switch::after{content:"";position:absolute;top:3px;inset-inline-start:3px;width:18px;height:18px;
+    border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:inset-inline-start .15s ease;}
+  .switch.on{background:var(--accent);} .switch.on::after{inset-inline-start:21px;}
+  .sect{font-weight:700;margin:16px 2px 8px;}
+  .cheatrow{background:var(--card);border-radius:var(--r-md);padding:11px 14px;margin-bottom:8px;display:flex;
+    justify-content:space-between;align-items:center;gap:12px;box-shadow:var(--shadow);}
   .cheatrow .info{flex:1;min-width:0;}
   .cheatrow .t{font-weight:700;font-size:15px;}
-  .cheatrow .t .tag{font-size:11px;font-weight:700;margin-inline-start:8px;}
-  .cheatrow .d{font-size:11px;color:var(--board);white-space:nowrap;
-    overflow:hidden;text-overflow:ellipsis;}
-  .keybox{background:var(--empty);border-radius:8px;min-width:90px;
-    padding:8px 10px;text-align:center;font-size:13px;font-weight:700;
-    color:var(--dark);flex:none;}
-  .keybox.listening{background:var(--accent);color:var(--light);}
-  .keybox.empty{color:var(--board);}
-  .clicknote{text-align:center;color:var(--board);font-size:12px;margin-top:8px;}
+  .cheatrow .tag{font-size:11px;font-weight:700;margin-inline-start:8px;padding:2px 7px;border-radius:6px;
+    background:rgba(237,124,66,.12);color:var(--accent);vertical-align:2px;}
+  .cheatrow .tag.tap{background:rgba(60,170,110,.12);color:#3a8f5f;}
+  .cheatrow .d{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.35;}
+  .keybox{flex:none;min-width:92px;background:rgba(205,193,180,.55);border-radius:var(--r-sm);padding:9px 10px;
+    text-align:center;font-size:13px;font-weight:700;}
+  .keybox.listening{background:var(--accent);color:#fff;} .keybox.empty{color:var(--muted);}
+  .clicknote{text-align:center;color:var(--muted);font-size:12px;margin-top:10px;}
 
-  /* dialogs */
-  .dim{position:fixed;inset:0;background:rgba(30,26,22,.7);z-index:100;
-    display:flex;align-items:center;justify-content:center;}
-  .dialog{background:var(--bg);border-radius:16px;padding:24px;max-width:420px;
-    width:88%;text-align:center;border-top:6px solid var(--accent);}
-  .dialog.green{border-top-color:#3caa6e;}
-  .dialog h3{margin:.2em 0;font-size:22px;}
+  /* ---------- dialogs, dot, toast ---------- */
+  .dim{position:fixed;inset:0;background:rgba(40,32,26,.55);backdrop-filter:blur(3px);z-index:100;
+    display:flex;align-items:center;justify-content:center;padding:16px;animation:fade .15s ease;}
+  .dialog{background:var(--bg);border-radius:20px;padding:24px 22px 20px;max-width:400px;width:100%;
+    text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.25);border-top:5px solid var(--accent);}
+  .dialog.green{border-top-color:var(--green);}
+  .dialog h3{margin:.1em 0 .4em;font-size:22px;font-weight:800;}
+  .dialog p{margin:.4em 0;line-height:1.45;}
   .dialog .accent{color:var(--accent);font-weight:700;}
-  .dialog .green-check{width:44px;height:44px;border-radius:50%;
-    background:#3caa6e;color:#fff;display:flex;align-items:center;
-    justify-content:center;font-size:24px;margin:0 auto 10px;}
-  .dialog .btns{display:flex;gap:14px;justify-content:center;margin-top:18px;}
-  .dialog .btns button{padding:11px 26px;font-size:15px;font-weight:700;
-    border-radius:10px;}
-  .btn-accent{background:var(--accent);color:var(--light);}
-  .btn-btn{background:var(--btn);color:var(--light);}
-  .btn-green{background:#3caa6e;color:#fff;}
-  .dialog .pick{background:var(--empty);color:var(--dark);padding:10px 14px;
-    font-size:14px;font-weight:700;border-radius:8px;min-width:56px;}
-  .dialog .pick:active{background:var(--accent);color:#fff;}
-  /* invisible cheat corner zones (mobile) */
-  #touchzones{position:absolute;inset:0;pointer-events:none;z-index:5;}
-  #touchzones .tz{position:absolute;width:22%;height:16%;pointer-events:auto;
-    background:transparent;}
-  #touchzones .tz[data-zone="tl"]{top:0;left:0;}
-  #touchzones .tz[data-zone="tr"]{top:0;right:0;}
-  #touchzones .tz[data-zone="bl"]{bottom:0;left:0;}
-  #touchzones .tz[data-zone="br"]{bottom:0;right:0;}
+  .dialog .btns{display:flex;gap:10px;justify-content:center;margin-top:18px;flex-wrap:wrap;}
+  .dialog .check{width:46px;height:46px;border-radius:50%;background:var(--green);color:#fff;display:flex;
+    align-items:center;justify-content:center;font-size:24px;margin:0 auto 8px;}
+  .dialog .picks{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0 4px;}
+  .dialog .pick{background:var(--card);padding:12px 8px;border-radius:var(--r-sm);font-weight:600;font-size:14px;}
+  .btn.green{background:var(--green);}
+  #cornerdot{position:fixed;top:5px;right:5px;width:6px;height:6px;border-radius:50%;opacity:0;
+    pointer-events:none;z-index:200;transition:opacity .2s ease;}
+  .toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);background:var(--btn);color:var(--light);
+    padding:12px 20px;border-radius:var(--r-md);z-index:150;text-align:center;font-size:14px;
+    box-shadow:0 8px 24px rgba(0,0,0,.2);white-space:pre-line;animation:tipin .2s ease;max-width:90vw;}
 
-  .toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);
-    background:var(--btn);color:var(--light);padding:12px 22px;
-    border-radius:10px;z-index:120;text-align:center;font-size:14px;
-    box-shadow:0 3px 10px rgba(0,0,0,.2);white-space:pre-line;}
+  /* invisible assist zones (touch devices): the screen's corners, under the controls */
+  #touchzones{position:absolute;inset:0;pointer-events:none;z-index:5;}
+  #touchzones .tz{position:absolute;width:22%;height:16%;pointer-events:auto;}
+  #touchzones .tz[data-zone="tl"]{top:0;left:0;} #touchzones .tz[data-zone="tr"]{top:0;right:0;}
+  #touchzones .tz[data-zone="bl"]{bottom:0;left:0;} #touchzones .tz[data-zone="br"]{bottom:0;right:0;}
+  .top,.toolbar,.bottombar{position:relative;z-index:6;}
+  .top>*,.toolbar>*{position:relative;z-index:6;}
+
+  @media (max-height:640px){ .toolbar{margin:10px 0 10px;} .tiparea{min-height:50px;} }
+  @media (prefers-reduced-motion:reduce){
+    .tile,.tile.ghost{transition:none;} .tile .in,.overlay,.tip,.scorebox .plus{animation:none !important;}
+  }
 </style>
 </head>
 <body>
 <div id="app"></div>
-
+<div id="cornerdot"></div>
+<script src="brain2049.js"></script>
 <script>
-const STRINGS = {"he": {"score": "ניקוד", "best": "שיא", "new_game": "משחק חדש", "settings": "הגדרות", "menu": "תפריט", "play": "שחק", "quit": "יציאה", "back": "חזרה", "subtitle": "המהדורה המשוכללת", "you_win": "הגעת ל-2048!", "keep_going": "המשך  •  משחק חדש", "game_over": "המשחק נגמר", "press_new": "לחץ Enter למשחק חדש", "tips": "טיפ: השתמש ב-← ↑ → ↓ למשחק!", "grid_size": "גודל לוח", "language": "שפה", "game_mode": "מצב משחק", "assist_keys": "מקשי עזרה נסתרים", "click_cycle": "לחץ על תיבת מקש כדי להחליף", "press_key": "לחץ מקש...", "click_to_set": "לחץ על תיבה ואז על מקש במקלדת. Backspace לניקוי.", "hold": "החזק", "tap": "לחיצה", "none": "ללא", "hebrew": "עברית", "english": "English", "mode_infinite": "מצב אינסופי", "mode_target": "מצב שבירת שיא", "sound_on": "קול דלוק", "sound_off": "קול כבוי", "sound": "צלילים", "on": "דלוק", "off": "כבוי", "win_mode": "מצב ניצחון", "show_tips": "הצג עצות", "reset_settings": "אפס הגדרות", "reset_score": "אפס שיא", "reset_settings_q": "לאפס את כל ההגדרות לברירת המחדל?", "reset_score_q": "לאפס את השיא האישי?", "yes": "כן", "no": "לא", "done_reset": "אופס בהצלחה", "tips_list": ["שמור את האריח הגבוה בפינה ואל תזיז אותו", "נסה לשמור שורה אחת מלאה ומסודרת", "בנה שרשרת מספרים יורדת לאורך שורה", "הזז בעיקר לשני כיוונים קבועים", "אל תמלא את הלוח – השאר מקום לתמרון"], "tip_stuck": "יש אריח נמוך תקוע – נסה לשחרר אותו", "tip_full": "הלוח מתמלא! מזג אריחים בדחיפות", "tip_corner": "שמור את האריח הגבוה בפינה", "tip_lost_corner": "האריח הגבוה יצא מהפינה – החזר אותו!", "tip_good_corner": "יופי! החזרת את הגבוה לפינה", "tip_good_clear": "יפה מאוד! שחררת את הלוח", "tip_good_merge": "מצוין! מיזוג גדול", "tip_good_space": "יפה! פינית הרבה מקום", "infinite": "אינסופי", "target": "שבירת שיא", "preferences": "העדפות", "prefs_hint": "הגדרות מתקדמות", "prefs_title": "מקלט הרמאים והנוכלים", "prefs_sub": "כאן מתאספים כל אלו שלא מספיק טובים בזכות עצמם", "persist_cheats": "שמור רמאויות בין הפעלות", "count_best": "חשב רמאויות בשיא", "credit": "נוצר על ידי Claude • BeniaBot", "about": "אודות", "opened_by": "פותח על ידי", "up_to_date": "האפליקציה מעודכנת לגרסה האחרונה", "update_ready": "גרסה חדשה זמינה להורדה", "check_again": "בדוק שוב", "checking": "בודק...", "visit_github": "בקר בעמוד ה-GitHub", "download_update": "הורד גרסה חדשה", "version_lbl": "גרסה", "update_avail": "עדכון זמין!", "confess_title": "רגע אחד...", "confess_body": "כדי לשמור הגדרות רמאות, עליך להודות:", "confess_line": "\"אני מרמה כי אני לא מספיק טוב\"", "confess_yes": "אני מודה", "confess_no": "לעולם לא!", "confess_rejected": "אז שוב לאימונים. ההגדרות לא נשמרו.", "praise_title": "כל הכבוד!", "praise_body": "בחרת לבטל את הרמאות ולהתמודד כמו גבר!", "praise_body2": "זה מרשים. השינוי נשמר אוטומטית.", "praise_ok": "תודה!", "praise_toast": "יאאלה, לשחק 'על אמת'\nרק אל תתייאש מהר מדי!", "mode_names": ["מצב 1 - רגיל", "מצב 2 - שליטה ב-2/4", "מצב 3 - מנקה", "מצב 4 - ערכת מלאה"], "actions": {"force_2": "האריח הבא יהיה 2", "force_4": "האריח הבא יהיה 4", "spawn_corner": "אריח חדש בשוליים", "clean_stuck": "נקה אריח תקוע", "undo": "בטל מהלך"}, "action_detail": {"force_2": "החזק במהלך – האריח שיופיע יהיה 2 ולא 4 (שומר על לוח נקי)", "force_4": "החזק במהלך – האריח שיופיע יהיה 4 (צובר נקודות מהר)", "spawn_corner": "החזק במהלך – האריח החדש יופיע בשוליים ולא במרכז", "clean_stuck": "לחיצה – מעלים אריח נמוך שתקוע בין גבוהים", "undo": "לחיצה – מחזיר את הלוח לפני המהלך האחרון"}, "zone_tl": "פינה שמאל למעלה", "zone_tr": "פינה ימין למעלה", "zone_bl": "פינה שמאל למטה", "zone_br": "פינה ימין למטה", "choose_zone": "בחר אזור נסתר", "zone_hold_hint": "החזק אצבע באזור בזמן החלקה", "zone_tap_hint": "הקש פעמיים באזור כדי להפעיל", "reserved_key": "המקש הזה שמור למשחק – בחר מקש אחר", "no_stuck_now": "אין כרגע אריח שבאמת תקוע", "no_undo": "אין מהלך לבטל", "difficulty": "רמת קושי", "diff_normal": "רגיל", "diff_hard": "קשה", "diff_evil": "מרושע"}, "en": {"score": "SCORE", "best": "BEST", "new_game": "New Game", "settings": "Settings", "menu": "Menu", "play": "Play", "quit": "Quit", "back": "Back", "subtitle": "enhanced edition", "you_win": "You reached 2048!", "keep_going": "Keep going  •  New game", "game_over": "Game over", "press_new": "Press Enter for new game", "tips": "Tips: use ← ↑ → ↓ to play!", "grid_size": "Grid size", "language": "Language", "game_mode": "Game mode", "assist_keys": "Hidden assist keys", "click_cycle": "Click a key box to cycle keys.", "press_key": "Press a key...", "click_to_set": "Click a box, then press any key. Backspace to clear.", "hold": "hold", "tap": "tap", "none": "None", "hebrew": "עברית", "english": "English", "mode_infinite": "Infinite mode", "mode_target": "Beat-best mode", "sound_on": "Sound on", "sound_off": "Sound off", "sound": "Sound", "on": "On", "off": "Off", "win_mode": "Win mode", "infinite": "Infinite", "target": "Beat best", "show_tips": "Show tips", "reset_settings": "Reset settings", "reset_score": "Reset best", "reset_settings_q": "Reset all settings to default?", "reset_score_q": "Reset your personal best?", "yes": "Yes", "no": "No", "done_reset": "Reset done", "tips_list": ["Keep your highest tile in a corner and don't move it", "Try to keep one full, ordered row", "Build a descending chain along a row", "Mostly swipe in just two fixed directions", "Don't fill the board - leave room to maneuver"], "tip_stuck": "A low tile is stuck - try to free it", "tip_full": "Board is filling up! Merge tiles urgently", "tip_corner": "Keep your highest tile in a corner", "tip_lost_corner": "Your highest tile left the corner - bring it back!", "tip_good_corner": "Nice! You got the highest back to a corner", "tip_good_clear": "Great! You freed up the board", "tip_good_merge": "Excellent! Big merge", "tip_good_space": "Nice! You cleared lots of space", "preferences": "Preferences", "prefs_hint": "Advanced settings", "prefs_title": "Refuge of Cheats & Crooks", "prefs_sub": "Where everyone who isn't good enough on their own gathers", "persist_cheats": "Keep cheats between sessions", "count_best": "Count cheats in best", "credit": "Made by Claude • BeniaBot", "about": "About", "opened_by": "Opened by", "up_to_date": "The app is up to date", "update_ready": "A new version is available", "check_again": "Check again", "checking": "Checking...", "visit_github": "Visit the GitHub page", "download_update": "Download new version", "version_lbl": "Version", "update_avail": "Update available!", "confess_title": "One moment...", "confess_body": "To save cheat settings, you must admit:", "confess_line": "\"I cheat because I'm not good enough\"", "confess_yes": "I admit it", "confess_no": "Never!", "confess_rejected": "Back to practice then. Settings not saved.", "praise_title": "Respect!", "praise_body": "You chose to drop the cheats and play like a champ!", "praise_body2": "That's impressive. Your change was saved automatically.", "praise_ok": "Thanks!", "praise_toast": "Go play 'for real'\nJust don't give up too fast!", "mode_names": ["Mode 1 - Classic", "Mode 2 - 2/4 Control", "Mode 3 - Cleaner", "Mode 4 - Full Kit"], "actions": {"force_2": "Next tile will be 2", "force_4": "Next tile will be 4", "spawn_corner": "New tile at the edge", "clean_stuck": "Clear a stuck tile", "undo": "Undo a move"}, "action_detail": {"force_2": "Hold during a move - new tile spawns as 2, not 4 (keeps board tidy)", "force_4": "Hold during a move - new tile spawns as 4 (scores faster)", "spawn_corner": "Hold during a move - new tile appears at the edge, not the middle", "clean_stuck": "Tap - removes a low tile trapped between higher ones", "undo": "Tap - restores the board to before your last move"}, "zone_tl": "Top-left corner", "zone_tr": "Top-right corner", "zone_bl": "Bottom-left corner", "zone_br": "Bottom-right corner", "choose_zone": "Choose a hidden zone", "zone_hold_hint": "Hold your finger in the zone while swiping", "zone_tap_hint": "Double-tap the zone to trigger", "reserved_key": "That key is reserved for gameplay - pick another", "no_stuck_now": "No genuinely stuck tile right now", "no_undo": "No move to undo", "difficulty": "Difficulty", "diff_normal": "Normal", "diff_hard": "Hard", "diff_evil": "Evil"}};
-// ============================================================
-//  2049 - browser version. Same gameplay as the Python game.
-// ============================================================
 "use strict";
+// ============================================================
+//  2049 - browser version. Same game and same brain as the desktop
+//  build (brain2049.js is a bit-identical port of brain2049.py).
+// ============================================================
+const APP_VERSION = "0.18.0";
+const B = window.Brain2049;
 
-const TILE_COLORS = {
-  2:"#eee4da",4:"#ede0c8",8:"#f2b179",16:"#f59563",32:"#f67c5f",
-  64:"#f65e3b",128:"#edcf72",256:"#edcc61",512:"#edc850",
-  1024:"#edc53f",2048:"#edc22e",4096:"#3c3a32",8192:"#3c3a32"
-};
+const STRINGS = {
+he: {
+  score:"ניקוד", best:"שיא", new_game:"משחק חדש", settings:"הגדרות", back:"חזרה",
+  subtitle:"המהדורה המשוכללת", you_win:"הגעת ל-2048!", keep_playing:"המשך לשחק",
+  game_over:"המשחק נגמר", press_new:"Enter – משחק חדש",
+  hint_keys:"משחקים בחצים או במקשי <span dir=\"ltr\">WASD</span>", hint_touch:"מחליקים על הלוח כדי לשחק",
+  grid_size:"גודל לוח", language:"שפה", difficulty:"רמת קושי",
+  diff_normal:"רגיל", diff_hard:"קשה", diff_evil:"מרושע", sound:"צלילים", on:"דלוק", off:"כבוי",
+  win_mode:"מצב ניצחון", infinite:"אינסופי", target:"עצירה ב-2048", show_tips:"עצות מאמן",
+  reset_settings:"איפוס הגדרות", reset_score:"איפוס שיא",
+  reset_settings_q:"לאפס את כל ההגדרות לברירת המחדל?", reset_score_q:"לאפס את השיא האישי?",
+  yes:"כן", no:"לא", done_reset:"אופס בהצלחה",
+  preferences:"העדפות", prefs_hint:"הגדרות מתקדמות",
+  prefs_title:"מקלט הרמאים והנוכלים", prefs_sub:"כאן מתאספים כל אלו שלא מספיק טובים בזכות עצמם",
+  game_mode:"מצב משחק", persist_cheats:"לשמור רמאויות בין ביקורים", count_best:"לחשב רמאויות בשיא",
+  assist_keys:"מקשי עזרה נסתרים", hold:"החזק", tap:"לחיצה", none:"ללא", press_key:"לחץ מקש...",
+  click_to_set:"לוחצים על תיבה ואז על מקש. Backspace מנקה.",
+  click_to_set_touch:"לוחצים על תיבה ובוחרים פינה נסתרת במסך.",
+  visit_github:"לעמוד הפרויקט ב-GitHub", opened_by:"פותח על ידי",
+  confess_title:"רגע אחד...", confess_body:"כדי לשמור הגדרות רמאות, עליך להודות:",
+  confess_line:"\"אני מרמה כי אני לא מספיק טוב\"", confess_yes:"אני מודה", confess_no:"לעולם לא!",
+  confess_rejected:"אז שוב לאימונים. ההגדרות לא נשמרו.",
+  praise_title:"כל הכבוד!", praise_body:"בחרת לבטל את הרמאות ולהתמודד כמו גבר!",
+  praise_body2:"זה מרשים. השינוי נשמר אוטומטית.", praise_ok:"תודה!",
+  praise_toast:"יאללה, לשחק 'על אמת'\nרק אל תתייאש מהר מדי!",
+  reserved_key:"המקש הזה שמור למשחק – בחר מקש אחר",
+  mode_names:["מצב 1 - רגיל","מצב 2 - שליטה ב-2/4","מצב 3 - מנקה","מצב 4 - ערכה מלאה"],
+  actions:{smart_spawn:"האריח הבא – בדיוק מה שצריך", force_2:"האריח הבא יהיה 2",
+    force_4:"האריח הבא יהיה 4", spawn_corner:"אריח חדש בשוליים", clean_stuck:"נקה אריח תקוע", undo:"בטל מהלך"},
+  action_detail:{smart_spawn:"החזק במהלך – המשחק בוחר איזה אריח ואיפה, לטובתך",
+    force_2:"החזק במהלך – האריח שיופיע יהיה 2 ולא 4", force_4:"החזק במהלך – האריח שיופיע יהיה 4",
+    spawn_corner:"החזק במהלך – האריח החדש יופיע בשוליים ולא במרכז",
+    clean_stuck:"לחיצה – במהלך הבא נעלם האריח שהכי מפריע (נראה כמו מיזוג)",
+    undo:"לחיצה – מחזיר את הלוח לפני המהלך האחרון"},
+  zone_tl:"פינה שמאלית עליונה", zone_tr:"פינה ימנית עליונה", zone_bl:"פינה שמאלית תחתונה",
+  zone_br:"פינה ימנית תחתונה", choose_zone:"בחר אזור נסתר",
+  zone_hold_hint:"מחזיקים אצבע באזור בזמן ההחלקה", zone_tap_hint:"נוגעים פעמיים באזור כדי להפעיל",
+  tip_open:"טיפ: בחר פינה לאריח הגבוה ושמור אותו שם",
+  tip_danger:"מצב קשה – המהלך הבטוח ביותר: {dir}",
+  tip_trap:"זהירות: {bad} עלול לגמור את המשחק · בטוח: {dir}",
+  tip_stuck:"ה-{value} {place} תקוע – בנה לידו {value} כדי לשחרר אותו",
+  tip_corner_lost:"ה-{value} יצא מהפינה – {dir} היה שומר אותו שם",
+  tip_corner_back:"החזר את ה-{value} לפינה: {dir}", tip_better:"{dir} היה מהלך טוב יותר כאן",
+  tip_good_escape:"יפה! יצאת מהמצב הקשה", tip_good_freed:"יפה מאוד! שחררת את האריח התקוע",
+  tip_good_corner:"יופי, ה-{value} חזר לפינה", tip_good_record:"מצוין! הגעת ל-{value}",
+  places:{corner_tl:"בפינה השמאלית העליונה", corner_tr:"בפינה הימנית העליונה",
+    corner_bl:"בפינה השמאלית התחתונה", corner_br:"בפינה הימנית התחתונה", edge_top:"בשורה העליונה",
+    edge_bottom:"בשורה התחתונה", edge_left:"בעמודה השמאלית", edge_right:"בעמודה הימנית", middle:"באמצע הלוח"},
+  sound_on:"צלילים דלוקים", sound_off:"צלילים כבויים", mode_inf:"מצב אינסופי", mode_tgt:"עצירה ב-2048"
+},
+en: {
+  score:"SCORE", best:"BEST", new_game:"New game", settings:"Settings", back:"Back",
+  subtitle:"enhanced edition", you_win:"You reached 2048!", keep_playing:"Keep playing",
+  game_over:"Game over", press_new:"Enter – new game",
+  hint_keys:"Play with the arrow keys or WASD", hint_touch:"Swipe on the board to play",
+  grid_size:"Grid size", language:"Language", difficulty:"Difficulty",
+  diff_normal:"Normal", diff_hard:"Hard", diff_evil:"Evil", sound:"Sound", on:"On", off:"Off",
+  win_mode:"Win mode", infinite:"Infinite", target:"Stop at 2048", show_tips:"Coach tips",
+  reset_settings:"Reset settings", reset_score:"Reset best",
+  reset_settings_q:"Reset all settings to default?", reset_score_q:"Reset your personal best?",
+  yes:"Yes", no:"No", done_reset:"Reset done",
+  preferences:"Preferences", prefs_hint:"Advanced settings",
+  prefs_title:"Refuge of Cheats & Crooks", prefs_sub:"Where everyone who isn't good enough on their own gathers",
+  game_mode:"Game mode", persist_cheats:"Keep cheats between visits", count_best:"Count cheats in best",
+  assist_keys:"Hidden assist keys", hold:"hold", tap:"tap", none:"None", press_key:"Press a key...",
+  click_to_set:"Click a box, then press any key. Backspace clears.",
+  click_to_set_touch:"Tap a box and pick a hidden screen corner.",
+  visit_github:"Project page on GitHub", opened_by:"Opened by",
+  confess_title:"One moment...", confess_body:"To save cheat settings, you must admit:",
+  confess_line:"\"I cheat because I'm not good enough\"", confess_yes:"I admit it", confess_no:"Never!",
+  confess_rejected:"Back to practice then. Settings not saved.",
+  praise_title:"Respect!", praise_body:"You chose to drop the cheats and play like a champ!",
+  praise_body2:"That's impressive. Your change was saved automatically.", praise_ok:"Thanks!",
+  praise_toast:"Go play 'for real'\nJust don't give up too fast!",
+  reserved_key:"That key is reserved for gameplay - pick another",
+  mode_names:["Mode 1 - Classic","Mode 2 - 2/4 Control","Mode 3 - Cleaner","Mode 4 - Full Kit"],
+  actions:{smart_spawn:"Next tile: exactly what you need", force_2:"Next tile will be 2",
+    force_4:"Next tile will be 4", spawn_corner:"New tile at the edge", clean_stuck:"Clear a stuck tile", undo:"Undo a move"},
+  action_detail:{smart_spawn:"Hold during a move - the game picks the tile and the spot, in your favor",
+    force_2:"Hold during a move - the new tile is a 2, not a 4", force_4:"Hold during a move - the new tile is a 4",
+    spawn_corner:"Hold during a move - the new tile appears at the edge, not the middle",
+    clean_stuck:"Tap - on your next move the tile that hurts most vanishes (looks like a merge)",
+    undo:"Tap - restores the board to before your last move"},
+  zone_tl:"Top-left corner", zone_tr:"Top-right corner", zone_bl:"Bottom-left corner",
+  zone_br:"Bottom-right corner", choose_zone:"Choose a hidden zone",
+  zone_hold_hint:"Hold a finger in the zone while you swipe", zone_tap_hint:"Double-tap the zone to trigger",
+  tip_open:"Tip: pick a corner for your biggest tile and keep it there",
+  tip_danger:"Tight spot - safest move: {dir}",
+  tip_trap:"Careful: {bad} may end the game · safe: {dir}",
+  tip_stuck:"The {value} {place} is stuck - build a {value} next to it",
+  tip_corner_lost:"Your {value} left the corner - {dir} would have kept it",
+  tip_corner_back:"Bring your {value} back to the corner: {dir}", tip_better:"{dir} was a better move here",
+  tip_good_escape:"Nice - you got out of that tight spot", tip_good_freed:"Great - you freed the stuck tile",
+  tip_good_corner:"Good - your {value} is back in the corner", tip_good_record:"Excellent - you reached {value}!",
+  places:{corner_tl:"in the top-left corner", corner_tr:"in the top-right corner",
+    corner_bl:"in the bottom-left corner", corner_br:"in the bottom-right corner", edge_top:"in the top row",
+    edge_bottom:"in the bottom row", edge_left:"in the left column", edge_right:"in the right column", middle:"in the middle"},
+  sound_on:"Sound on", sound_off:"Sound off", mode_inf:"Infinite mode", mode_tgt:"Stop at 2048"
+}};
+
+const ARROWS = ["←","→","↑","↓"];        // by brain direction
+const DIR_OF = {left:B.LEFT, right:B.RIGHT, up:B.UP, down:B.DOWN};
+
+// ---- tiles ----
+const TILE_COLORS = {2:"#eee4da",4:"#ede0c8",8:"#f2b179",16:"#f59563",32:"#f67c5f",64:"#f65e3b",
+  128:"#edcf72",256:"#edcc61",512:"#edc850",1024:"#edc53f",2048:"#edc22e"};
+const TILE_GLOW = {128:.24,256:.32,512:.40,1024:.48,2048:.56};
 const tileColor = v => TILE_COLORS[v] || "#3c3a32";
-const tileText  = v => (v===2||v===4) ? "#776e65" : "#f9f6f2";
-const tileFont  = v => v<100?"32px":v<1000?"26px":"20px";
-
-const RESERVED = new Set(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight",
-  "w","a","s","d","W","A","S","D","Escape"," "]);
-const ACTIONS = ["force_2","force_4","spawn_corner","clean_stuck","undo"];
-const HOLD = new Set(["force_2","force_4","spawn_corner"]);
-
-// Chance per spawn that the new tile is placed adversarially (see
-// Board._evilCell). Values are calibrated so "hard" stings and "evil" hurts.
-// Calibrated by simulation (400 games/setting): hard roughly halves a solid
-// player's 2048-reach rate; evil makes 2048 nearly unreachable while 512-1024
-// stays common. Must match DIFFICULTY_EVIL_P in 2049.py.
-const DIFFICULTY_EVIL_P = {normal: 0.0, hard: 0.30, evil: 0.75};
-
-// ---- config / persistence ----
-const CFG_KEY = "cfg2049";
-function defaultCfg(){
-  return {config_version:3, grid_size:4, language:"he", active_profile:0,
-    highscore:0, sound:true, infinite:true, show_tips:false,
-    persist_cheats:false, count_cheats_in_best:false, difficulty:"normal",
-    profiles:[
-      {map:{}},
-      {map:{force_4:"Shift"}},
-      {map:{clean_stuck:"Shift", undo:"Control"}},
-      {map:{force_4:"Shift", clean_stuck:"c", undo:"z", spawn_corner:"Alt"}}
-    ]};
+const tileText = v => (v===2||v===4) ? "#776e65" : "#f9f6f2";
+function tileFont(v, cell){
+  const d = String(v).length;
+  const f = d<=2 ? .46 : d===3 ? .38 : d===4 ? .30 : d===5 ? .245 : .20;
+  return Math.max(10, Math.round(cell*f)) + "px";
 }
-const JS_CONFIG_VERSION = 3;
-function loadCfg(){
-  let c = defaultCfg();
-  try{
-    const s = JSON.parse(localStorage.getItem(CFG_KEY));
-    if(s){
-      const oldVer = s.config_version || 1;
-      Object.assign(c, s);
-      c.config_version = JS_CONFIG_VERSION;
-      if(!c.profiles || !c.profiles.length) c.profiles = defaultCfg().profiles;
-      // migration: configs from older browser builds may carry broken values
-      // (empty built-in modes, internal "__touch_" garbage). Re-seed the four
-      // built-in modes while keeping the player's settings and best score.
-      if(oldVer < JS_CONFIG_VERSION){
-        c.profiles = defaultCfg().profiles;
-        c.active_profile = 0;
-      } else {
-        // sanitize: drop any internal/invalid key values
-        for(const p of c.profiles){
-          if(p && p.map){
-            for(const a of Object.keys(p.map)){
-              const v = p.map[a];
-              if(typeof v !== "string" || v.startsWith("__")) delete p.map[a];
-            }
-          }
-        }
-      }
-      // parity with desktop: unless the player opted to keep cheats, every
-      // page load starts clean (like every desktop launch)
-      if(!c.persist_cheats){
-        c.profiles = defaultCfg().profiles;
-        c.active_profile = 0;
-      }
-      saveCfg(c);
-    }
-  }catch(e){}
+function tileShadow(v){
+  const g = TILE_GLOW[v];
+  if(g) return `0 0 ${Math.round(28*g+6)}px ${Math.round(10*g)}px rgba(243,215,116,${g*.55}),inset 0 0 0 1px rgba(255,255,255,${g*.4})`;
+  if(v>2048) return "0 2px 6px rgba(0,0,0,.25)";
+  return "0 1px 2px rgba(119,110,101,.15)";
+}
+
+// ---- assists ----
+const RESERVED = new Set(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","w","a","s","d","Escape"," ","Enter"]);
+const ACTIONS = ["smart_spawn","force_2","force_4","spawn_corner","clean_stuck","undo"];
+const HOLD = new Set(["smart_spawn","force_2","force_4","spawn_corner"]);
+const DIFFICULTY_EVIL_P = {normal:0.0, hard:0.30, evil:0.75};   // = 2049.py
+
+// ---- persistence ----
+const CFG_KEY = "cfg2049", GAME_KEY = "game2049", JS_CONFIG_VERSION = 3;
+function defaultCfg(){
+  return {config_version:3, grid_size:4, language:"he", active_profile:0, highscore:0, sound:true,
+    infinite:true, show_tips:false, persist_cheats:false, count_cheats_in_best:false, difficulty:"normal",
+    profiles:[{map:{}},{map:{force_4:"Shift"}},{map:{clean_stuck:"Shift",undo:"Control"}},
+      {map:{force_4:"Shift",clean_stuck:"c",undo:"z",spawn_corner:"Alt",smart_spawn:"x"}}]};
+}
+function store(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+function load(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } }
+function sanitize(c){
+  const d = defaultCfg(), ok = (k, f) => { if(!f(c[k])) c[k] = d[k]; };
+  ok("grid_size", v => [4,5,6].includes(v)); ok("language", v => v in STRINGS);
+  ok("difficulty", v => v in DIFFICULTY_EVIL_P);
+  ["sound","infinite","show_tips","persist_cheats","count_cheats_in_best"].forEach(k => ok(k, v => typeof v==="boolean"));
+  ok("highscore", v => Number.isInteger(v) && v >= 0);
+  if(!Array.isArray(c.profiles) || !c.profiles.length || !c.profiles.every(p => p && typeof p.map==="object" && p.map))
+    c.profiles = d.profiles;
+  for(const p of c.profiles) for(const a of Object.keys(p.map)){
+    const v = p.map[a];
+    if(!ACTIONS.includes(a) || typeof v!=="string" || !v || v.startsWith("__")) delete p.map[a];
+  }
+  ok("active_profile", v => Number.isInteger(v) && v >= 0 && v < c.profiles.length);
   return c;
 }
-function saveCfg(c){ try{ localStorage.setItem(CFG_KEY, JSON.stringify(c)); }catch(e){} }
+function loadCfg(){
+  let c = defaultCfg();
+  const s = load(CFG_KEY);
+  if(s && typeof s==="object"){
+    const oldVer = s.config_version || 1;
+    Object.assign(c, s);
+    c.config_version = JS_CONFIG_VERSION;
+    if(oldVer < JS_CONFIG_VERSION){ c.profiles = defaultCfg().profiles; c.active_profile = 0; }
+  }
+  c = sanitize(c);
+  // like every desktop launch: unless kept on purpose, each visit starts clean
+  if(!c.persist_cheats){ c.profiles = defaultCfg().profiles; c.active_profile = 0; }
+  store(CFG_KEY, c);
+  return c;
+}
+const saveCfg = c => store(CFG_KEY, c);
 
-// detect touch device -> show cheat buttons instead of keyboard
-const IS_TOUCH = ('ontouchstart' in window) ||
-  navigator.maxTouchPoints>0 || window.matchMedia("(pointer:coarse)").matches;
+const IS_TOUCH = ('ontouchstart' in window) || navigator.maxTouchPoints > 0 ||
+  window.matchMedia("(pointer:coarse)").matches;
+
+const ICON = {
+  refresh:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>',
+  up:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 7l6 8H6z"/></svg>',
+  down:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 17l-6-8h12z"/></svg>',
+  prev:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+  next:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
+  soundOn:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/></svg>',
+  soundOff:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path d="M17 9l5 6M22 9l-5 6"/></svg>',
+  inf:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 12c-2-2.8-3.6-4-5.5-4a4 4 0 0 0 0 8c1.9 0 3.5-1.2 5.5-4zm0 0c2 2.8 3.6 4 5.5 4a4 4 0 0 0 0-8c-1.9 0-3.5 1.2-5.5 4z"/></svg>',
+  target:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v4a5 5 0 0 1-10 0z"/><path d="M12 13v4M8 20h8M17 5h3a3 3 0 0 1-3 4M7 5H4a3 3 0 0 0 3 4"/></svg>'
+};
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
 // ============================================================
-//  Board logic (mirrors the Python Board)
+//  Board (game rules + slide bookkeeping; the brain does the thinking)
 // ============================================================
 class Board{
-  constructor(size){ this.size=size; this.grid=Array.from({length:size},
-    ()=>Array(size).fill(0)); this.score=0; }
-  clone(){ const b=new Board(this.size);
-    b.grid=this.grid.map(r=>r.slice()); b.score=this.score; return b; }
-  emptyCells(){ const o=[]; for(let r=0;r<this.size;r++)
-    for(let c=0;c<this.size;c++) if(this.grid[r][c]===0) o.push([r,c]); return o; }
-  maxTile(){ let m=0; for(const row of this.grid) for(const v of row) if(v>m)m=v;
-    return m; }
-  spawn(forceValue=null, preferEdge=false, evil=false){
+  constructor(n){ this.size=n; this.grid=Array.from({length:n},()=>Array(n).fill(0)); this.score=0; }
+  clone(){ const b=new Board(this.size); b.grid=this.grid.map(r=>r.slice()); b.score=this.score; return b; }
+  emptyCells(){ const o=[]; for(let r=0;r<this.size;r++) for(let c=0;c<this.size;c++) if(!this.grid[r][c]) o.push([r,c]); return o; }
+  maxTile(){ let m=0; for(const row of this.grid) for(const v of row) if(v>m) m=v; return m; }
+  ranks(){ return B.toRanks(this.grid).b; }
+  spawn(forceValue=null, preferEdge=false, evil=false, at=null){
     let cells=this.emptyCells(); if(!cells.length) return null;
-    if(preferEdge){ const e=cells.filter(([r,c])=>r===0||r===this.size-1||
-      c===0||c===this.size-1); if(e.length) cells=e; }
+    if(at && cells.some(([r,c])=>r===at[0]&&c===at[1])){
+      const v=forceValue||2; this.grid[at[0]][at[1]]=v; return [at[0],at[1],v];
+    }
+    if(preferEdge){ const n=this.size, e=cells.filter(([r,c])=>r===0||r===n-1||c===0||c===n-1); if(e.length) cells=e; }
     const val=forceValue?forceValue:(Math.random()<0.1?4:2);
-    // evil placement runs AFTER the edge filter so the edge cheat still
-    // constrains where the adversary may strike
-    let r,c;
-    if(evil && cells.length>1) [r,c]=this._evilCell(cells,val);
-    else [r,c]=cells[Math.floor(Math.random()*cells.length)];
+    const [r,c]=(evil&&cells.length>1)?this._evilCell(cells,val):cells[Math.floor(Math.random()*cells.length)];
     this.grid[r][c]=val; return [r,c,val];
   }
-  adjacentPairs(){
-    const n=this.size; let cnt=0;
-    for(let r=0;r<n;r++) for(let c=0;c<n;c++){
-      const v=this.grid[r][c]; if(v===0) continue;
-      if(c+1<n && this.grid[r][c+1]===v) cnt++;
-      if(r+1<n && this.grid[r+1][c]===v) cnt++;
-    }
-    return cnt;
-  }
-  maxInCorner(){
-    const n=this.size, mx=this.maxTile();
-    return [this.grid[0][0],this.grid[0][n-1],
-            this.grid[n-1][0],this.grid[n-1][n-1]].includes(mx);
-  }
-  _evilCell(cells,val){
-    // Depth-1 minimax: for each candidate cell, assume the player answers
-    // with their BEST move (most empties/merges/corner kept) and pick the
-    // cell whose best answer is WORST. Ties break randomly so evil spawns
-    // don't look scripted.
+  adjacentPairs(){ const n=this.size; let k=0;
+    for(let r=0;r<n;r++) for(let c=0;c<n;c++){ const v=this.grid[r][c]; if(!v) continue;
+      if(c+1<n&&this.grid[r][c+1]===v) k++; if(r+1<n&&this.grid[r+1][c]===v) k++; } return k; }
+  maxInCorner(){ const n=this.size, m=this.maxTile();
+    return [this.grid[0][0],this.grid[0][n-1],this.grid[n-1][0],this.grid[n-1][n-1]].includes(m); }
+  _evilCell(cells,val){            // the difficulty's adversary (unchanged, = 2049.py)
     let best=null, bestCells=[];
     for(const [r,c] of cells){
-      const b=this.clone(); b.grid[r][c]=val;
-      let reply=null;
-      for(const d of ["left","right","up","down"]){
-        const b2=b.clone();
-        if(b2.move(d).changed){
-          const q=6*b2.emptyCells().length + 2*b2.adjacentPairs()
-                + (b2.maxInCorner()?2:0);
-          reply = reply===null ? q : Math.max(reply,q);
-        }
-      }
-      if(reply===null) reply=-1e9;       // player has no reply -> jackpot
-      if(best===null || reply<best){ best=reply; bestCells=[[r,c]]; }
-      else if(reply===best) bestCells.push([r,c]);
+      const b=this.clone(); b.grid[r][c]=val; let reply=null;
+      for(const d of ["left","right","up","down"]){ const b2=b.clone();
+        if(b2.move(d).changed){ const q=6*b2.emptyCells().length+2*b2.adjacentPairs()+(b2.maxInCorner()?2:0);
+          reply=reply===null?q:Math.max(reply,q); } }
+      if(reply===null) reply=-1e9;
+      if(best===null||reply<best){ best=reply; bestCells=[[r,c]]; } else if(reply===best) bestCells.push([r,c]);
     }
     return bestCells[Math.floor(Math.random()*bestCells.length)];
   }
   _lineMoves(line){
-    const entries=[]; for(let i=0;i<line.length;i++) if(line[i]!==0)
-      entries.push([line[i],i]);
-    const newLine=Array(line.length).fill(0); const moves=[]; let dest=0,i=0;
-    while(i<entries.length){
-      const [v,src]=entries[i];
-      if(i+1<entries.length && entries[i+1][0]===v){
-        newLine[dest]=v*2; moves.push([dest,[src,entries[i+1][1]],true,v*2]); i+=2;
-      }else{ newLine[dest]=v; moves.push([dest,[src],false,v]); i+=1; }
+    const ent=[]; line.forEach((v,i)=>{ if(v) ent.push([v,i]); });
+    const out=Array(line.length).fill(0), moves=[]; let dest=0,i=0;
+    while(i<ent.length){
+      if(i+1<ent.length&&ent[i+1][0]===ent[i][0]){ out[dest]=ent[i][0]*2; moves.push([dest,[ent[i][1],ent[i+1][1]],true,ent[i][0]*2]); i+=2; }
+      else { out[dest]=ent[i][0]; moves.push([dest,[ent[i][1]],false,ent[i][0]]); i+=1; }
       dest++;
     }
-    return [newLine,moves];
+    return [out,moves];
   }
-  move(direction){
+  move(dir){
     const n=this.size; let changed=false, gain=0; const anims=[], merges=[];
-    if(direction==="left"||direction==="right"){
-      for(let r=0;r<n;r++){
-        const line=this.grid[r].slice();
-        const oriented = direction==="left"?line.slice():line.slice().reverse();
-        const [newLine,moves]=this._lineMoves(oriented);
-        const back = direction==="left"?(p=>p):(p=>n-1-p);
-        for(const [dest,srcs,merged,val] of moves){
-          for(const s of srcs) anims.push({from:[r,back(s)],to:[r,back(dest)],
-            value:oriented[s],merged,new_value:val});
-          if(merged){ gain+=val; merges.push([r,back(dest),val]); }
-        }
-        const final = direction==="left"?newLine:newLine.slice().reverse();
-        if(JSON.stringify(final)!==JSON.stringify(line)) changed=true;
-        this.grid[r]=final;
+    for(let k=0;k<n;k++){
+      const pos = j => dir==="left"?[k,j]:dir==="right"?[k,n-1-j]:dir==="up"?[j,k]:[n-1-j,k];
+      const line=[]; for(let j=0;j<n;j++){ const [r,c]=pos(j); line.push(this.grid[r][c]); }
+      const [out,moves]=this._lineMoves(line);
+      for(const [dest,srcs,merged,val] of moves){
+        for(const s of srcs) anims.push({from:pos(s),to:pos(dest),value:line[s],merged,newValue:val});
+        if(merged){ gain+=val; merges.push([...pos(dest),val]); }
       }
-    }else{
-      for(let c=0;c<n;c++){
-        const line=[]; for(let r=0;r<n;r++) line.push(this.grid[r][c]);
-        const oriented = direction==="up"?line.slice():line.slice().reverse();
-        const [newLine,moves]=this._lineMoves(oriented);
-        const back = direction==="up"?(p=>p):(p=>n-1-p);
-        for(const [dest,srcs,merged,val] of moves){
-          for(const s of srcs) anims.push({from:[back(s),c],to:[back(dest),c],
-            value:oriented[s],merged,new_value:val});
-          if(merged){ gain+=val; merges.push([back(dest),c,val]); }
-        }
-        const final = direction==="up"?newLine:newLine.slice().reverse();
-        const orig=[]; for(let r=0;r<n;r++) orig.push(this.grid[r][c]);
-        if(JSON.stringify(final)!==JSON.stringify(orig)) changed=true;
-        for(let r=0;r<n;r++) this.grid[r][c]=final[r];
-      }
+      for(let j=0;j<n;j++){ const [r,c]=pos(j); if(this.grid[r][c]!==out[j]) changed=true; this.grid[r][c]=out[j]; }
     }
     if(changed) this.score+=gain;
-    return {changed,anims,merges};
+    return {changed,anims,merges,gain};
   }
-  canMove(){
-    if(this.emptyCells().length) return true;
-    const n=this.size;
-    for(let r=0;r<n;r++) for(let c=0;c<n;c++){
-      const v=this.grid[r][c];
-      if(c+1<n && this.grid[r][c+1]===v) return true;
-      if(r+1<n && this.grid[r+1][c]===v) return true;
-    }
-    return false;
-  }
-  inDanger(){
-    // nearly full AND no single move buys real air (3+ empties) or fresh
-    // merge chances (2+ pairs) -> the player is genuinely cornered
-    if(this.emptyCells().length>3) return false;
-    for(const d of ["left","right","up","down"]){
-      const b=this.clone();
-      if(b.move(d).changed && (b.emptyCells().length>=3 || b.adjacentPairs()>=2))
-        return false;                    // an escape move exists
-    }
-    return true;
-  }
-  edgeOrdered(){
-    // true if the max tile sits in a corner AND the full row or column
-    // running away from that corner is completely filled and non-increasing
-    // (the classic "ordered edge" structure is already built)
-    const n=this.size, mx=this.maxTile();
-    const ordered=line=>line.every(x=>x!==0) &&
-      line.every((x,i)=>i===n-1 || x>=line[i+1]);
-    for(const cr of [0,n-1]) for(const cc of [0,n-1]){
-      if(this.grid[cr][cc]!==mx) continue;
-      const row=this.grid[cr].slice(); if(cc!==0) row.reverse();
-      const col=[]; for(let r=0;r<n;r++) col.push(this.grid[r][cc]);
-      if(cr!==0) col.reverse();
-      if(ordered(row)||ordered(col)) return true;
-    }
-    return false;
-  }
-  // ---- stuck detection via real simulation ----
-  // ---- deep stuck detection: follow the actual tile through move futures ----
-  _movesTracking(pos){
-    // all 4 directions on clones (no spawn); for each move that changes the
-    // board, report (newBoard, newPos, merged) for the tile that started at pos
-    const out=[];
-    for(const d of ["left","right","up","down"]){
-      const b=this.clone();
-      const {changed,anims}=b.move(d);
-      if(!changed) continue;
-      let np=null, merged=false;
-      for(const a of anims){
-        if(a.from[0]===pos[0] && a.from[1]===pos[1]){
-          np=a.to; merged=a.merged; break;
-        }
-      }
-      if(np===null) np=pos;
-      out.push([b,np,merged]);
-    }
-    return out;
-  }
-  _tileFate(r,c,depth=3){
-    // explore ALL spawn-free move sequences up to depth, following this tile.
-    // returns [canMerge, canOpen]
-    const key=(g,p)=>JSON.stringify(g)+"|"+p[0]+","+p[1];
-    const seen=new Set([key(this.grid,[r,c])]);
-    const frontier=[[this,[r,c],0]];
-    let canMerge=false, canOpen=false;
-    while(frontier.length){
-      const [board,pos,d]=frontier.pop();
-      if(!canOpen && d<=depth-1){
-        const n=board.size;
-        for(const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){
-          const rr=pos[0]+dr, cc=pos[1]+dc;
-          if(rr>=0&&rr<n&&cc>=0&&cc<n&&board.grid[rr][cc]===0){ canOpen=true; break; }
-        }
-      }
-      if(d>=depth) continue;
-      for(const [nb,np,merged] of board._movesTracking(pos)){
-        if(merged){
-          canMerge=true;
-          if(canOpen) return [true,true];
-          continue;
-        }
-        const k=key(nb.grid,np);
-        if(!seen.has(k)){ seen.add(k); frontier.push([nb,np,d+1]); }
-      }
-      if(canMerge&&canOpen) return [true,true];
-    }
-    return [canMerge,canOpen];
-  }
-  blockedPairValue(r,c){
-    // merges this tile is directly preventing: the nearest non-empty
-    // neighbors on both sides along the row (only empties between, by
-    // construction) that are EQUAL to each other and != v would merge if
-    // this tile vanished. Same for the column. Returns the sum of such
-    // blocked pair values (0, one, or both).
-    const n=this.size, v=this.grid[r][c]; let total=0;
-    let left=null, right=null, up=null, down=null;
-    for(let cc=c-1;cc>=0;cc--) if(this.grid[r][cc]){ left=this.grid[r][cc]; break; }
-    for(let cc=c+1;cc<n;cc++)  if(this.grid[r][cc]){ right=this.grid[r][cc]; break; }
-    if(left!==null && right!==null && left===right && left!==v) total+=left;
-    for(let rr=r-1;rr>=0;rr--) if(this.grid[rr][c]){ up=this.grid[rr][c]; break; }
-    for(let rr=r+1;rr<n;rr++)  if(this.grid[rr][c]){ down=this.grid[rr][c]; break; }
-    if(up!==null && down!==null && up===down && up!==v) total+=up;
-    return total;
-  }
-  freedom(){
-    // number of directions whose move changes the board
-    let cnt=0;
-    for(const d of ["left","right","up","down"])
-      if(this.clone().move(d).changed) cnt++;
-    return cnt;
-  }
-  freedomWithout(r,c,base=null){
-    // how many extra move directions open up if this tile vanished.
-    // `base` lets callers hoist this.freedom() out of a whole-board scan.
-    if(base===null) base=this.freedom();
-    const b=this.clone(); b.grid[r][c]=0;
-    return Math.max(0, b.freedom()-base);
-  }
-  stuckScore(r,c,baseFreedom=null){
-    // v2: a tile is a problem when it's buried under strictly bigger tiles
-    // with no simulated escape, OR it directly blocks a big equal pair from
-    // merging (even with air around), OR the board is down to its last
-    // direction and removing this tile would unlock another. Exact order
-    // matters - the cheap structural tests gate the expensive sim, so the
-    // per-move scan stays fast even on crowded 6x6 boards.
-    const n=this.size, v=this.grid[r][c];
-    if(v===0) return null;
-    const mx=this.maxTile()||v;
-    if(v*4>mx) return null;              // only low-relative tiles
-    const neigh=[];
-    for(const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){
-      const rr=r+dr, cc=c+dc;
-      if(rr>=0&&rr<n&&cc>=0&&cc<n) neigh.push(this.grid[rr][cc]);
-    }
-    if(neigh.some(nv=>nv===v)) return null;  // mergeable right now
-    const boxed=neigh.every(nv=>nv!==0);
-    const blockedV=this.blockedPairValue(r,c);
-    // cheap structural gates - only three archetypes justify the deep sim:
-    const buried=boxed && neigh.every(nv=>nv>v);  // walled in by bigger
-    if(baseFreedom===null) baseFreedom=this.freedom();
-    const jamPossible=boxed && baseFreedom<=1;    // board nearly locked
-    if(!(buried || jamPossible || blockedV>=4*v))
-      return null;                       // cheap out - no simulation
-    // ground truth: follow the tile through every 3-move future
-    const [canMerge,canOpen]=this._tileFate(r,c,3);
-    if(canMerge) return null;            // proven escape exists
-    const soft=boxed && Math.min(...neigh)<v*4;
-    const rescuable=canOpen && soft;     // air + soft walls -> realistic rescue
-    const fd=this.freedomWithout(r,c,baseFreedom);
-    const problem=(buried && !rescuable) || blockedV>=4*v || (jamPossible && fd>0);
-    if(!problem) return null;
-    // score by how low + how blocking + how freeing + how central
-    const lowness=mx/v;
-    const edge=(r===0||r===n-1?1:0)+(c===0||c===n-1?1:0);
-    const centrality=1.0+(edge>=2?0:(edge===1?0.5:1.0));
-    let score=lowness*centrality + 3.0*blockedV/v + 2.0*fd;
-    if(boxed) score += lowness*(Math.min(...neigh)/v);
-    let partner=false;
-    for(let rr=0;rr<n&&!partner;rr++) for(let cc=0;cc<n;cc++)
-      if(this.grid[rr][cc]===v && !(rr===r&&cc===c)){ partner=true; break; }
-    if(!partner) score*=1.3;             // no partner anywhere = more stuck
-    return score;
-  }
-  removeStuckLow(){
-    const n=this.size; let best=null;
-    const base=this.freedom();           // hoisted: same for every candidate
-    for(let r=0;r<n;r++) for(let c=0;c<n;c++){
-      const s=this.stuckScore(r,c,base);
-      if(s!==null && (best===null||s>best[0])) best=[s,r,c];
-    }
-    if(best){ this.grid[best[1]][best[2]]=0; return [best[1],best[2]]; }
-    return null;
-  }
-  anyMergeAvailable(){
-    const n=this.size;
-    for(let r=0;r<n;r++) for(let c=0;c<n;c++){
-      const v=this.grid[r][c]; if(v===0) continue;
-      if(c+1<n&&this.grid[r][c+1]===v) return true;
-      if(r+1<n&&this.grid[r+1][c]===v) return true;
-    }
-    return false;
-  }
+  canMove(){ return B.canMove(this.ranks(), this.size); }
 }
 
 // ============================================================
-//  Game / UI controller
+//  Game
 // ============================================================
 class Game{
   constructor(){
-    this.cfg = loadCfg();
-    this.app = document.getElementById("app");
-    this.state = "game";
-    this.capturing = null;
-    this.cheatDirty = false;
-    this.entryCheatOn = false; this.entryProfile = 0; this.profSnapshot=null;
-    this.cheatUsed = false;
-    this.tipNow = null; this.tipCooldown=0;
-    this.prevCornerOk=null; this.prevStuck=null; this.prevMax=0; this.prevEmpties=null;
-    this.moveNo=0; this.tipLast={}; this.dangerShown=false;
-    this.stuckCache=[]; this.lastGeneralTip=null;
-    this.factsEmpties=0; this.factsMax=0; this.factsCorner=false; this.factsMerges=0;
-    this.factsDanger=false; this.factsOrdered=false;
-    this.heldKeys = new Set();
-    this.animating=false;
-    this.audioCtx=null;
-    this.newGame();
-    this.bindGlobalKeys();
+    this.cfg=loadCfg();
+    this.app=document.getElementById("app");
+    this.dot=document.getElementById("cornerdot");
+    this.state="game"; this.capturing=null; this.cheatDirty=false;
+    this.heldKeys=new Set(); this.animating=false; this.audioCtx=null;
+    this.coach=new B.Coach(); this.boardTag=0; this.coachTag=0; this.pending=new Map();
+    this.analysis=null; this.tip=null; this.tipSince=0; this.armedClean=null;
+    this.moveNo=0; this.history=[];
+    if(!this.restoreGame()) this.newGame(false);
+    this.bindGlobal();
     this.render();
+    setInterval(()=>this.tickTip(), 250);
   }
   L(k){ return STRINGS[this.cfg.language][k]; }
   isRTL(){ return this.cfg.language==="he"; }
   profile(){ return this.cfg.profiles[this.cfg.active_profile]; }
-  modeName(){ return this.L("mode_names")[this.cfg.active_profile]; }
-
-  newGame(){
-    this.board = new Board(this.cfg.grid_size);
-    this.board.spawn(); this.board.spawn();   // the initial spawns are NEVER evil
-    // cancel any in-flight move (mirrors Python: animating=False, pending_spawn=None)
-    if(this._finalizeTimer){ clearTimeout(this._finalizeTimer); this._finalizeTimer=null; }
-    this.animating=false;
-    this.history=[]; this.won=false; this.keepGoing=false;
-    this.cheatUsed=false;
-    this.prevCornerOk=null; this.prevStuck=null; this.prevMax=0; this.prevEmpties=null;
-    this.tipNow=null; this.moveNo=0; this.tipLast={}; this.dangerShown=false;
-    this.stuckCache=[]; this.lastGeneralTip=null;
-    this.refreshBoardFacts();
-  }
-
-  // ---------- cheat state ----------
-  activeCheatOn(){ const m=this.profile().map;
-    return Object.values(m).some(v=>typeof v==="string" && v.length>0); }
   keyForAction(a){ return this.profile().map[a] || null; }
+  activeCheatOn(){ return Object.values(this.profile().map).some(v=>typeof v==="string"&&v.length>0); }
 
-  // ---------- highscore ----------
+  // ---------- game flow ----------
+  newGame(render=true){
+    this.finishNow();
+    this.board=new Board(this.cfg.grid_size);
+    const s1=this.board.spawn(), s2=this.board.spawn();
+    this.history=[]; this.won=false; this.keepGoing=false; this.cheatUsed=false;
+    this.armedClean=null; this.moveNo=0; this.fresh=[s1,s2];
+    this.boardChanged("new"); this.saveGame();
+    if(render) this.render();
+  }
+  restoreGame(){
+    const st=load(GAME_KEY);
+    try{
+      const n=st.size, g=st.grid;
+      if(n!==this.cfg.grid_size || g.length!==n || !g.every(r=>r.length===n &&
+         r.every(v=>Number.isInteger(v)&&v>=0&&(v&(v-1))===0))) return false;
+      const b=new Board(n); b.grid=g.map(r=>r.slice()); b.score=st.score|0;
+      if(!b.canMove() || !b.maxTile()) return false;
+      this.board=b; this.history=[]; this.won=!!st.won; this.keepGoing=!!st.keepGoing;
+      this.cheatUsed=!!st.cheat; this.moveNo=st.moves|0; this.armedClean=null; this.fresh=null;
+      this.boardChanged("new");
+      return true;
+    }catch(e){ return false; }
+  }
+  saveGame(){
+    if(!this.board.canMove()){ try{ localStorage.removeItem(GAME_KEY); }catch(e){} return; }
+    store(GAME_KEY,{v:1,size:this.board.size,grid:this.board.grid,score:this.board.score,won:this.won,
+      keepGoing:this.keepGoing,cheat:this.cheatUsed,moves:this.moveNo});
+  }
   updateHighscore(){
-    const cheating = this.cheatUsed || this.activeCheatOn();
+    const cheating=this.cheatUsed||this.activeCheatOn();
     if(cheating && !this.cfg.count_cheats_in_best) return;
-    if(this.board.score>this.cfg.highscore){
-      this.cfg.highscore=this.board.score; saveCfg(this.cfg);
+    if(this.board.score>this.cfg.highscore){ this.cfg.highscore=this.board.score; saveCfg(this.cfg); }
+  }
+  heldParams(){
+    let fv=null, pe=false, smart=false;
+    const held=a=>{ const k=this.keyForAction(a); return !!k && this.heldKeys.has(k); };
+    if(held("force_2")) fv=2; if(held("force_4")) fv=4; if(held("spawn_corner")) pe=true; if(held("smart_spawn")) smart=true;
+    if(IS_TOUCH && this._touchArm){ const t=this._touchArm;
+      if(t.force_2) fv=2; if(t.force_4) fv=4; if(t.spawn_corner) pe=true; if(t.smart_spawn) smart=true; }
+    if(fv!==null||pe||smart) this.cheatUsed=true;
+    return [fv,pe,smart];
+  }
+  rollEvil(){ const p=DIFFICULTY_EVIL_P[this.cfg.difficulty]||0; return p>0 && Math.random()<p; }
+
+  finishNow(){
+    // the next key during a slide settles it at once: no move is ever dropped
+    if(this.animating){ clearTimeout(this._finTimer); this._finTimer=null; this.finalizeMove(); }
+  }
+  handleMove(dir){
+    if(this.state!=="game") return;
+    this.finishNow();
+    if(this.won && !this.keepGoing && !this.cfg.infinite) return;
+    const probe=this.board.clone(), pr=probe.move(dir);
+    if(!pr.changed) return;
+    const prev=this.board.clone(); let cheated=false, ghost=null;
+    const target=this.armedTarget(); this.armedClean=null;
+    if(target){
+      const [r,c]=target, a=pr.anims.find(x=>x.from[0]===r&&x.from[1]===c);
+      ghost={from:[r,c],to:a?a.to:[r,c],value:this.board.grid[r][c],merged:false,ghost:true};
+      this.board.grid[r][c]=0; this.cheatUsed=true; cheated=true;
     }
-  }
-
-  // ---------- sound (WebAudio) ----------
-  ensureAudio(){ if(!this.audioCtx){ try{
-    this.audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
-    // browsers start the context suspended until a user gesture
-    if(this.audioCtx && this.audioCtx.state==="suspended"){
-      this.audioCtx.resume().catch(()=>{}); } }
-  beep(freq, dur=0.08, type="sine", vol=0.15){
-    if(!this.cfg.sound) return; this.ensureAudio(); if(!this.audioCtx) return;
-    const t=this.audioCtx.currentTime;
-    const o=this.audioCtx.createOscillator(), g=this.audioCtx.createGain();
-    o.type=type; o.frequency.value=freq;
-    g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
-    o.connect(g); g.connect(this.audioCtx.destination); o.start(t); o.stop(t+dur);
-  }
-  playMerge(v){ // pitch rises with value
-    const scale=[261.63,293.66,329.63,349.23,392,440,493.88,523.25,587.33,
-      659.25,698.46,783.99,880,987.77,1046.5,1174.66];
-    const idx=Math.min(scale.length-1, Math.max(0, Math.round(Math.log2(v))-2));
-    this.beep(scale[idx],0.12,"triangle",0.18);
-  }
-  playSpawn(){ this.beep(180,0.05,"sine",0.08); }
-  playWin(){ [523,659,784].forEach((f,i)=>setTimeout(()=>this.beep(f,0.18,"triangle",0.2),i*90)); }
-
-  // ---------- movement ----------
-  heldSpawnParams(){
-    let fv=null, pe=false;
-    const k2=this.keyForAction("force_2"); if(k2&&this.heldKeys.has(k2)) fv=2;
-    const k4=this.keyForAction("force_4"); if(k4&&this.heldKeys.has(k4)) fv=4;
-    const ke=this.keyForAction("spawn_corner"); if(ke&&this.heldKeys.has(ke)) pe=true;
-    if(fv!==null||pe) this.cheatUsed=true;
-    return [fv,pe];
-  }
-  rollEvil(){
-    // rolled once per spawn: does the difficulty make THIS spawn evil?
-    const p=DIFFICULTY_EVIL_P[this.cfg.difficulty||"normal"]||0;
-    return p>0 && Math.random()<p;
-  }
-  handleMove(direction){
-    if(this.animating) return;           // input during the slide is dropped
-    if(!this.board.canMove()) return;
-    const prev=this.board.clone();
-    const {changed,anims,merges}=this.board.move(direction);
-    if(!changed) return;
+    const res=this.board.move(dir);
+    if(ghost) res.anims.unshift(ghost);
     this.history.push(prev); if(this.history.length>40) this.history.shift();
-    // capture spawn params NOW - keys may be released during the animation
-    let [fv,pe]=this.heldSpawnParams();
-    if(IS_TOUCH){ const [tfv,tpe]=this.touchHeldParams();
-      if(tfv!==null) fv=tfv; if(tpe) pe=true; this.clearTouchArm(); }
+    let [fv,pe,smart]=this.heldParams(); cheated=cheated||fv!==null||pe||smart;
+    if(IS_TOUCH) this.clearTouchArm();
+    let at=null;
+    if(smart){ const ch=this.smartChoice(fv,pe); at=ch[0]; fv=ch[1]; }
+    const n=this.board.size, moved=new Map();
+    for(const a of res.anims) if(!a.ghost) moved.set(a.from[0]*n+a.from[1],[a.to[0]*n+a.to[1],a.merged]);
+    this.pendingMove={spawn:[fv,pe,at], merges:res.merges, gain:res.gain, dir:DIR_OF[dir], moved, cheated};
     this.animating=true;
-    this.animateSlide(anims);
-    this._finalizeTimer=setTimeout(()=>{ this._finalizeTimer=null;
-      this.finalizeMove(fv,pe,merges); },130);
+    this.animateSlide(res.anims);
+    this._finTimer=setTimeout(()=>{ this._finTimer=null; this.finalizeMove(); },120);
   }
-  animateSlide(anims){
-    // rebuild the tile layer at the FROM positions, force a reflow, then move
-    // every tile to its TO position so the CSS transition (.12s) slides them
-    const board=document.getElementById("board");
-    const tilesEl=document.getElementById("tiles");
-    if(this.state!=="game"||!board||!tilesEl) return;
-    const n=this.board.size, pad=12, gap=12;
-    const inner=board.clientWidth-2*pad;
-    const cell=(inner-gap*(n-1))/n;
-    tilesEl.innerHTML="";
-    const pos=([r,c])=>`translate(${c*(cell+gap)}px,${r*(cell+gap)}px)`;
-    const divs=[];
-    for(const a of anims){
-      const t=document.createElement("div"); t.className="tile";
-      t.style.width=cell+"px"; t.style.height=cell+"px";
-      t.style.transform=pos(a.from);
-      t.style.background=tileColor(a.value); t.style.color=tileText(a.value);
-      t.style.fontSize=tileFont(a.value);
-      t.textContent=a.value;
-      tilesEl.appendChild(t); divs.push([t,a]);
-    }
-    void tilesEl.offsetHeight;           // force reflow so the transition runs
-    for(const [t,a] of divs) t.style.transform=pos(a.to);
+  smartChoice(fv,pe){
+    const n=this.board.size; let cells=this.board.emptyCells();
+    if(pe){ const e=cells.filter(([r,c])=>r===0||r===n-1||c===0||c===n-1); if(e.length) cells=e; }
+    if(!cells.length) return [null,fv];
+    const ranks=fv?[Math.round(Math.log2(fv))]:[1,2];
+    const pick=B.bestSpawn(this.board.ranks(),n,ranks,cells.map(([r,c])=>r*n+c));
+    if(!pick) return [null,fv];
+    return [[Math.floor(pick[0]/n),pick[0]%n],Math.pow(2,pick[1])];
   }
-  finalizeMove(fv,pe,merges){
-    // the board settles here: spawn, sound, win check, tips - then re-render.
-    // the evil roll happens at spawn time, exactly like the Python version
-    const spawned=this.board.spawn(fv,pe,this.rollEvil());
+  finalizeMove(){
+    const pm=this.pendingMove; this.pendingMove=null; this.animating=false;
+    if(!pm) return;
+    const [fv,pe,at]=pm.spawn;
+    const spawned=this.board.spawn(fv,pe,at===null&&this.rollEvil(),at);
     this.updateHighscore();
-    if(merges.length){ let hv=0; for(const m of merges) hv=Math.max(hv,m[2]);
-      this.playMerge(hv); } else this.playSpawn();
-    if(!this.won && this.board.maxTile()>=2048){ this.won=true; this.playWin();
-      if(this.cfg.infinite) this.keepGoing=true; }
+    if(pm.merges.length){ let hv=0; for(const m of pm.merges) hv=Math.max(hv,m[2]); this.playMerge(hv); }
+    else this.playSpawn();
+    if(!this.won && this.board.maxTile()>=2048){ this.won=true; this.playWin(); if(this.cfg.infinite) this.keepGoing=true; }
     this.moveNo++;
-    this.refreshBoardFacts();
-    this.checkTipEvents();
-    this.animating=false;
-    // lightweight update (no full DOM rebuild) unless game-over/win overlay needed
-    if((this.won && !this.keepGoing && !this.cfg.infinite) || !this.board.canMove())
-      this.render();
-    else
-      this.updateGameView(spawned,merges);
+    this.fresh=spawned?[spawned]:null; this.merged=pm.merges;
+    this.boardChanged(["move",pm.dir,pm.moved,pm.cheated]);
+    this.saveGame();
+    if(this.state!=="game") return;
+    if(this.overlayKind()) this.render();
+    else { this.layoutTiles(); this.updateScore(pm.gain); }
   }
-  updateGameView(spawned=null,merges=null){
-    // refresh only the tiles and score numbers - avoids the full-screen flash
-    if(this.state!=="game") return;      // board already mutated; skip DOM work
-    const b=this.board;
-    const sEls=document.querySelectorAll(".scorebox .val");
-    if(sEls.length>=2){
-      sEls[0].textContent=b.score;
-      sEls[1].textContent=Math.max(this.cfg.highscore, b.score);
-    }
-    this.layoutTiles(spawned,merges);
-    this.renderTip();
+
+  // ---------- the brain (runs once the board has settled) ----------
+  boardChanged(how){
+    this.boardTag++; this.pending.set(this.boardTag,how); this.analysis=null;
+    if(how==="new"){ this.tip=null; this.renderTip(); }
+    clearTimeout(this._anaTimer);
+    // after the slide + pop: a burst of fast moves becomes one analysis
+    this._anaTimer=setTimeout(()=>this.runBrain(), how==="new"?60:300);
   }
-  // ---------- tap cheats ----------
+  runBrain(){
+    const tag=this.boardTag, how=this.pending.get(tag); let news=false;
+    for(const [t,h] of this.pending){ if(t<tag && h==="new") news=true; }
+    this.pending.clear();
+    if(how===undefined) return;
+    const a=B.Analysis.ofGrid(this.board.grid);
+    if(how==="new"||news) this.coach.newGame(a);
+    else if(how==="resync"||tag!==this.coachTag+1) this.coach.resync(a);
+    else this.coach.onMove(how[1],how[2],a,how[3]);
+    this.coachTag=tag; this.analysis=a;
+    if(this.coach.current!==this.tip){ this.tip=this.coach.current; this.tipSince=Date.now(); this.renderTip(); }
+  }
+  analysisNow(){
+    const r=this.board.ranks();
+    if(this.analysis && this.analysis.b.every((x,i)=>x===r[i])) return this.analysis;
+    return B.Analysis.ofGrid(this.board.grid);
+  }
+  armedTarget(){
+    if(!this.armedClean) return null;
+    const [tag,cell]=this.armedClean;
+    if(tag===this.boardTag) return cell;
+    const p=this.analysisNow().problem();
+    return p===null?null:[Math.floor(p/this.board.size),p%this.board.size];
+  }
+  tickTip(){
+    if(this.tip && Date.now()-this.tipSince>this.tip.maxSecs*1000){ this.coach.dismiss(); this.tip=null; this.renderTip(); }
+  }
+  tipText(t){
+    const p=t.params, f={}, arrow=d=>`<span class="arrow">${ARROWS[d]}</span>`;
+    if(p.dir!==undefined) f.dir=arrow(p.dir);
+    if(p.bad) f.bad=p.bad.map(arrow).join(" ");
+    if(p.value!==undefined) f.value=String(p.value);
+    if(p.place) f.place=esc(this.L("places")[p.place]||"");
+    return esc(this.L(t.key)).replace(/\{(\w+)\}/g,(m,k)=>f[k]!==undefined?f[k]:m);
+  }
+
+  // ---------- tap assists: no toast ever, only the corner dot ----------
+  signal(ok){
+    const d=this.dot; d.style.background=ok?"#8f7a66":"#d69478"; d.style.opacity="1";
+    clearTimeout(this._dotT); this._dotT=setTimeout(()=>this.showArmedDot(),260);
+  }
+  showArmedDot(){ const d=this.dot; d.style.background="#8f7a66"; d.style.opacity=this.armedClean?".55":"0"; }
   doTapAction(action){
-    if(this.animating) return;
-    let pos=null; const prev=this.board.clone();
+    this.finishNow();
     if(action==="undo"){
-      if(this.history.length){ this.board=this.history.pop(); this.cheatUsed=true;
-        this.resyncTipState();   // never praise/warn for cheat effects
-        this.render(); }
-      else this.toast(this.L("no_undo"));
+      if(this.history.length){
+        this.board=this.history.pop(); this.cheatUsed=true; this.armedClean=null;
+        this.moveNo=Math.max(0,this.moveNo-1); this.fresh=null; this.merged=null;
+        this.boardChanged("resync"); this.saveGame(); this.signal(true); this.render();
+      } else this.signal(false);
       return;
-    } else if(action==="clean_stuck"){ pos=this.board.removeStuckLow(); }
-    if(pos){ this.cheatUsed=true; this.history.push(prev);
-      this.updateHighscore();
-      this.resyncTipState();     // never praise the cheat's cleanup
-      this.render(); }
-    else if(action==="clean_stuck"){
-      // the assist only removes tiles that are GENUINELY stuck - explain
-      this.toast(this.L("no_stuck_now"));
+    }
+    if(action==="clean_stuck"){
+      const p=this.analysisNow().problem();
+      if(p===null){ this.armedClean=null; this.signal(false); return; }
+      const n=this.board.size, cell=[Math.floor(p/n),p%n];
+      if(!this.board.canMove()){            // nothing left to hide it in: rescue now
+        this.history.push(this.board.clone()); this.board.grid[cell[0]][cell[1]]=0;
+        this.cheatUsed=true; this.updateHighscore(); this.fresh=null; this.merged=null;
+        this.boardChanged("resync"); this.saveGame(); this.render();
+      } else this.armedClean=[this.boardTag,cell];
+      this.signal(true);
     }
   }
 
-  // ---------- tips ----------
-  // ------------------------------------------------------------------
-  //  Tip engine (port of the Python v0.15 engine).
-  //  Board facts are computed ONCE per settled move and cached; event tips
-  //  fire on real transitions with per-tip cooldowns measured in MOVES.
-  // ------------------------------------------------------------------
-  static TIP_COOLDOWNS = {
-    tip_full:8, tip_stuck:6, tip_lost_corner:5, tip_good_corner:5,
-    tip_good_clear:6, tip_good_merge:4, tip_good_space:10, tip_corner:10
-  };
-  // thin delegates - the logic lives on Board so cheats/tips/evil spawns
-  // all share one implementation
-  maxInCorner(){ return this.board.maxInCorner(); }
-  countAdjacentPairs(){ return this.board.adjacentPairs(); }
-  refreshBoardFacts(){
-    const b=this.board,n=b.size, cache=[];
-    for(let r=0;r<n;r++) for(let c=0;c<n;c++){
-      const s=b.stuckScore(r,c);
-      if(s!==null) cache.push([r,c,s]);
-    }
-    this.stuckCache=cache;
-    this.factsEmpties=b.emptyCells().length;
-    this.factsMax=b.maxTile();
-    this.factsCorner=this.maxInCorner();
-    this.factsMerges=this.countAdjacentPairs();
-    // danger only simulates when empties <= 3, so it's cheap to cache too
-    this.factsDanger=b.inDanger();
-    this.factsOrdered=b.edgeOrdered();
+  // ---------- sound ----------
+  ensureAudio(){ if(!this.audioCtx){ try{ this.audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} }
+    if(this.audioCtx&&this.audioCtx.state==="suspended") this.audioCtx.resume().catch(()=>{}); }
+  tone(freqs,dur,vol){
+    if(!this.cfg.sound) return; this.ensureAudio(); const ac=this.audioCtx; if(!ac) return;
+    const t=ac.currentTime, g=ac.createGain(); g.connect(ac.destination);
+    g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vol,t+0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    for(const f of freqs){ const o=ac.createOscillator(); o.type="sine"; o.frequency.value=f; o.connect(g); o.start(t); o.stop(t+dur+0.02); }
   }
-  hasStuck(){ return this.stuckCache.length>0; }
-  tipReady(key){
-    const last=this.tipLast[key];
-    const cd=Game.TIP_COOLDOWNS[key]||6;
-    return last===undefined || (this.moveNo-last)>=cd;
-  }
-  fireTip(key,secs=4.0){
-    if(!this.cfg.show_tips) return false;
-    this.tipLast[key]=this.moveNo;
-    this.tipNow={text:this.L(key),until:Date.now()+secs*1000};
-    this.renderTip();
-    return true;
-  }
-  checkTipEvents(){
-    const co=this.factsCorner, st=this.hasStuck();
-    const mx=this.factsMax, em=this.factsEmpties;
-    const total=this.board.size*this.board.size;
-    let fired=false;
-    if(this.cfg.show_tips){
-      // 1) danger: board nearly full AND no move buys real air - once per episode
-      if(this.factsDanger){
-        if(!this.dangerShown && this.tipReady("tip_full")){
-          fired=this.fireTip("tip_full",5.0); this.dangerShown=true;
-        }
-      } else if(em>=5){ this.dangerShown=false; }
-      // 2) a tile just became stuck
-      if(!fired && this.prevStuck===false && st && this.tipReady("tip_stuck"))
-        fired=this.fireTip("tip_stuck",5.0);
-      // 3) highest tile just left the corner
-      if(!fired && this.prevCornerOk===true && !co && mx>=64 && this.tipReady("tip_lost_corner"))
-        fired=this.fireTip("tip_lost_corner",4.5);
-      // 4) praise: highest back in a corner
-      if(!fired && this.prevCornerOk===false && co && mx>=64 && this.tipReady("tip_good_corner"))
-        fired=this.fireTip("tip_good_corner");
-      // 5) praise: stuck resolved by real play (cheats resync, never reach here)
-      if(!fired && this.prevStuck===true && !st && this.tipReady("tip_good_clear"))
-        fired=this.fireTip("tip_good_clear");
-      // 6) praise: new record tile (128+)
-      if(!fired && this.prevMax && mx>this.prevMax && mx>=128 && this.tipReady("tip_good_merge"))
-        fired=this.fireTip("tip_good_merge");
-      // 7) praise: big cleanup, only when the board WAS crowded
-      if(!fired && this.prevEmpties!==null && em-this.prevEmpties>=3
-          && this.prevEmpties<=total*0.4 && this.tipReady("tip_good_space"))
-        fired=this.fireTip("tip_good_space");
-    }
-    this.saveTipState(co,st,mx,em);
-  }
-  saveTipState(co,st,mx,em){ this.prevCornerOk=co; this.prevStuck=st;
-    this.prevMax=mx; this.prevEmpties=em; }
-  resyncTipState(){
-    // refresh facts + snapshot WITHOUT firing - used after cheats so the
-    // game never praises what the cheat just did
-    this.refreshBoardFacts();
-    this.saveTipState(this.factsCorner,this.hasStuck(),this.factsMax,this.factsEmpties);
-  }
-  pickAmbientTip(){
-    const L=k=>this.L(k);
-    const empties=this.factsEmpties, total=this.board.size*this.board.size;
-    const mx=this.factsMax;
-    if(this.hasStuck() && this.tipReady("tip_stuck")){
-      this.tipLast["tip_stuck"]=this.moveNo; return L("tip_stuck");
-    }
-    if(mx>=64 && !this.factsCorner && this.tipReady("tip_corner")){
-      this.tipLast["tip_corner"]=this.moveNo; return L("tip_corner");
-    }
-    // general tips matched to the ACTUAL situation; when nothing clearly
-    // applies, stay silent - silence beats a wrong tip
-    let idx=null;
-    if(empties<=total*0.3) idx=4;        // don't fill the board
-    else if(this.factsCorner && mx>=128 && !this.factsOrdered) idx=1; // keep a full ordered row
-    else if(this.factsCorner && mx>=128 && this.factsOrdered) idx=2;  // build a descending chain
-    else if(this.moveNo<30 && empties>=total*0.5) idx=3; // two fixed directions (early game)
-    if(idx===null) return null;
-    const tip=L("tips_list")[idx];
-    if(tip===this.lastGeneralTip) return null;
-    this.lastGeneralTip=tip;
-    return tip;
-  }
-  tickTips(){
-    // per-interval housekeeping only - all heavy detection is per-move cached
-    if(!this.cfg.show_tips){ if(this.tipNow){this.tipNow=null;this.renderTip();} return; }
-    if(this.tipNow){
-      if(Date.now()>this.tipNow.until){
-        this.tipNow=null; this.tipCooldown=Date.now()+12000; this.renderTip();
-      }
-    } else {
-      if(Date.now()>this.tipCooldown){
-        const t=this.pickAmbientTip();
-        if(t){ this.tipNow={text:t,until:Date.now()+4500}; this.renderTip(); }
-        this.tipCooldown=Date.now()+12000;
-      }
-    }
-  }
-  renderTip(){
-    const el=document.getElementById("tipbanner"); if(!el) return;
-    if(this.tipNow){ el.classList.remove("hidden");
-      el.querySelector(".txt").textContent=this.tipNow.text; }
-    else el.classList.add("hidden");
-  }
+  playMerge(v){ const sc=[261.63,293.66,329.63,349.23,392,440,493.88,523.25,587.33,659.25,698.46,783.99,880,987.77,1046.5,1174.66,1318.51];
+    const b=sc[Math.min(sc.length-1,Math.max(0,Math.round(Math.log2(v))-2))]; this.tone([b,b*1.5],0.12,0.12); }
+  playSpawn(){ this.tone([392],0.06,0.05); }
+  playWin(){ [523,659,784].forEach((f,i)=>setTimeout(()=>this.tone([f],0.22,0.13),i*90)); }
 
-  // ---------- preferences enter/leave (confession/praise) ----------
-  enterPreferences(){
-    this.profSnapshot=JSON.parse(JSON.stringify(this.cfg.profiles));
-    this.entryProfile=this.cfg.active_profile;
-    this.entryCheatOn=this.activeCheatOn();
-    // the refuge's toggles must also roll back on a refused confession
-    this.entryPersist=this.cfg.persist_cheats;
-    this.entryCountBest=this.cfg.count_cheats_in_best;
-    this.cheatDirty=false; this.state="preferences"; this.render();
-  }
-  enforceMode1Clean(){ if(this.cfg.active_profile===0 &&
-    Object.keys(this.cfg.profiles[0].map).length){ this.cfg.profiles[0].map={};
-      this.cheatDirty=true; } }
-  leavePreferences(){
-    this.capturing=null; this.closeDialog();
-    const nowOn=this.activeCheatOn(), wasOn=this.entryCheatOn;
-    const profChanged=this.cfg.active_profile!==this.entryProfile;
-    if(!wasOn && nowOn){ this.showConfession(); }
-    else if(wasOn && !nowOn){ saveCfg(this.cfg); this.cheatDirty=false; this.showPraise(); }
-    else { if(this.cheatDirty||profChanged){ saveCfg(this.cfg); this.cheatDirty=false; }
-      this.state="settings"; this.render(); }
-  }
-  confessYes(){ saveCfg(this.cfg); this.cheatDirty=false; this.closeDialog();
-    this.state="settings"; this.render(); }
-  confessNo(){ this.cfg.profiles=JSON.parse(JSON.stringify(this.profSnapshot));
-    this.cfg.active_profile=this.entryProfile;
-    // ...and the refuge toggles, so nothing sneaks past the refusal
-    this.cfg.persist_cheats=this.entryPersist;
-    this.cfg.count_cheats_in_best=this.entryCountBest;
-    this.cheatDirty=false;
-    this.closeDialog(); this.toast(this.L("confess_rejected")); this.state="settings"; this.render(); }
-  praiseOk(){ this.closeDialog(); this.toast(this.L("praise_toast"));
-    this.state="settings"; this.render(); }
-
-  // ---------- key display ----------
-  keyDisplay(k){
-    if(!k) return this.L("none");
-    if(typeof k==="string" && k.startsWith("zone:")){
-      const z=k.slice(5); return this.L("zone_"+z)||z;
-    }
-    const map={"Shift":"Shift","Control":"Ctrl","Alt":"Alt"," ":"Space"};
-    if(map[k]) return map[k];
-    return k.length===1?k.toUpperCase():k;
-  }
-
-  // ---------- global keyboard ----------
-  bindGlobalKeys(){
-    // unlock audio on the very first user gesture (browser autoplay policy)
-    const unlock=()=>{ this.ensureAudio();
-      if(this.audioCtx && this.audioCtx.state==="suspended") this.audioCtx.resume().catch(()=>{});
-      window.removeEventListener("keydown",unlock);
-      window.removeEventListener("pointerdown",unlock);
-      window.removeEventListener("touchstart",unlock); };
-    window.addEventListener("keydown",unlock);
-    window.addEventListener("pointerdown",unlock);
-    window.addEventListener("touchstart",unlock);
-    document.addEventListener("keydown",(e)=>{
-      // key capture in preferences
-      // key capture only applies while inside the preferences screen
-      if(this.capturing!==null && this.state!=="preferences"){ this.capturing=null; }
-      if(this.capturing!==null){
-        e.preventDefault();
-        let k=e.key;
-        if(k==="Escape"){ this.capturing=null; this.closeDialog(); this.render(); return; }
-        if(k==="Backspace"||k==="Delete"){ delete this.profile().map[this.capturing];
-          this.cheatDirty=true; this.capturing=null; this.closeDialog(); this.render(); return; }
-        if(RESERVED.has(k)){
-          // these keys are needed for gameplay - tell the user instead of silence
-          this.toast(this.L("reserved_key"));
-          return;
-        }
-        // normalize modifier keys
-        if(k==="Shift"||k==="Control"||k==="Alt"){}
-        else if(k.length===1) k=k.toLowerCase();
-        // remove dup
-        for(const a of Object.keys(this.profile().map))
-          if(this.profile().map[a]===k) delete this.profile().map[a];
-        this.profile().map[this.capturing]=k;
-        this.cheatDirty=true; this.capturing=null; this.closeDialog(); this.render(); return;
-      }
-      if(this.state!=="game") return;
-      // track held keys for hold-cheats
-      let hk=e.key;
-      if(hk==="Shift"||hk==="Control"||hk==="Alt"){} else if(hk.length===1) hk=hk.toLowerCase();
-      this.heldKeys.add(hk);
-      // tap cheats
-      for(const a of ACTIONS){ if(!HOLD.has(a)){ const k=this.keyForAction(a);
-        if(k && hk===k){ e.preventDefault(); this.doTapAction(a); return; } } }
-      // game over -> Enter
-      if(!this.board.canMove() && (e.key==="Enter")){ this.newGame(); this.render(); return; }
-      if(this.won && !this.keepGoing && (e.key==="Enter"||e.key===" ")) this.keepGoing=true;
-      if(e.key==="ArrowLeft"||hk==="a") this.handleMove("left");
-      else if(e.key==="ArrowRight"||hk==="d") this.handleMove("right");
-      else if(e.key==="ArrowUp"||hk==="w") this.handleMove("up");
-      else if(e.key==="ArrowDown"||hk==="s") this.handleMove("down");
+  // ---------- input ----------
+  normKey(k){ return (k==="Shift"||k==="Control"||k==="Alt"||k.length!==1)?k:k.toLowerCase(); }
+  bindGlobal(){
+    const unlock=()=>{ this.ensureAudio(); ["keydown","pointerdown","touchstart"].forEach(t=>window.removeEventListener(t,unlock)); };
+    ["keydown","pointerdown","touchstart"].forEach(t=>window.addEventListener(t,unlock));
+    document.addEventListener("keydown",e=>this.onKey(e));
+    document.addEventListener("keyup",e=>{
+      const k=this.normKey(e.key); this.heldKeys.delete(k);
+      if(this.state==="game" && k==="Alt") e.preventDefault();      // no browser menu focus
     });
-    document.addEventListener("keyup",(e)=>{
-      let hk=e.key; if(hk==="Shift"||hk==="Control"||hk==="Alt"){}
-      else if(hk.length===1) hk=hk.toLowerCase();
-      this.heldKeys.delete(hk);
-    });
-    // focus loss eats keyup events - drop all held keys so none stay stale
     window.addEventListener("blur",()=>this.heldKeys.clear());
-    // touch swipe on the board
-    let sx=0,sy=0,active=false;
-    document.addEventListener("touchstart",(e)=>{
-      const b=document.getElementById("board"); if(!b||this.state!=="game")return;
+    window.addEventListener("resize",()=>{ if(this.state==="game") this.layoutTiles(); });
+    let sx=0, sy=0, active=false;
+    document.addEventListener("touchstart",e=>{
+      if(this.state!=="game"||e.touches.length!==1) return;
+      if(e.target.closest("button,a,.bicon")) return;
       const t=e.touches[0]; sx=t.clientX; sy=t.clientY; active=true;
     },{passive:true});
-    document.addEventListener("touchend",(e)=>{
-      if(!active||this.state!=="game")return; active=false;
-      const t=e.changedTouches[0]; const dx=t.clientX-sx, dy=t.clientY-sy;
-      if(Math.abs(dx)<24 && Math.abs(dy)<24) return;
-      if(!this.board.canMove()){ this.newGame(); this.render(); return; }
-      if(Math.abs(dx)>Math.abs(dy)) this.handleMove(dx>0?"right":"left");
-      else this.handleMove(dy>0?"down":"up");
+    document.addEventListener("touchend",e=>{
+      if(!active||this.state!=="game") return; active=false;
+      const t=e.changedTouches[0], dx=t.clientX-sx, dy=t.clientY-sy;
+      if(Math.max(Math.abs(dx),Math.abs(dy))<24) return;
+      if(Math.abs(dx)>Math.abs(dy)) this.handleMove(dx>0?"right":"left"); else this.handleMove(dy>0?"down":"up");
     },{passive:true});
   }
+  onKey(e){
+    if(this.capturing!==null && this.state!=="preferences") this.capturing=null;
+    if(this.capturing!==null){ e.preventDefault(); this.captureKey(e.key); return; }
+    if(document.querySelector(".dim")) return;
+    if(this.state!=="game") return;
+    const k=this.normKey(e.key);
+    this.heldKeys.add(k);
+    if(k==="Alt"||k==="Tab") e.preventDefault();
+    for(const a of ACTIONS){ if(!HOLD.has(a) && this.keyForAction(a)===k){ e.preventDefault(); if(!e.repeat) this.doTapAction(a); return; } }
+    const ov=this.overlayKind();
+    if(e.key==="Enter"){ if(ov==="over"){ this.newGame(); return; } if(ov==="won"){ this.keepGoing=true; this.saveGame(); this.render(); return; } }
+    const dir={ArrowLeft:"left",ArrowRight:"right",ArrowUp:"up",ArrowDown:"down",a:"left",d:"right",w:"up",s:"down"}[e.key.length===1?e.key.toLowerCase():e.key];
+    if(dir){ e.preventDefault(); this.handleMove(dir); }
+  }
 
-  // ---------- toast + dialogs ----------
-  toast(text){
-    const old=document.querySelector(".toast"); if(old) old.remove();
-    const t=document.createElement("div"); t.className="toast"; t.textContent=text;
-    document.body.appendChild(t); setTimeout(()=>t.remove(),3200);
+  // ---------- touch assists (invisible corner zones) ----------
+  bindTouchZones(){
+    document.querySelectorAll("#touchzones .tz").forEach(z=>{
+      const zone=z.dataset.zone; let lastTap=0, x0=0, y0=0, moved=false;
+      z.addEventListener("touchstart",e=>{
+        const t=e.touches[0]; x0=t.clientX; y0=t.clientY; moved=false;
+        const holds=this.cheatsForZone(zone,true);
+        if(holds.length){ this._touchArm=this._touchArm||{}; holds.forEach(a=>this._touchArm[a]=true); }
+      },{passive:true});
+      z.addEventListener("touchmove",e=>{ const t=e.touches[0]; if(Math.abs(t.clientX-x0)>18||Math.abs(t.clientY-y0)>18) moved=true; },{passive:true});
+      z.addEventListener("touchend",()=>{
+        const holds=this.cheatsForZone(zone,true);
+        if(holds.length) setTimeout(()=>{ if(this._touchArm) holds.forEach(a=>this._touchArm[a]=false); },60);
+        if(moved) return;
+        const now=Date.now();
+        if(now-lastTap<320){ this.cheatsForZone(zone,false).forEach(a=>this.doTapAction(a)); lastTap=0; } else lastTap=now;
+      },{passive:true});
+    });
   }
+  cheatsForZone(zone,hold){ return ACTIONS.filter(a=>this.profile().map[a]==="zone:"+zone && HOLD.has(a)===hold); }
+  clearTouchArm(){ if(this._touchArm) this._touchArm={}; }
+
+  // ---------- dialogs ----------
+  toast(text){ document.querySelectorAll(".toast").forEach(t=>t.remove());
+    const t=document.createElement("div"); t.className="toast"; t.textContent=text; document.body.appendChild(t);
+    setTimeout(()=>t.remove(),3200); }
   closeDialog(){ document.querySelectorAll(".dim").forEach(d=>d.remove()); }
-  showConfession(){
-    const L=k=>this.L(k);
+  dialog(html,cls=""){
+    this.closeDialog();
     const dim=document.createElement("div"); dim.className="dim";
-    dim.innerHTML=`<div class="dialog"><h3>${L("confess_title")}</h3>
-      <p>${L("confess_body")}</p><p class="accent">${L("confess_line")}</p>
-      <div class="btns"><button class="btn-btn" id="cfYes">${L("confess_yes")}</button>
-      <button class="btn-accent" id="cfNo">${L("confess_no")}</button></div></div>`;
-    document.body.appendChild(dim);
-    dim.querySelector("#cfYes").onclick=()=>this.confessYes();
-    dim.querySelector("#cfNo").onclick=()=>this.confessNo();
+    dim.innerHTML=`<div class="dialog ${cls}" role="dialog" aria-modal="true">${html}</div>`;
+    document.body.appendChild(dim); return dim;
   }
-  showPraise(){
-    const L=k=>this.L(k);
-    const dim=document.createElement("div"); dim.className="dim";
-    dim.innerHTML=`<div class="dialog green"><div class="green-check">\u2713</div>
-      <h3 style="color:#3caa6e">${L("praise_title")}</h3>
-      <p>${L("praise_body")}</p><p style="font-size:13px;color:#bbada0">${L("praise_body2")}</p>
-      <div class="btns"><button class="btn-green" id="prOk">${L("praise_ok")}</button></div></div>`;
-    document.body.appendChild(dim);
-    dim.querySelector("#prOk").onclick=()=>this.praiseOk();
-  }
-  showConfirm(question, action){
-    const L=k=>this.L(k);
-    const dim=document.createElement("div"); dim.className="dim";
-    dim.innerHTML=`<div class="dialog"><p style="font-size:17px">${question}</p>
-      <div class="btns"><button class="btn-accent" id="cy">${L("yes")}</button>
-      <button class="btn-btn" id="cn">${L("no")}</button></div></div>`;
-    document.body.appendChild(dim);
-    dim.querySelector("#cy").onclick=()=>{ this.closeDialog(); action(); };
-    dim.querySelector("#cn").onclick=()=>this.closeDialog();
-  }
+  showConfirm(q,action){ const L=k=>this.L(k);
+    const d=this.dialog(`<p style="font-size:17px;font-weight:600">${esc(q)}</p><div class="btns">
+      <button class="btn accent" id="cy">${L("yes")}</button><button class="btn" id="cn">${L("no")}</button></div>`);
+    d.querySelector("#cy").onclick=()=>{ this.closeDialog(); action(); }; d.querySelector("#cn").onclick=()=>this.closeDialog(); }
 
   // ============================================================
   //  RENDER
   // ============================================================
   render(){
-    const rtl = this.isRTL();
-    this.app.dir = rtl?"rtl":"ltr";
-    document.body.dir = rtl?"rtl":"ltr";
+    const rtl=this.isRTL();
+    document.documentElement.dir=rtl?"rtl":"ltr"; document.documentElement.lang=this.cfg.language;
     if(this.state==="game") this.renderGame();
     else if(this.state==="settings") this.renderSettings();
-    else if(this.state==="preferences") this.renderPreferences();
+    else this.renderPreferences();
   }
-
+  overlayKind(){
+    if(this.animating) return null;
+    if(this.won && !this.keepGoing && !this.cfg.infinite) return "won";
+    if(!this.board.canMove()) return "over";
+    return null;
+  }
   renderGame(){
-    const L=k=>this.L(k), b=this.board, n=b.size;
-    const shownBest=Math.max(this.cfg.highscore, b.score);
-    const gap=12, boardInner=560-2*12-2*12; // approx; use % based grid instead
-    let html=`<div class="screen">
-      <div class="top">
-        <div class="title">2049</div>
-        <div class="scores">
-          <div class="scorebox"><div class="lbl">${L("score")}</div><div class="val">${b.score}</div></div>
-          <div class="scorebox"><div class="lbl">${L("best")}</div><div class="val">${shownBest}</div></div>
-        </div>
-      </div>
-      <div class="toolbar">
-        <button class="btn" id="toSettings">${L("settings")}</button>
-        <div class="selwrap">
-          <div class="selbox"><div class="arrows"><button id="gridUp">\u25b2</button>
-            <button id="gridDown">\u25bc</button></div><span>${n}\u00d7${n}</span></div>
-          <button class="iconbtn" id="refresh">\u21bb</button>
-        </div>
-      </div>
-      <div id="boardwrap"><div id="board">
-        <div class="grid-bg" id="gridbg" style="grid-template-columns:repeat(${n},1fr);"></div>
-        <div id="tiles"></div>`;
-    // overlay
-    if(this.won && !this.keepGoing && !this.cfg.infinite)
-      html+=`<div class="overlay"><h2>${L("you_win")}</h2><p>${L("keep_going")}</p>
-        <button class="btn" id="ovKeep">${L("keep_going")}</button></div>`;
-    else if(!b.canMove())
-      html+=`<div class="overlay"><h2>${L("game_over")}</h2><p>${L("press_new")}</p>
-        <button class="btn" id="ovNew">${L("new_game")}</button></div>`;
-    html+=`</div></div>
-      <div id="tipbanner" class="tipbanner hidden"><span class="dot"></span><span class="txt"></span></div>
-      <div class="bottombar">
-        <div class="icons"><div class="bicon" id="sndIcon">${this.cfg.sound?"\u{1f50a}":"\u{1f507}"}</div>
-          <div class="bicon" id="modeIcon">${this.cfg.infinite?"\u221e":"\u{1f3af}"}</div></div>
-        <div>${L("tips")}</div>
-      </div>`;
-    // On touch devices, cheats are triggered by INVISIBLE corner zones (no
-    // visible tell). Each cheat can be mapped to a corner in the refuge.
-    if(IS_TOUCH){
-      html+=`<div id="touchzones">
-        <div class="tz" data-zone="tl"></div><div class="tz" data-zone="tr"></div>
-        <div class="tz" data-zone="bl"></div><div class="tz" data-zone="br"></div>
-      </div>`;
-    }
-    html+=`</div>`;
-    this.app.innerHTML=html;
-    // build grid background cells
-    const gb=document.getElementById("gridbg");
-    for(let i=0;i<n*n;i++){ const c=document.createElement("div"); c.className="cell"; gb.appendChild(c); }
-    this.layoutTiles();
-    this.renderTip();
-    // events
-    document.getElementById("toSettings").onclick=()=>{this.state="settings";this.render();};
-    document.getElementById("gridUp").onclick=()=>this.changeGrid(1);
-    document.getElementById("gridDown").onclick=()=>this.changeGrid(-1);
-    document.getElementById("refresh").onclick=()=>{this.newGame();this.render();};
-    document.getElementById("sndIcon").onclick=()=>{this.cfg.sound=!this.cfg.sound;saveCfg(this.cfg);this.render();};
-    document.getElementById("modeIcon").onclick=()=>{this.cfg.infinite=!this.cfg.infinite;saveCfg(this.cfg);if(this.cfg.infinite)this.keepGoing=true;this.render();};
-    const ovNew=document.getElementById("ovNew"); if(ovNew) ovNew.onclick=()=>{this.newGame();this.render();};
-    const ovKeep=document.getElementById("ovKeep"); if(ovKeep) ovKeep.onclick=()=>{this.keepGoing=true;this.render();};
+    const L=k=>this.L(k), b=this.board, n=b.size, ov=this.overlayKind();
+    let h=`<div class="screen game">
+      <div class="top"><div class="brand"><div class="title">2049</div><div class="subtitle">${L("subtitle")}</div></div>
+        <div class="scores"><div class="scorebox" id="scorebox"><div class="lbl">${L("score")}</div><div class="val" id="sval">${b.score}</div></div>
+        <div class="scorebox"><div class="lbl">${L("best")}</div><div class="val" id="bval">${Math.max(this.cfg.highscore,b.score)}</div></div></div></div>
+      <div class="toolbar"><button class="btn" id="toSettings">${L("settings")}</button>
+        <div class="tools"><div class="sizesel"><button id="gridDown" aria-label="-">${ICON.down}</button><span>${n}×${n}</span>
+          <button id="gridUp" aria-label="+">${ICON.up}</button></div>
+          <button class="iconbtn" id="refresh" title="${L("new_game")}" aria-label="${L("new_game")}">${ICON.refresh}</button></div></div>
+      <div class="boardwrap"><div id="board"><div class="grid-bg" id="gridbg" style="grid-template-columns:repeat(${n},1fr)">${'<div class="cell"></div>'.repeat(n*n)}</div><div id="tiles"></div>`;
+    if(ov==="won") h+=`<div class="overlay"><h2>${L("you_win")}</h2><div class="btns"><button class="btn accent" id="ovKeep">${L("keep_playing")}</button><button class="btn" id="ovNew">${L("new_game")}</button></div></div>`;
+    else if(ov==="over") h+=`<div class="overlay"><h2>${L("game_over")}</h2><div class="btns"><button class="btn accent" id="ovNew">${L("new_game")}</button></div>${IS_TOUCH?"":`<div class="hint">${L("press_new")}</div>`}</div>`;
+    h+=`</div></div><div class="tiparea" id="tiparea"></div>
+      <div class="bottombar"><div class="icons">
+        <button class="bicon ${this.cfg.sound?"":"off"}" id="sndIcon" title="${this.cfg.sound?L("sound_on"):L("sound_off")}" aria-label="${L("sound")}">${this.cfg.sound?ICON.soundOn:ICON.soundOff}</button>
+        <button class="bicon" id="modeIcon" title="${this.cfg.infinite?L("mode_inf"):L("mode_tgt")}" aria-label="${L("win_mode")}">${this.cfg.infinite?ICON.inf:ICON.target}</button></div>
+        <div>${IS_TOUCH?L("hint_touch"):L("hint_keys")}</div></div>`;
+    if(IS_TOUCH) h+=`<div id="touchzones"><div class="tz" data-zone="tl"></div><div class="tz" data-zone="tr"></div><div class="tz" data-zone="bl"></div><div class="tz" data-zone="br"></div></div>`;
+    h+=`</div>`;
+    this.app.innerHTML=h;
+    const $=id=>document.getElementById(id);
+    $("toSettings").onclick=()=>{ this.state="settings"; this.render(); };
+    $("gridUp").onclick=()=>this.changeGrid(1); $("gridDown").onclick=()=>this.changeGrid(-1);
+    $("refresh").onclick=()=>this.newGame();
+    $("sndIcon").onclick=()=>{ this.cfg.sound=!this.cfg.sound; saveCfg(this.cfg); this.render(); };
+    $("modeIcon").onclick=()=>{ this.cfg.infinite=!this.cfg.infinite; saveCfg(this.cfg); if(this.cfg.infinite) this.keepGoing=true; this.render(); };
+    if($("ovNew")) $("ovNew").onclick=()=>this.newGame();
+    if($("ovKeep")) $("ovKeep").onclick=()=>{ this.keepGoing=true; this.saveGame(); this.render(); };
     if(IS_TOUCH) this.bindTouchZones();
+    this.layoutTiles(); this.renderTip(); this.showArmedDot();
   }
-  bindTouchZones(){
-    // Corner zones are transparent overlays. A cheat mapped to a corner is
-    // triggered by a STATIONARY gesture there: HOLD cheats stay armed while a
-    // finger rests in the corner (even as a second finger swipes); TAP cheats
-    // fire on a quick double-tap in place. A finger that DRAGS out of the
-    // corner is a swipe - it never counts as a tap, and the board still moves.
-    document.querySelectorAll("#touchzones .tz").forEach(z=>{
-      const zone=z.dataset.zone;
-      let lastTap=0, startX=0, startY=0, moved=false;
-      z.addEventListener("touchstart",(e)=>{
-        const t=e.touches[0]; startX=t.clientX; startY=t.clientY; moved=false;
-        const holds=this.cheatsForZone(zone,true);
-        if(holds.length){                 // arm hold cheats while pressed
-          this._touchArm=this._touchArm||{};
-          holds.forEach(a=>this._touchArm[a]=true);
-        }
-      },{passive:true});
-      z.addEventListener("touchmove",(e)=>{
-        const t=e.touches[0];
-        if(Math.abs(t.clientX-startX)>18 || Math.abs(t.clientY-startY)>18)
-          moved=true;                      // this is a swipe, not a tap
-      },{passive:true});
-      z.addEventListener("touchend",(e)=>{
-        const holds=this.cheatsForZone(zone,true);
-        if(holds.length){                  // release hold arm just after the
-          // swipe consumes it (the board's touchend runs and reads the arm)
-          setTimeout(()=>{ if(this._touchArm){ holds.forEach(a=>this._touchArm[a]=false); } },60);
-        }
-        if(moved) return;                  // dragged out -> a swipe, not a tap
-        const now=Date.now();
-        if(now-lastTap<320){
-          const taps=this.cheatsForZone(zone,false);
-          taps.forEach(a=>this.doTapAction(a));
-          lastTap=0;
-        } else lastTap=now;
-      },{passive:true});
-    });
+  geometry(){
+    const board=document.getElementById("board"); if(!board) return null;
+    const n=this.board.size, w=board.clientWidth, gap=Math.max(6,Math.round(w*(n===4?.028:n===5?.022:.018)));
+    board.style.setProperty("--gap",gap+"px");
+    const inner=w-2*gap, cell=(inner-gap*(n-1))/n;
+    return {cell,gap,step:cell+gap};
   }
-  cheatsForZone(zone,holdType){
-    // map each action to a zone string stored in the profile map (mobile mode)
-    const out=[];
-    for(const a of ACTIONS){
-      const v=this.profile().map[a];
-      if(v===("zone:"+zone)){ if(HOLD.has(a)===holdType) out.push(a); }
-    }
-    return out;
+  tileEl(v,r,c,g,cls){
+    const t=document.createElement("div"); t.className="tile"+(cls?" "+cls:"");
+    t.style.width=t.style.height=g.cell+"px";
+    t.style.transform=`translate(${c*g.step}px,${r*g.step}px)`;
+    const i=document.createElement("div"); i.className="in"; i.textContent=v;
+    i.style.background=tileColor(v); i.style.color=tileText(v); i.style.fontSize=tileFont(v,g.cell);
+    i.style.boxShadow=tileShadow(v); t.appendChild(i); return t;
   }
-  // touch hold-cheats: read arms directly when spawning
-  touchHeldParams(){
-    let fv=null, pe=false;
-    if(this._touchArm){
-      if(this._touchArm.force_2) fv=2;
-      if(this._touchArm.force_4) fv=4;
-      if(this._touchArm.spawn_corner) pe=true;
-    }
-    if(fv!==null||pe) this.cheatUsed=true;
-    return [fv,pe];
+  layoutTiles(){
+    if(this.state!=="game") return;
+    const tiles=document.getElementById("tiles"), g=this.geometry(); if(!tiles||!g) return;
+    tiles.innerHTML=""; const n=this.board.size;
+    const isFresh=(r,c)=>this.fresh&&this.fresh.some(s=>s&&s[0]===r&&s[1]===c);
+    const isMerged=(r,c)=>this.merged&&this.merged.some(m=>m[0]===r&&m[1]===c);
+    for(let r=0;r<n;r++) for(let c=0;c<n;c++){ const v=this.board.grid[r][c]; if(!v) continue;
+      tiles.appendChild(this.tileEl(v,r,c,g,isFresh(r,c)?"new":isMerged(r,c)?"merged":"")); }
+    this.fresh=null; this.merged=null;
   }
-  clearTouchArm(){ if(this._touchArm){ this._touchArm={}; } }
-
-  layoutTiles(spawned=null,merges=null){
-    if(this.state!=="game") return;      // never touch a screen we're not on
-    const n=this.board.size;
-    const board=document.getElementById("board");
-    const tilesEl=document.getElementById("tiles");
-    if(!board||!tilesEl) return;
-    const pad=12, gap=12;
-    const inner=board.clientWidth-2*pad;
-    const cell=(inner-gap*(n-1))/n;
-    const gb=document.getElementById("gridbg");
-    gb.style.gap=gap+"px";
-    gb.querySelectorAll(".cell").forEach(c=>{ c.style.height=cell+"px"; });
-    // square board: height = padding + cells + gaps
-    board.style.height=(2*pad + n*cell + (n-1)*gap)+"px";
-    tilesEl.innerHTML="";
-    for(let r=0;r<n;r++) for(let c=0;c<n;c++){
-      const v=this.board.grid[r][c]; if(v===0) continue;
-      const t=document.createElement("div"); t.className="tile";
-      t.style.width=cell+"px"; t.style.height=cell+"px";
-      t.style.transform=`translate(${c*(cell+gap)}px,${r*(cell+gap)}px)`;
-      t.style.background=tileColor(v); t.style.color=tileText(v);
-      t.style.fontSize=tileFont(v);
-      t.textContent=v;
-      if(spawned && spawned[0]===r && spawned[1]===c) t.classList.add("pop");
-      else if(merges && merges.some(m=>m[0]===r&&m[1]===c)) t.classList.add("merged");
-      tilesEl.appendChild(t);
+  animateSlide(anims){
+    if(this.state!=="game") return;
+    const tiles=document.getElementById("tiles"), g=this.geometry(); if(!tiles||!g) return;
+    tiles.innerHTML=""; const els=[];
+    for(const a of anims){ const t=this.tileEl(a.value,a.from[0],a.from[1],g,a.ghost?"ghost":""); tiles.appendChild(t); els.push([t,a]); }
+    void tiles.offsetHeight;                 // start the CSS transitions
+    for(const [t,a] of els){
+      t.style.transform=`translate(${a.to[1]*g.step}px,${a.to[0]*g.step}px)`;
+      if(a.ghost){ t.style.opacity="0"; t.firstChild.style.scale=".5"; }
     }
   }
-
-  changeGrid(delta){
-    const sizes=[4,5,6]; let i=sizes.indexOf(this.cfg.grid_size);
-    i=(i+delta+sizes.length)%sizes.length; this.cfg.grid_size=sizes[i];
-    saveCfg(this.cfg); this.newGame(); this.render();
+  updateScore(gain){
+    const s=document.getElementById("sval"), bv=document.getElementById("bval"), box=document.getElementById("scorebox");
+    if(s) s.textContent=this.board.score;
+    if(bv) bv.textContent=Math.max(this.cfg.highscore,this.board.score);
+    if(box && gain>0){ box.querySelectorAll(".plus").forEach(p=>p.remove());
+      const p=document.createElement("div"); p.className="plus"; p.textContent="+"+gain; box.appendChild(p);
+      setTimeout(()=>p.remove(),700); }
   }
-
-  optRow(label, opts, cur, cb){
-    let h=`<div class="scard"><span class="lbl">${label}</span><div class="opts">`;
-    opts.forEach((o,i)=>{ h+=`<button class="opt ${o.val===cur?'sel':''}" data-i="${i}">${o.txt}</button>`; });
-    h+=`</div></div>`;
-    return {h,cb,opts};
+  renderTip(){
+    const el=document.getElementById("tiparea"); if(!el) return;
+    const t=this.tip;
+    if(!t || !this.cfg.show_tips || this.overlayKind()){ el.innerHTML=""; return; }
+    el.innerHTML=`<div class="tip ${t.kind}"><span class="dot"></span><span>${this.tipText(t)}</span></div>`;
   }
+  changeGrid(delta){ const s=[4,5,6]; let i=s.indexOf(this.cfg.grid_size); i=(i+delta+s.length)%s.length;
+    this.cfg.grid_size=s[i]; saveCfg(this.cfg); this.newGame(); }
 
+  // ---------- settings ----------
+  seg(label,opts,cur,cb){ return {label,opts,cur,cb}; }
   renderSettings(){
     const L=k=>this.L(k);
     const rows=[
-      this.optRow(L("grid_size"),[{val:4,txt:"4\u00d74"},{val:5,txt:"5\u00d75"},{val:6,txt:"6\u00d76"}],this.cfg.grid_size,v=>{this.cfg.grid_size=v;saveCfg(this.cfg);this.newGame();}),
-      // applies immediately - the next spawn already rolls the new odds
-      this.optRow(L("difficulty"),[{val:"normal",txt:L("diff_normal")},{val:"hard",txt:L("diff_hard")},{val:"evil",txt:L("diff_evil")}],this.cfg.difficulty||"normal",v=>{this.cfg.difficulty=v;saveCfg(this.cfg);}),
-      this.optRow(L("language"),[{val:"he",txt:L("hebrew")},{val:"en",txt:L("english")}],this.cfg.language,v=>{this.cfg.language=v;saveCfg(this.cfg);}),
-      this.optRow(L("sound"),[{val:true,txt:L("on")},{val:false,txt:L("off")}],this.cfg.sound,v=>{this.cfg.sound=v;saveCfg(this.cfg);}),
-      this.optRow(L("win_mode"),[{val:true,txt:L("infinite")},{val:false,txt:L("target")}],this.cfg.infinite,v=>{this.cfg.infinite=v;saveCfg(this.cfg);}),
-      this.optRow(L("show_tips"),[{val:true,txt:L("on")},{val:false,txt:L("off")}],this.cfg.show_tips,v=>{this.cfg.show_tips=v;saveCfg(this.cfg);}),
+      this.seg(L("grid_size"),[[4,"4×4"],[5,"5×5"],[6,"6×6"]],this.cfg.grid_size,v=>{ this.cfg.grid_size=v; saveCfg(this.cfg); this.newGame(false); }),
+      this.seg(L("difficulty"),[["normal",L("diff_normal")],["hard",L("diff_hard")],["evil",L("diff_evil")]],this.cfg.difficulty,v=>{ this.cfg.difficulty=v; saveCfg(this.cfg); }),
+      this.seg(L("language"),[["he","עברית"],["en","English"]],this.cfg.language,v=>{ this.cfg.language=v; saveCfg(this.cfg); }),
+      this.seg(L("sound"),[[true,L("on")],[false,L("off")]],this.cfg.sound,v=>{ this.cfg.sound=v; saveCfg(this.cfg); }),
+      this.seg(L("win_mode"),[[true,L("infinite")],[false,L("target")]],this.cfg.infinite,v=>{ this.cfg.infinite=v; saveCfg(this.cfg); if(v) this.keepGoing=true; }),
+      this.seg(L("show_tips"),[[true,L("on")],[false,L("off")]],this.cfg.show_tips,v=>{ this.cfg.show_tips=v; saveCfg(this.cfg); })
     ];
-    let html=`<div class="screen">
-      <div class="schead"><button class="btn" id="back">${L("back")}</button>
-        <div class="h">${L("settings")}</div></div>`;
-    rows.forEach((r,i)=>{ html+=r.h.replace('class="scard"',`class="scard" data-row="${i}"`); });
-    html+=`<div class="resetrow">
-        <button id="rSettings">${L("reset_settings")}</button>
-        <button id="rScore">${L("reset_score")}</button></div>
-      <button class="prefbtn" id="toPrefs">${L("preferences")}</button>
-      <div class="prefhint">${L("prefs_hint")}</div>
-      <div class="aboutcard">
-        <a class="ghbtn" href="https://github.com/BeniaBot/2049" target="_blank">${L("visit_github")}</a>
-        <div class="byline">${L("opened_by")}<img src="avatar.png" alt="">
-          <a href="https://github.com/BeniaBot" target="_blank">BeniaBot</a></div>
-      </div>
-      <div class="ver">v${APP_VERSION}</div>
-    </div>`;
-    this.app.innerHTML=html;
-    document.getElementById("back").onclick=()=>{this.state="game";this.render();};
+    let h=`<div class="screen"><div class="schead"><h1>${L("settings")}</h1><button class="btn" id="back">${L("back")}</button></div>`;
+    rows.forEach((r,i)=>{ h+=`<div class="scard"><span class="lbl">${r.label}</span><div class="seg">${r.opts.map((o,j)=>
+      `<button class="${o[0]===r.cur?"on":""}" data-r="${i}" data-o="${j}"><span class="${/^[0-9]/.test(o[1])?"ltr":""}">${o[1]}</span></button>`).join("")}</div></div>`; });
+    h+=`<div class="resetrow"><button id="rSettings">${L("reset_settings")}</button><button id="rScore">${L("reset_score")}</button></div>
+      <button class="btn prefbtn" id="toPrefs">${L("preferences")}</button><div class="prefhint">${L("prefs_hint")}</div>
+      <div class="aboutcard"><a class="btn ghbtn" href="https://github.com/BeniaBot/2049" target="_blank" rel="noopener">${L("visit_github")}</a>
+        <div class="byline">${L("opened_by")} <img src="avatar.png" alt=""><a href="https://github.com/BeniaBot" target="_blank" rel="noopener">BeniaBot</a></div></div>
+      <div class="ver">v${APP_VERSION}</div></div>`;
+    this.app.innerHTML=h;
+    document.getElementById("back").onclick=()=>{ this.state="game"; this.render(); };
     document.getElementById("toPrefs").onclick=()=>this.enterPreferences();
     document.getElementById("rSettings").onclick=()=>this.showConfirm(L("reset_settings_q"),()=>{
-      const hs=this.cfg.highscore; this.cfg=defaultCfg(); this.cfg.highscore=hs; saveCfg(this.cfg);
-      this.newGame(); this.toast(L("done_reset")); this.render(); });
+      const hs=this.cfg.highscore; this.cfg=defaultCfg(); this.cfg.highscore=hs; saveCfg(this.cfg); this.newGame(false); this.toast(this.L("done_reset")); this.render(); });
     document.getElementById("rScore").onclick=()=>this.showConfirm(L("reset_score_q"),()=>{
-      this.cfg.highscore=0; saveCfg(this.cfg); this.toast(L("done_reset")); this.render(); });
-    rows.forEach((r,i)=>{
-      this.app.querySelectorAll(`[data-row="${i}"] .opt`).forEach(btn=>{
-        btn.onclick=()=>{ r.cb(r.opts[+btn.dataset.i].val); this.render(); };
-      });
-    });
+      this.cfg.highscore=0; saveCfg(this.cfg); this.toast(this.L("done_reset")); this.render(); });
+    this.app.querySelectorAll(".seg button").forEach(btn=>{ btn.onclick=()=>{ const r=rows[+btn.dataset.r]; r.cb(r.opts[+btn.dataset.o][0]); this.render(); }; });
   }
 
-  renderPreferences(){
-    const L=k=>this.L(k);
-    let html=`<div class="screen">
-      <div class="schead"><button class="btn" id="pBack">${L("back")}</button>
-        <div class="h">${L("prefs_title")}</div></div>
-      <div class="subtitle">${L("prefs_sub")}</div>
-      <div class="modesel"><button id="pPrev">\u2039</button>
-        <div class="name">${this.modeName()}</div><button id="pNext">\u203a</button></div>
-      <div class="checkrow"><span>${L("persist_cheats")}</span>
-        <div class="checkbox ${this.cfg.persist_cheats?'on':''}" id="cbPersist">${this.cfg.persist_cheats?"\u2713":""}</div></div>
-      <div class="checkrow"><span>${L("count_best")}</span>
-        <div class="checkbox ${this.cfg.count_cheats_in_best?'on':''}" id="cbCount">${this.cfg.count_cheats_in_best?"\u2713":""}</div></div>
-      <div style="font-weight:700;margin:10px 4px 8px">${L("assist_keys")}</div>`;
-    for(const a of ACTIONS){
-      const tag=HOLD.has(a)?L("hold"):L("tap");
-      const tagcol=HOLD.has(a)?"var(--accent)":"#6e9b6e";
-      const k=this.keyForAction(a);
-      const listening=this.capturing===a;
-      const disp=listening?L("press_key"):(k?this.keyDisplay(k):L("none"));
-      html+=`<div class="cheatrow">
-        <div class="info"><div class="t">${L("actions")[a]}
-          <span class="tag" style="color:${tagcol}">${tag}</span></div>
-          <div class="d">${L("action_detail")[a]}</div></div>
-        <div class="keybox ${listening?'listening':''} ${k?'':'empty'}" data-act="${a}">${disp}</div>
-      </div>`;
-    }
-    html+=`<div class="clicknote">${L("click_to_set")}</div></div>`;
-    this.app.innerHTML=html;
-    document.getElementById("pBack").onclick=()=>this.leavePreferences();
-    document.getElementById("pPrev").onclick=()=>{this.cfg.active_profile=(this.cfg.active_profile-1+this.cfg.profiles.length)%this.cfg.profiles.length;this.enforceMode1Clean();this.render();};
-    document.getElementById("pNext").onclick=()=>{this.cfg.active_profile=(this.cfg.active_profile+1)%this.cfg.profiles.length;this.enforceMode1Clean();this.render();};
-    document.getElementById("cbPersist").onclick=()=>{this.cfg.persist_cheats=!this.cfg.persist_cheats;this.cheatDirty=true;this.render();};
-    document.getElementById("cbCount").onclick=()=>{this.cfg.count_cheats_in_best=!this.cfg.count_cheats_in_best;this.cheatDirty=true;this.render();};
-    this.app.querySelectorAll(".keybox[data-act]").forEach(box=>{
-      box.onclick=(ev)=>{ ev.stopPropagation();
-        this.capturing=box.dataset.act; this.render();
-        // on touch devices also offer an on-screen key picker (no keyboard)
-        if(IS_TOUCH) this.showKeyPicker(box.dataset.act);
-      };
-    });
+  // ---------- the refuge (assist configuration) ----------
+  enterPreferences(){
+    this.profSnapshot=JSON.parse(JSON.stringify(this.cfg.profiles)); this.entryProfile=this.cfg.active_profile;
+    this.entryCheatOn=this.activeCheatOn(); this.entryPersist=this.cfg.persist_cheats; this.entryCount=this.cfg.count_cheats_in_best;
+    this.cheatDirty=false; this.state="preferences"; this.render();
   }
-  // On touch: assign the cheat to a hidden CORNER ZONE (no keyboard).
-  showKeyPicker(action){
-    const L=k=>this.L(k);
-    const zones=[["tl",L("zone_tl")],["tr",L("zone_tr")],
-                 ["bl",L("zone_bl")],["br",L("zone_br")]];
-    const isHold=HOLD.has(action);
-    const hint=isHold?L("zone_hold_hint"):L("zone_tap_hint");
-    const dim=document.createElement("div"); dim.className="dim";
-    let btns=zones.map(([z,nm])=>`<button class="pick" data-z="${z}">${nm}</button>`).join("");
-    dim.innerHTML=`<div class="dialog"><h3>${L("choose_zone")}</h3>
-      <p style="font-size:13px;color:#8f7a66">${hint}</p>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0">
-      ${btns}</div>
-      <div class="btns"><button class="btn-btn" id="pkClear">${L("none")}</button>
-      <button class="btn-accent" id="pkCancel">${L("back")}</button></div></div>`;
-    document.body.appendChild(dim);
-    const assign=(z)=>{
-      if(z===null){ delete this.profile().map[action]; }
-      else{ const val="zone:"+z;
-        // multiple cheats CAN share a zone only if different type (hold/tap);
-        // remove same-type conflicts on that zone
-        for(const a of ACTIONS){ if(a!==action && this.profile().map[a]===val
-            && HOLD.has(a)===isHold) delete this.profile().map[a]; }
-        this.profile().map[action]=val; }
-      this.cheatDirty=true; this.capturing=null; this.closeDialog(); this.render();
+  enforceMode1Clean(){ if(this.cfg.active_profile===0 && Object.keys(this.cfg.profiles[0].map).length){ this.cfg.profiles[0].map={}; this.cheatDirty=true; } }
+  leavePreferences(){
+    this.capturing=null; this.closeDialog();
+    const nowOn=this.activeCheatOn(), wasOn=this.entryCheatOn, changed=this.cfg.active_profile!==this.entryProfile;
+    if(!wasOn && nowOn) this.showConfession();
+    else if(wasOn && !nowOn){ saveCfg(this.cfg); this.cheatDirty=false; this.showPraise(); }
+    else { if(this.cheatDirty||changed){ saveCfg(this.cfg); this.cheatDirty=false; } this.state="settings"; this.render(); }
+  }
+  showConfession(){ const L=k=>this.L(k);
+    const d=this.dialog(`<h3>${L("confess_title")}</h3><p>${L("confess_body")}</p><p class="accent">${esc(L("confess_line"))}</p>
+      <div class="btns"><button class="btn" id="cfYes">${L("confess_yes")}</button><button class="btn accent" id="cfNo">${L("confess_no")}</button></div>`);
+    d.querySelector("#cfYes").onclick=()=>{ saveCfg(this.cfg); this.cheatDirty=false; this.closeDialog(); this.state="settings"; this.render(); };
+    d.querySelector("#cfNo").onclick=()=>{ this.cfg.profiles=JSON.parse(JSON.stringify(this.profSnapshot)); this.cfg.active_profile=this.entryProfile;
+      this.cfg.persist_cheats=this.entryPersist; this.cfg.count_cheats_in_best=this.entryCount; this.cheatDirty=false;
+      this.closeDialog(); this.toast(this.L("confess_rejected")); this.state="settings"; this.render(); }; }
+  showPraise(){ const L=k=>this.L(k);
+    const d=this.dialog(`<div class="check">✓</div><h3 style="color:var(--green)">${L("praise_title")}</h3><p>${L("praise_body")}</p>
+      <p style="font-size:13px;color:var(--muted)">${L("praise_body2")}</p><div class="btns"><button class="btn green" id="prOk">${L("praise_ok")}</button></div>`,"green");
+    d.querySelector("#prOk").onclick=()=>{ this.closeDialog(); this.toast(this.L("praise_toast")); this.state="settings"; this.render(); }; }
+  keyDisplay(k){
+    if(!k) return this.L("none");
+    if(k.startsWith("zone:")) return this.L("zone_"+k.slice(5))||k;
+    return {Shift:"Shift",Control:"Ctrl",Alt:"Alt"," ":"Space",Tab:"Tab"}[k]||(k.length===1?k.toUpperCase():k);
+  }
+  renderPreferences(){
+    const L=k=>this.L(k), rtl=this.isRTL();
+    let h=`<div class="screen"><div class="schead"><h1>${L("prefs_title")}</h1><button class="btn" id="pBack">${L("back")}</button></div>
+      <div class="refsub">${L("prefs_sub")}</div>
+      <div class="modesel"><span class="lbl">${L("game_mode")}</span><button id="pPrev" aria-label="prev">${rtl?ICON.next:ICON.prev}</button>
+        <div class="name">${L("mode_names")[this.cfg.active_profile]||("Mode "+(this.cfg.active_profile+1))}</div>
+        <button id="pNext" aria-label="next">${rtl?ICON.prev:ICON.next}</button></div>
+      <div class="checkrow"><span>${L("persist_cheats")}</span><button class="switch ${this.cfg.persist_cheats?"on":""}" id="cbPersist" role="switch" aria-checked="${this.cfg.persist_cheats}"></button></div>
+      <div class="checkrow"><span>${L("count_best")}</span><button class="switch ${this.cfg.count_cheats_in_best?"on":""}" id="cbCount" role="switch" aria-checked="${this.cfg.count_cheats_in_best}"></button></div>
+      <div class="sect">${L("assist_keys")}</div>`;
+    for(const a of ACTIONS){
+      const k=this.keyForAction(a), listening=this.capturing===a;
+      h+=`<div class="cheatrow"><div class="info"><div class="t">${L("actions")[a]}<span class="tag ${HOLD.has(a)?"":"tap"}">${HOLD.has(a)?L("hold"):L("tap")}</span></div>
+        <div class="d">${L("action_detail")[a]}</div></div>
+        <button class="keybox ${listening?"listening":""} ${k?"":"empty"}" data-act="${a}">${listening?L("press_key"):esc(this.keyDisplay(k))}</button></div>`;
+    }
+    h+=`<div class="clicknote">${IS_TOUCH?L("click_to_set_touch"):L("click_to_set")}</div></div>`;
+    this.app.innerHTML=h;
+    const $=id=>document.getElementById(id), n=this.cfg.profiles.length;
+    $("pBack").onclick=()=>this.leavePreferences();
+    $("pPrev").onclick=()=>{ this.cfg.active_profile=(this.cfg.active_profile-1+n)%n; this.enforceMode1Clean(); this.render(); };
+    $("pNext").onclick=()=>{ this.cfg.active_profile=(this.cfg.active_profile+1)%n; this.enforceMode1Clean(); this.render(); };
+    $("cbPersist").onclick=()=>{ this.cfg.persist_cheats=!this.cfg.persist_cheats; this.cheatDirty=true; this.render(); };
+    $("cbCount").onclick=()=>{ this.cfg.count_cheats_in_best=!this.cfg.count_cheats_in_best; this.cheatDirty=true; this.render(); };
+    this.app.querySelectorAll(".keybox[data-act]").forEach(box=>{ box.onclick=ev=>{ ev.stopPropagation();
+      if(IS_TOUCH){ this.showZonePicker(box.dataset.act); return; }
+      this.capturing=box.dataset.act; this.render(); }; });
+  }
+  captureKey(raw){
+    const a=this.capturing;
+    if(raw==="Escape"){ this.capturing=null; this.render(); return; }
+    if(raw==="Backspace"||raw==="Delete"){ delete this.profile().map[a]; this.cheatDirty=true; this.capturing=null; this.render(); return; }
+    if(RESERVED.has(raw)||RESERVED.has(raw.toLowerCase?raw.toLowerCase():raw)){ this.toast(this.L("reserved_key")); return; }
+    const k=this.normKey(raw);
+    for(const x of Object.keys(this.profile().map)) if(this.profile().map[x]===k) delete this.profile().map[x];
+    this.profile().map[a]=k; this.cheatDirty=true; this.capturing=null; this.render();
+  }
+  showZonePicker(action){
+    const L=k=>this.L(k), hold=HOLD.has(action);
+    const d=this.dialog(`<h3>${L("choose_zone")}</h3><p style="font-size:13px;color:var(--muted)">${hold?L("zone_hold_hint"):L("zone_tap_hint")}</p>
+      <div class="picks">${["tl","tr","bl","br"].map(z=>`<button class="pick" data-z="${z}">${L("zone_"+z)}</button>`).join("")}</div>
+      <div class="btns"><button class="btn" id="pkClear">${L("none")}</button><button class="btn accent" id="pkCancel">${L("back")}</button></div>`);
+    const assign=z=>{
+      if(z===null) delete this.profile().map[action];
+      else { const v="zone:"+z; for(const a of ACTIONS) if(a!==action && this.profile().map[a]===v && HOLD.has(a)===hold) delete this.profile().map[a];
+        this.profile().map[action]=v; }
+      this.cheatDirty=true; this.closeDialog(); this.render();
     };
-    dim.querySelectorAll(".pick").forEach(b=>b.onclick=()=>assign(b.dataset.z));
-    dim.querySelector("#pkClear").onclick=()=>assign(null);
-    dim.querySelector("#pkCancel").onclick=()=>{ this.capturing=null; this.closeDialog(); this.render(); };
-    // clicking the dark backdrop also cancels (defensive - never leave a stuck overlay)
-    dim.addEventListener("click",(ev)=>{ if(ev.target===dim){
-      this.capturing=null; this.closeDialog(); this.render(); } });
+    d.querySelectorAll(".pick").forEach(b=>b.onclick=()=>assign(b.dataset.z));
+    d.querySelector("#pkClear").onclick=()=>assign(null);
+    d.querySelector("#pkCancel").onclick=()=>this.closeDialog();
+    d.addEventListener("click",ev=>{ if(ev.target===d) this.closeDialog(); });
   }
 }
 
-const APP_VERSION="0.17.0";
-window.addEventListener("load",()=>{
-  const game=new Game();
-  window._game=game;
-  // relayout tiles on resize
-  window.addEventListener("resize",()=>{ if(game.state==="game") game.layoutTiles(); });
-  // tip ticker
-  setInterval(()=>{ if(game.state==="game") game.tickTips(); }, 500);
-});
-
+window.addEventListener("load",()=>{ window._game=new Game(); });
 </script>
 </body>
 </html>
