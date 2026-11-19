@@ -955,12 +955,17 @@ class AccessibilityHotkeys:
 
 
 class Analyst:
-    """Runs brain analyses on one worker thread, strictly in order, so the
-    game never stutters while the brain thinks."""
+    """Runs brain analyses on a worker thread. Python threads share one
+    interpreter lock, so thinking WHILE tiles slide made frames late
+    (measured: 9-12% of frames over budget). The worker therefore waits
+    while anything animates and thinks once the board settles; only the
+    newest board is kept waiting (a burst of fast moves = one analysis)."""
 
     def __init__(self):
-        self._jobs = deque()
+        self._job = None
         self._done = deque()
+        self._busy_ui = False
+        self._working = False
         self._cv = threading.Condition()
         t = threading.Thread(target=self._run, name="2049-brain", daemon=True)
         t.start()
@@ -968,21 +973,30 @@ class Analyst:
     def submit(self, tag, grid):
         snap = [row[:] for row in grid]
         with self._cv:
-            self._jobs.append((tag, snap))
+            self._job = (tag, snap)              # newer board supersedes
             self._cv.notify()
+
+    def set_ui_busy(self, busy):
+        with self._cv:
+            if busy != self._busy_ui:
+                self._busy_ui = busy
+                self._cv.notify()
 
     def _run(self):
         while True:
             with self._cv:
-                while not self._jobs:
+                while self._job is None or self._busy_ui:
                     self._cv.wait()
-                tag, grid = self._jobs.popleft()
+                tag, grid = self._job
+                self._job = None
+                self._working = True
             try:
                 a = brain.Analysis.of_grid(grid)
             except Exception:
                 a = None
             with self._cv:
                 self._done.append((tag, a))
+                self._working = False
 
     def results(self):
         with self._cv:
@@ -992,7 +1006,7 @@ class Analyst:
 
     def idle(self):
         with self._cv:
-            return not self._jobs
+            return self._job is None and not self._working
 
 
 # ============================================================================
@@ -1079,6 +1093,7 @@ class Game:
         self.analyst = Analyst()       # analyses on a worker thread
         self.coach = brain.Coach()     # turns analyses into tips
         self._board_tag = 0            # bumps on every board change
+        self._coach_tag = 0            # last tag the coach has seen
         self._pending_coach = {}       # tag -> what happened (for the coach)
         self._pending_move = None
         self._analysis = None          # analysis of the CURRENT board
@@ -1453,15 +1468,21 @@ class Game:
     def _poll_brain(self):
         for tag, a in self.analyst.results():
             how = self._pending_coach.pop(tag, None)
+            # boards superseded by a burst of fast moves were never analysed
+            skipped = [t for t in self._pending_coach if t < tag]
+            news = any(self._pending_coach[t] == "new" for t in skipped)
+            for t in skipped:
+                del self._pending_coach[t]
             if a is None or how is None:
                 continue
-            if how == "new":
+            if how == "new" or news:
                 self.coach.new_game(a)
-            elif how == "resync":
-                self.coach.resync(a)
+            elif how == "resync" or tag != self._coach_tag + 1:
+                self.coach.resync(a)      # can't follow tiles across a gap
             else:
                 _, d, moved, cheated = how
                 self.coach.on_move(d, moved, a, cheated)
+            self._coach_tag = tag
             if tag == self._board_tag:
                 self._analysis = a
                 tip = self.coach.current
@@ -1811,7 +1832,7 @@ class Game:
             self.draw_tile(a["value"], x, y, cell, scale)
 
     def _update_pops(self):
-        dt = self.clock.get_time()/1000.0; done = []
+        dt = getattr(self, "_dt", 1/60); done = []
         for pos in list(self.pop_tiles.keys()):
             self.pop_tiles[pos] -= dt/0.14
             if self.pop_tiles[pos] <= 0: done.append(pos)
@@ -2704,15 +2725,16 @@ class Game:
     def _busy(self):
         """Is anything on screen moving or counting down?"""
         return bool(self.animating or self.pop_tiles or self.toast
-                    or self.flash or self._tip is not None
-                    or self.capturing_action is not None
-                    or not self.analyst.idle())
+                    or self.flash or self.capturing_action is not None)
 
     def frame(self, dt):
         """One frame: input already handled; advance, think, draw."""
+        self._dt = dt
         if self.animating:
             self.anim_time += dt
             if self.anim_time >= self.anim_dur: self.finish_move()
+        # the brain thinks only while nothing moves on screen
+        self.analyst.set_ui_busy(bool(self.animating or self.pop_tiles))
         if self.toast:
             self.toast[1] -= 1
             if self.toast[1] <= 0: self.toast = None
@@ -2738,7 +2760,7 @@ class Game:
                 else:
                     # nothing moves: sleep until input arrives (instantly)
                     # or 50 ms pass - it used to redraw 60 fps doing nothing
-                    first = pygame.event.wait(50)
+                    first = pygame.event.wait(50 if self.analyst.idle() else 8)
                     events = ([first] if first.type != pygame.NOEVENT else []) \
                         + pygame.event.get()
                     dt = self.clock.tick()/1000.0
