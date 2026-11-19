@@ -688,12 +688,25 @@ PRIO_OPEN, PRIO_PRAISE, PRIO_HINT, PRIO_CORNER, PRIO_STUCK, PRIO_DANGER = \
     range(6)
 
 COOLDOWN = {             # moves between two tips of the same key
-    "stuck": 8, "tip_corner_lost": 6, "tip_corner_back": 6,
+    "stuck": 8, "tip_corner_lost": 6,
     "tip_corner_goal": 20, "tip_good_escape": 10, "tip_good_freed": 6,
     "tip_good_corner": 20, "tip_good_record": 0, "tip_danger": 0,
 }
 RECORD_RANK = 8          # praise new records from 256 up
 OFF_CORNER_MOVES = 4     # biggest tile out of a corner this long -> corner tip
+# Corner tips name no move: the move itself is often a close call that a
+# much deeper search (tools/referee.js) decides differently. What the coach
+# is sure of is the SITUATION - so that is what they say, and only when:
+LOST_MARGIN = 0.25       # leaving the corner cost at least this much (harm
+                         # units) against the best move that kept it
+GOAL_REGRET = 0.15       # "you can get it back now": some move does it, is
+                         # not deadly, and costs at most this against the best
+# Both measured, not guessed (tools/calib_corner.py + .js, 19.11.2026: 130
+# corner exits and 86 chances to return, from brand-new games, each judged
+# by deep search AND paired play-outs). Exits blamed at a cost >= 0.25: the
+# referee never found leaving had been better (the one such case: 0.15).
+# Returns offered at <= 0.15: never clearly worse than the best move; the
+# clearly worse ones started at 0.19.
 STUCK_KEYS = ("tip_stuck_block", "tip_stuck_chain", "tip_stuck_corner")
 
 
@@ -750,9 +763,17 @@ class Coach:
             return self.move_no == tip.born and tip.params["dir"] in a.values
         if k in STUCK_KEYS:
             return tip.track is not None and tip.track in a.problems
-        if k in ("tip_corner_lost", "tip_corner_back", "tip_corner_goal"):
+        if k == "tip_corner_lost":
             return not a.corner
+        if k == "tip_corner_goal":
+            return not a.corner and bool(self._ways_back(a))
         return True
+
+    @staticmethod
+    def _ways_back(a):
+        """Moves that put the biggest tile into a corner at a fair price."""
+        return [x for x in a.values if a.keeps_corner(x)
+                and x not in a.deadly and a.regret(x) <= GOAL_REGRET]
 
     # ---- the per-move step ---------------------------------------------
     def on_move(self, d, moved, a, cheated=False):
@@ -823,31 +844,23 @@ class Coach:
         # -- the biggest tile left its corner ---------------------------------
         if p is not None and p.corner and not a.corner \
                 and a.max_rank >= 6 and d in p.values:
-            alts = [x for x in p.values if x != d and p.keeps_corner(x)
-                    and p.values[x] >= p.values[d]]
-            if alts and self._ready("tip_corner_lost"):
-                alt = max(alts, key=lambda x: p.values[x])
+            # blamed only when it was avoidable AND it mattered: a move that
+            # kept the corner was clearly better. A forced or sensible exit
+            # gets no tip at all.
+            keep = [x for x in p.values if x != d and p.keeps_corner(x)]
+            if keep and self._ready("tip_corner_lost") and \
+                    (max(p.values[x] for x in keep) - p.values[d]) / p.unit >= LOST_MARGIN:
                 cands.append(Tip("tip_corner_lost", PRIO_CORNER, m,
-                                 {"value": 1 << a.max_rank, "dir": alt},
-                                 max_moves=3))
-            elif not alts and self._ready("tip_corner_back"):
-                back = [x for x in a.values if a.keeps_corner(x)]
-                if back:
-                    bd = max(back, key=lambda x: a.values[x])
-                    cands.append(Tip("tip_corner_back", PRIO_CORNER, m,
-                                     {"value": 1 << a.max_rank, "dir": bd},
-                                     max_moves=3))
+                                 {"value": 1 << a.max_rank}, max_moves=3))
         elif not a.corner and a.max_rank >= 6 \
                 and self.off_corner >= OFF_CORNER_MOVES \
                 and (self.corner_told is None or m - self.corner_told > 8) \
                 and self._ready("tip_corner_goal"):
-            # out of a corner for a while: say so only when ONE move fixes it
-            into = [x for x in a.values if a.keeps_corner(x)]
-            if into:
-                gd = max(into, key=lambda x: a.values[x])
+            # out of a corner for a while, and right now one move brings it
+            # back at a fair price: the moment to say so
+            if self._ways_back(a):
                 cands.append(Tip("tip_corner_goal", PRIO_CORNER, m,
-                                 {"value": 1 << a.max_rank, "dir": gd},
-                                 max_moves=2))
+                                 {"value": 1 << a.max_rank}, max_moves=2))
         elif p is not None and not p.corner and a.corner \
                 and self.corner_told is not None \
                 and m - self.corner_told <= 6 and not cheated \
@@ -885,8 +898,7 @@ class Coach:
                     self.last["stuck" if top.key in STUCK_KEYS else top.key] = m
                     if top.key in STUCK_KEYS:
                         self.track[top.track]["told"] = True
-                    if top.key in ("tip_corner_lost", "tip_corner_back",
-                                   "tip_corner_goal"):
+                    if top.key in ("tip_corner_lost", "tip_corner_goal"):
                         self.corner_told = m
         self.current = cur
         self.prev = a

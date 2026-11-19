@@ -525,11 +525,12 @@
   var PRIO_OPEN = 0, PRIO_PRAISE = 1, PRIO_HINT = 2, PRIO_CORNER = 3,
       PRIO_STUCK = 4, PRIO_DANGER = 5;
   var COOLDOWN = {
-    stuck: 8, tip_corner_lost: 6, tip_corner_back: 6, tip_corner_goal: 20,
+    stuck: 8, tip_corner_lost: 6, tip_corner_goal: 20,
     tip_good_escape: 10, tip_good_freed: 6, tip_good_corner: 20,
     tip_good_record: 0, tip_danger: 0
   };
   var RECORD_RANK = 8, OFF_CORNER_MOVES = 4;
+  var LOST_MARGIN = 0.25, GOAL_REGRET = 0.15;   // measured - see brain2049.py
   var STUCK_KEYS = ["tip_stuck_block", "tip_stuck_chain", "tip_stuck_corner"];
   function isStuckKey(k) { return STUCK_KEYS.indexOf(k) >= 0; }
 
@@ -575,9 +576,15 @@
     if (k === "tip_danger") return a.survival < DANGER_EXIT && a.hasValue(tip.params.dir);
     if (k === "tip_trap") return this.moveNo === tip.born && a.hasValue(tip.params.dir);
     if (isStuckKey(k)) return tip.track !== null && a.problems.has(tip.track);
-    if (k === "tip_corner_lost" || k === "tip_corner_back" || k === "tip_corner_goal") return !a.corner;
+    if (k === "tip_corner_lost") return !a.corner;
+    if (k === "tip_corner_goal") return !a.corner && waysBack(a).length > 0;
     return true;
   };
+  function waysBack(a) {     // = Python Coach._ways_back
+    return a.legal.filter(function (x) {
+      return a.keepsCorner(x) && a.deadly.indexOf(x) < 0 && a.regret(x) <= GOAL_REGRET;
+    });
+  }
   /* moved: Map from_cell -> [to_cell, merged] */
   Coach.prototype.onMove = function (d, moved, a, cheated) {
     var p = this.prev, m = ++this.moveNo, cands = [], self = this;
@@ -638,29 +645,20 @@
 
     // the biggest tile left its corner
     if (p && p.corner && !a.corner && a.maxRank >= 6 && p.hasValue(d)) {
-      var alts = p.legal.filter(function (x) { return x !== d && p.keepsCorner(x) && p.values[x] >= p.values[d]; });
-      if (alts.length && this.ready("tip_corner_lost")) {
-        var alt = alts[0];
-        for (var i = 1; i < alts.length; i++) if (p.values[alts[i]] > p.values[alt]) alt = alts[i];
-        cands.push(new Tip("tip_corner_lost", PRIO_CORNER, m, { value: Math.pow(2, a.maxRank), dir: alt }, { maxMoves: 3 }));
-      } else if (!alts.length && this.ready("tip_corner_back")) {
-        var back = a.legal.filter(function (x) { return a.keepsCorner(x); });
-        if (back.length) {
-          var bd = back[0];
-          for (var j = 1; j < back.length; j++) if (a.values[back[j]] > a.values[bd]) bd = back[j];
-          cands.push(new Tip("tip_corner_back", PRIO_CORNER, m, { value: Math.pow(2, a.maxRank), dir: bd }, { maxMoves: 3 }));
-        }
+      // blamed only when avoidable AND it mattered (see brain2049.py)
+      var keep = p.legal.filter(function (x) { return x !== d && p.keepsCorner(x); });
+      if (keep.length && this.ready("tip_corner_lost")) {
+        var kv = p.values[keep[0]];
+        for (var i = 1; i < keep.length; i++) if (p.values[keep[i]] > kv) kv = p.values[keep[i]];
+        if ((kv - p.values[d]) / p.unit >= LOST_MARGIN)
+          cands.push(new Tip("tip_corner_lost", PRIO_CORNER, m, { value: Math.pow(2, a.maxRank) }, { maxMoves: 3 }));
       }
     } else if (!a.corner && a.maxRank >= 6 && this.offCorner >= OFF_CORNER_MOVES &&
                (this.cornerTold === null || m - this.cornerTold > 8) &&
                this.ready("tip_corner_goal")) {
-      // out of a corner for a while: say so only when ONE move fixes it
-      var into = a.legal.filter(function (x) { return a.keepsCorner(x); });
-      if (into.length) {
-        var gd = into[0];
-        for (var g = 1; g < into.length; g++) if (a.values[into[g]] > a.values[gd]) gd = into[g];
-        cands.push(new Tip("tip_corner_goal", PRIO_CORNER, m, { value: Math.pow(2, a.maxRank), dir: gd }, { maxMoves: 2 }));
-      }
+      // out of a corner for a while, and one move brings it back at a fair price
+      if (waysBack(a).length)
+        cands.push(new Tip("tip_corner_goal", PRIO_CORNER, m, { value: Math.pow(2, a.maxRank) }, { maxMoves: 2 }));
     } else if (p && !p.corner && a.corner && this.cornerTold !== null &&
                m - this.cornerTold <= 6 && !cheated && this.ready("tip_good_corner")) {
       cands.push(new Tip("tip_good_corner", PRIO_PRAISE, m, { value: Math.pow(2, a.maxRank) }, { maxMoves: 2, kind: "praise", maxSecs: 3.5 }));
@@ -685,8 +683,7 @@
           cur = top;
           this.last[isStuckKey(top.key) ? "stuck" : top.key] = m;
           if (isStuckKey(top.key)) this.track.get(top.track).told = true;
-          if (top.key === "tip_corner_lost" || top.key === "tip_corner_back" ||
-              top.key === "tip_corner_goal") this.cornerTold = m;
+          if (top.key === "tip_corner_lost" || top.key === "tip_corner_goal") this.cornerTold = m;
         }
       }
     }

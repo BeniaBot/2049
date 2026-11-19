@@ -147,7 +147,7 @@ for lang in ("he", "en"):
     game.cfg["language"] = lang
     for t in (B.Tip("tip_trap", 5, game.coach.move_no, {"dir": 3, "bad": [0, 1]}),
               B.Tip("tip_stuck", 4, game.coach.move_no, {"value": 4, "place": "corner_bl"}),
-              B.Tip("tip_corner_lost", 3, game.coach.move_no, {"value": 256, "dir": 0}),
+              B.Tip("tip_corner_lost", 3, game.coach.move_no, {"value": 256}),
               B.Tip("tip_good_record", 1, game.coach.move_no, {"value": 512}, kind="praise")):
         game._tip = t; game._tip_since = time.monotonic()
         set_board(game, [[2, 4, 8, 16], [32, 64, 128, 256], [512, 1024, 2048, 4096],

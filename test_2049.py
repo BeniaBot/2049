@@ -242,7 +242,8 @@ class TestCoach(unittest.TestCase):
             tip = c.on_move(B.UP, ident(off), ana(off)) or tip
         self.assertIsNotNone(tip)
         self.assertEqual(tip.key, "tip_corner_goal")
-        self.assertEqual(tip.params, {"value": 128, "dir": B.RIGHT})
+        self.assertEqual(tip.params, {"value": 128})      # names no move
+        self.assertEqual(B.Coach._ways_back(ana(off)), [B.RIGHT])
 
     def test_trap_tip_points_to_safety_and_expires(self):
         trap = [[2, 8, 2, 8], [16, 32, 16, 4], [8, 64, 128, 2], [16, 32, 0, 4]]
@@ -276,16 +277,26 @@ class TestCoach(unittest.TestCase):
         gb.grid[spawn_at[0]][spawn_at[1]] = 2
         return moved, gb.grid
 
-    def test_corner_lost_names_the_better_move(self):
-        # left keeps the 64 in its corner; the player swipes right anyway
-        before = [[2, 4, 0, 0], [4, 8, 0, 2], [8, 16, 0, 0], [64, 32, 0, 0]]
+    def test_corner_lost_when_it_clearly_mattered(self):
+        # left keeps the 64 in its corner; the player swipes right anyway,
+        # and that costs a lot here (0.6 units)
+        before = [[2, 4, 8, 0], [4, 8, 16, 2], [8, 16, 32, 0], [64, 32, 8, 0]]
         c = self.fresh(before)
         moved, after = self.real_move(before, "right", (0, 0))
         tip = c.on_move(B.RIGHT, moved, ana(after))
         self.assertIsNotNone(tip)
         self.assertEqual(tip.key, "tip_corner_lost")
-        self.assertEqual(tip.params["value"], 64)
-        self.assertNotEqual(tip.params["dir"], B.RIGHT)
+        self.assertEqual(tip.params, {"value": 64})       # names no move
+
+    def test_corner_exit_that_hardly_matters_is_not_blamed(self):
+        # an early, open board: leaving the corner costs only 0.15 units -
+        # in the calibration that is where the referee once found the exit
+        # to have been the better move
+        before = [[2, 4, 0, 0], [4, 8, 0, 2], [8, 16, 0, 0], [64, 32, 0, 0]]
+        c = self.fresh(before)
+        moved, after = self.real_move(before, "right", (0, 0))
+        tip = c.on_move(B.RIGHT, moved, ana(after))
+        self.assertTrue(tip is None or tip.key != "tip_corner_lost")
 
     def test_forced_corner_loss_is_not_blamed(self):
         # every column and row is packed left: right is the ONLY move

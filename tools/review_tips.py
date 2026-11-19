@@ -4,8 +4,12 @@ the exe: Analyst thread, coach, drawing) and record every tip at the moment
 it appears: the board, the tip text, and a screenshot of what the player
 sees. The log is for a human (or Claude) to read and judge tip by tip.
 
-    python tools/review_tips.py OUT_DIR [games] [seed] [lang]
+    python tools/review_tips.py OUT_DIR [games] [seed] [lang] [size]
+
+Every game starts from a brand-new board (new_game), never from a saved
+mid-game position.
 """
+import json
 import os
 import random
 import sys
@@ -20,6 +24,7 @@ OUT = sys.argv[1]
 GAMES = int(sys.argv[2]) if len(sys.argv) > 2 else 6
 SEED = int(sys.argv[3]) if len(sys.argv) > 3 else 1
 LANG = sys.argv[4] if len(sys.argv) > 4 else "en"
+SIZE = int(sys.argv[5]) if len(sys.argv) > 5 else 4
 os.makedirs(OUT, exist_ok=True)
 
 g = load_game()
@@ -30,6 +35,7 @@ g.Game._start_update_check = lambda self: setattr(self, "update_status", "error"
 game = g.Game()
 game.cfg["show_tips"] = True
 game.cfg["language"] = LANG
+game.cfg["grid_size"] = SIZE
 KEYS = {B.LEFT: pygame.K_LEFT, B.RIGHT: pygame.K_RIGHT, B.UP: pygame.K_UP, B.DOWN: pygame.K_DOWN}
 ARROW = {B.LEFT: "<-", B.RIGHT: "->", B.UP: "^", B.DOWN: "v"}
 
@@ -51,6 +57,9 @@ def board_text(grid):
 
 
 log = open(os.path.join(OUT, "tips.txt"), "w", encoding="utf-8")
+# the same, machine-readable, for the referee (tools/referee.js): every tip,
+# and every move played with no danger warning on screen
+events = open(os.path.join(OUT, "events.jsonl"), "w", encoding="utf-8")
 policies = [("careful", policy_corner_human), ("habit", policy_lazy_corner),
             ("casual", policy_noisy(0.55))]
 n_tips = 0
@@ -69,6 +78,10 @@ for gi in range(GAMES):
         if d is None:
             break
         before = [row[:] for row in game.board.grid]
+        shown = game._tip.key if game._tip is not None and game.cfg["show_tips"] else None
+        if shown not in ("tip_danger", "tip_trap"):
+            events.write(json.dumps({"type": "quiet", "game": gi + 1, "move": moves + 1,
+                                     "played": d, "before": before, "shown": shown}) + "\n")
         game.handle_event(pygame.event.Event(pygame.KEYDOWN, {"key": KEYS[d], "mod": 0,
                                                              "unicode": "", "scancode": 0}))
         settle()
@@ -79,6 +92,11 @@ for gi in range(GAMES):
             text = game.tip_text(tip)
             log.write("#%d  game %d (%s player)  move %d  played %s  [%s]\n    TIP: %s\n"
                       % (n_tips, gi + 1, pname, moves, ARROW[d], tip.key, text))
+            events.write(json.dumps({"type": "tip", "id": n_tips, "game": gi + 1,
+                                     "move": moves, "played": d, "key": tip.key,
+                                     "params": tip.params, "track": tip.track,
+                                     "before": before, "now": game.board.grid,
+                                     "text": text}, ensure_ascii=False) + "\n")
             log.write("  before the move:\n%s\n  now:\n%s\n\n" % (board_text(before),
                                                              board_text(game.board.grid)))
             shot = pygame.transform.smoothscale(game._render_surf, (game.W, game.H))
@@ -87,5 +105,6 @@ for gi in range(GAMES):
     log.write("=== game %d over after %d moves, max tile %d\n\n" % (gi + 1, moves,
                                                                   game.board.max_tile()))
 log.close()
+events.close()
 game.shutdown()
 print("tips recorded:", n_tips, "->", os.path.join(OUT, "tips.txt"))
