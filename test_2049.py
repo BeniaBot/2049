@@ -670,6 +670,26 @@ class TestSingleInstance(unittest.TestCase):
         self.assertEqual(out[-1], "True False")
 
 
+class TestVersions(unittest.TestCase):
+    """One version everywhere. The web page loads its engine as
+    brain2049.js?v=VERSION and the service worker caches by URL: if the two
+    disagree, a returning visitor runs the new page with the old engine."""
+    def test_versions_agree(self):
+        import re
+        def read(name):
+            with open(os.path.join(_HERE, name), encoding="utf-8") as f:
+                return f.read()
+        v = g.APP_VERSION
+        html, sw, iss = read("index.html"), read("sw.js"), read("installer.iss")
+        self.assertIn('const APP_VERSION = "%s";' % v, html)
+        self.assertIn('<script src="brain2049.js?v=%s"></script>' % v, html)
+        self.assertIn('const CACHE = "2049-v%s";' % v, sw)
+        self.assertIn('"brain2049.js?v=%s"' % v, sw)
+        self.assertIn('#define MyAppVersion "%s"' % v, iss)
+        # no other, unversioned way in
+        self.assertEqual(len(re.findall(r'src="brain2049\.js', html)), 1)
+
+
 class TestCompile(unittest.TestCase):
     def test_py_compile(self):
         import py_compile

@@ -33,7 +33,7 @@ def _trace(label):
 _trace("python + imports ready")
 
 APP_NAME    = "2049"
-APP_VERSION = "0.18.0"
+APP_VERSION = "0.18.1"
 _trace("version " + APP_VERSION)
 GITHUB_REPO = "BeniaBot/2049"   # owner/repo for auto-update checks
 
