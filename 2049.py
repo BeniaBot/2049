@@ -2736,12 +2736,16 @@ class Game:
     def _settings_ev(self, e):
         # Confirmation dialog takes over input while shown
         if self._confirm:
+            if e.type==pygame.KEYDOWN and e.key==pygame.K_ESCAPE:
+                self._confirm = None; return              # Esc = "no"
             if e.type==pygame.MOUSEBUTTONDOWN and e.button==1:
                 if hasattr(self,"cfm_yes") and self.cfm_yes.hit(e.pos):
                     self._do_confirmed_action(); return
                 if hasattr(self,"cfm_no") and self.cfm_no.hit(e.pos):
                     self._confirm = None; return
             return
+        if e.type==pygame.KEYDOWN and e.key==pygame.K_ESCAPE:
+            self.state="game"; return                    # Esc = back
         if e.type==pygame.MOUSEBUTTONDOWN and e.button==1:
             if self.s_back.hit(e.pos): self.state="game"; return
             for sz,b in self.s_grid:
@@ -2872,12 +2876,16 @@ class Game:
     def _preferences_ev(self, e):
         # Praise dialog takes over input while shown
         if self.praising:
+            if e.type==pygame.KEYDOWN and e.key in (pygame.K_ESCAPE, pygame.K_RETURN):
+                self.praise_ok(); return
             if e.type==pygame.MOUSEBUTTONDOWN and e.button==1:
                 if hasattr(self,"pr_ok") and self.pr_ok.hit(e.pos):
                     self.praise_ok(); return
             return
         # Confession dialog takes over input while shown
         if self.confessing:
+            if e.type==pygame.KEYDOWN and e.key==pygame.K_ESCAPE:
+                self.confess_no(); return                 # Esc = "never!"
             if e.type==pygame.MOUSEBUTTONDOWN and e.button==1:
                 if hasattr(self,"cf_yes") and self.cf_yes.hit(e.pos):
                     self.confess_yes(); return
@@ -2891,6 +2899,8 @@ class Game:
                 return
             if e.type == pygame.MOUSEBUTTONDOWN:
                 self.capturing_action = None
+        if e.type==pygame.KEYDOWN and e.key==pygame.K_ESCAPE:
+            self.leave_preferences(); return             # Esc = back
         if e.type==pygame.MOUSEBUTTONDOWN and e.button==1:
             if self.p_back.hit(e.pos): self.leave_preferences(); return
             if self.p_prev.hit(e.pos):

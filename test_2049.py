@@ -475,6 +475,28 @@ class TestGameFlow(unittest.TestCase):
         self.assertIsNotNone(self.game.pending_spawn[2])
         self.settle()
 
+    def test_escape_answers_dialogs_safely(self):
+        gm = self.game
+        esc = pygame.event.Event(pygame.KEYDOWN, {"key": pygame.K_ESCAPE, "mod": 0,
+                                                 "unicode": "", "scancode": 0})
+        gm.state = "settings"
+        gm._confirm = ("?", "reset_score")
+        best = gm.cfg["highscore"]
+        gm.handle_event(esc)
+        self.assertIsNone(gm._confirm)                  # closed, nothing reset
+        self.assertEqual(gm.cfg["highscore"], best)
+        gm.enter_preferences()
+        gm.cfg["active_profile"] = 1                    # a cheat mode
+        gm.leave_preferences()
+        self.assertTrue(gm.confessing)
+        gm.handle_event(esc)                            # Esc = "never!"
+        self.assertFalse(gm.confessing)
+        self.assertEqual(gm.cfg["active_profile"], gm._entry_profile)
+        gm.state = "settings"
+        gm.handle_event(esc)
+        self.assertEqual(gm.state, "game")
+        gm.cfg["active_profile"] = 3                    # restore for other tests
+
     def test_resume_after_restart(self):
         self.set_board([[2, 4, 8, 16], Z, [0, 0, 4, 0], [0, 0, 0, 2]])
         self.game.board.score = 1234
