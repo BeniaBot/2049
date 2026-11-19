@@ -332,6 +332,35 @@ class TestCoach(unittest.TestCase):
         tip = c.on_move(B.DOWN, moved, ana(after))
         self.assertTrue(tip is None or not tip.key.startswith("tip_corner"))
 
+    def test_warning_after_a_burst_of_fast_moves(self):
+        # moves too fast to analyse one by one end in a resync; if the board
+        # it lands on is a trap, the pause is exactly when to say so
+        trap = [[2, 8, 2, 8], [16, 32, 16, 4], [8, 64, 128, 2], [16, 32, 0, 4]]
+        c = self.fresh([[2, 0, 0, 0], Z, Z, Z])
+        a = ana(trap)
+        c.resync(a)
+        self.assertIsNotNone(c.current)
+        self.assertEqual(c.current.key, "tip_trap")
+        self.assertEqual(c.current.params["dir"], a.safest())
+        calm = [[2, 0, 0, 0], Z, Z, [0, 0, 0, 4]]
+        c.resync(ana(calm))
+        self.assertTrue(c.current is None or c.current.key != "tip_trap")
+        # and the JS port says exactly the same
+        js = ("const B=require(%r);const c=new B.Coach();c.newGame(B.Analysis.ofGrid(%s,true));"
+              "const a=B.Analysis.ofGrid(%s,true);c.resync(a);"
+              "console.log(JSON.stringify([c.current.key,c.current.params]))"
+              % (os.path.join(_HERE, "brain2049.js").replace("\\", "/"),
+                 json.dumps([[2, 0, 0, 0], Z, Z, Z]), json.dumps(trap)))
+        try:
+            out = subprocess.run(["node", "-e", js], capture_output=True, text=True,
+                                 timeout=60).stdout.strip()
+        except FileNotFoundError:
+            self.skipTest("node not installed")
+        key, params = json.loads(out)
+        self.assertEqual(key, "tip_trap")
+        self.assertEqual(params["dir"], a.safest())
+        self.assertEqual(params["bad"], a.deadly)
+
     def test_no_tip_once_the_game_is_over(self):
         start = [[2, 4, 2, 4], [4, 2, 4, 2], [2, 4, 2, 4], [4, 2, 4, 0]]
         dead = [[2, 4, 2, 4], [4, 2, 4, 2], [2, 4, 2, 4], [4, 2, 4, 2]]

@@ -574,11 +574,21 @@
       this.current = new Tip("tip_open", PRIO_OPEN, 0, {}, { maxMoves: 5, kind: "info", maxSecs: 7.0 });
     }
   };
-  Coach.prototype.resync = function (a) {
+  Coach.prototype.resync = function (a) {     // see brain2049.py
     this.prev = a;
     this.track = new Map();
     this.danger = a.survival < DANGER_ENTER;
-    if (this.current && !this.isValid(this.current, a)) this.current = null;
+    if (this.current && (this.current.key === "tip_danger" || this.current.key === "tip_trap" ||
+                         !this.isValid(this.current, a))) this.current = null;   // re-derived below
+    if (!a.legal.length) return;
+    var tip;
+    if (this.danger) {
+      tip = new Tip("tip_danger", PRIO_DANGER, this.moveNo, { dir: a.safest() }, { maxMoves: 1, maxSecs: 8.0 });
+    } else if (a.deadly.length) {
+      tip = new Tip("tip_trap", PRIO_DANGER, this.moveNo, { dir: a.safest(), bad: a.deadly.slice() }, { maxMoves: 0, maxSecs: 10.0 });
+    } else return;
+    var cur = this.current;
+    if (!cur || cur.key !== tip.key || !sameParams(cur.params, tip.params)) this.current = tip;
   };
   Coach.prototype.dismiss = function () { this.current = null; };
   Coach.prototype.ready = function (key) {

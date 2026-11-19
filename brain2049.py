@@ -739,6 +739,7 @@ SCATTER_MOVES = 3        # big tiles spread out this long -> the general tip
 # record are never held back.
 GAP = 5
 URGENT = ("tip_danger", "tip_trap", "tip_good_record")
+URGENT_BOARD = ("tip_danger", "tip_trap")    # about the board on screen only
 
 
 class Coach:
@@ -769,13 +770,31 @@ class Coach:
                                kind="info", max_secs=7.0)
 
     def resync(self, analysis):
-        """After an assist / undo: adopt the board silently, never praise."""
+        """After an assist / undo, or a burst of moves too fast to analyse
+        one by one: adopt the board, never praise. Tiles cannot be followed
+        across the gap - but danger and traps depend on THIS board alone,
+        and the pause after a burst is exactly when a warning helps (found
+        playing fast in the browser: the coach used to stay silent here)."""
         self.prev = analysis
         self.track = {}
         self.danger = analysis.survival < DANGER_ENTER
-        if self.current is not None and not self.is_valid(self.current,
-                                                          analysis):
-            self.current = None
+        if self.current is not None and (self.current.key in URGENT_BOARD or
+                                         not self.is_valid(self.current, analysis)):
+            self.current = None          # warnings are re-derived from THIS board
+        if not analysis.values:
+            return
+        if self.danger:
+            tip = Tip("tip_danger", PRIO_DANGER, self.move_no,
+                      {"dir": analysis.safest()}, max_moves=1, max_secs=8.0)
+        elif analysis.deadly:
+            tip = Tip("tip_trap", PRIO_DANGER, self.move_no,
+                      {"dir": analysis.safest(), "bad": analysis.deadly},
+                      max_moves=0, max_secs=10.0)
+        else:
+            return
+        cur = self.current
+        if cur is None or cur.key != tip.key or cur.params != tip.params:
+            self.current = tip
 
     def dismiss(self):
         """The UI took the tip down (its time ran out)."""
