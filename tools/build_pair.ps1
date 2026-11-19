@@ -2,10 +2,11 @@
 #   A = this tree (version as in 2049.py)            -> build_v018\A\{2049.exe, 2049_Setup.exe}
 #   B = the same tree stamped as a newer version      -> build_v018\B\{...}
 # Nothing here is published; it only feeds tools\vm\guest_update_test.ps1.
-param([string]$NewVersion = "0.18.1")
+# -OnlyThisTree -OutName X: just this tree, into X\new (a release build).
+param([string]$NewVersion = "0.18.1", [string]$OutName = "build_v018", [switch]$OnlyThisTree)
 $ErrorActionPreference = 'Continue'   # PyInstaller logs to stderr; 5.1 would treat it as errors
 $root = Split-Path $PSScriptRoot -Parent
-$out = Join-Path $root 'build_v018'
+$out = Join-Path $root $OutName
 $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
 
 function Build([string]$src, [string]$dest) {
@@ -28,6 +29,13 @@ function Build([string]$src, [string]$dest) {
   if ($rc -ne 0) { throw "Inno Setup failed for $src" }
   Copy-Item "$src\dist\2049.exe" $dest -Force
   Copy-Item "$src\Output\2049_Setup.exe" $dest -Force
+}
+
+if ($OnlyThisTree) {
+  Build $root (Join-Path $out 'new')
+  Get-ChildItem (Join-Path $out 'new') -Filter *.exe |
+    Select-Object Name, Length, @{n='sha';e={(Get-FileHash $_.FullName).Hash.Substring(0,12)}}
+  return
 }
 
 "== A (this tree)"
