@@ -85,7 +85,15 @@ try {
   Start-Process 'C:\bench\portable\2049.exe' -WorkingDirectory 'C:\bench\portable' | Out-Null
   $h = Wait-Window 90
   Check 'portable A opens' ($h -ne [IntPtr]::Zero)
-  Start-Sleep -Seconds 4
+  Start-Sleep -Seconds 2
+  # play a little first: the game in progress must survive the update
+  foreach ($k in @(0x25,0x28,0x25,0x28,0x27,0x28)) {
+    [W]::PostMessageW($h, 0x100, [IntPtr]$k, [IntPtr](1 -bor (0x4B -shl 16) -bor (1 -shl 24))) | Out-Null
+    Start-Sleep -Milliseconds 40
+    [W]::PostMessageW($h, 0x101, [IntPtr]$k, [IntPtr](1 -bor (0x4B -shl 16) -bor (1 -shl 24) -bor (1 -shl 30) -bor ([int]0x80000000))) | Out-Null
+    Start-Sleep -Milliseconds 180
+  }
+  Start-Sleep -Seconds 2
   [W]::Shot($h, (Join-Path $out 'p1_badge.png'))
   [W]::Click($h, $SETTINGS[0], $SETTINGS[1]); Start-Sleep -Milliseconds 800
   [W]::Shot($h, (Join-Path $out 'p2_settings.png'))
@@ -104,6 +112,8 @@ try {
   Check 'leftover old exe cleaned up' (-not (Test-Path 'C:\bench\portable\2049.exe.old'))
   Check 'only one game running' (@(Get-Process 2049 -ErrorAction SilentlyContinue).Count -ge 1 -and [W]::Find() -eq $h2)
   Close-All
+  $gs = Get-Content (Join-Path $env:APPDATA '2049\2049_game.json') -Raw | ConvertFrom-Json
+  Check 'the game in progress survived the update' ($gs.moves -ge 3) ("moves " + $gs.moves + ", score " + $gs.score)
 
   # ---------------- installed ----------------
   Remove-Item $trace -ErrorAction SilentlyContinue
