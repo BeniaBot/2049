@@ -430,7 +430,9 @@ def _migrate_map(m):
     return out
 
 def _read_json(path):
-    with open(path, "r", encoding="utf-8") as f:
+    # utf-8-sig: a file saved by Notepad/PowerShell starts with a BOM, which
+    # plain utf-8 json rejects - that silently reset the settings
+    with open(path, "r", encoding="utf-8-sig") as f:
         data = json.load(f)
     if not isinstance(data, dict):
         raise ValueError("not a JSON object")

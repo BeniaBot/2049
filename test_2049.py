@@ -355,6 +355,14 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(cfg["active_profile"], 0)
         self.assertEqual(cfg["profiles"][0]["map"], {})
 
+    def test_config_saved_with_a_bom_still_loads(self):
+        # Notepad and PowerShell 5 write UTF-8 with a BOM
+        with open(g.CONFIG_PATH, "w", encoding="utf-8-sig") as f:
+            json.dump({"config_version": 3, "highscore": 4242, "language": "en"}, f)
+        cfg = g.load_config()
+        self.assertEqual(cfg["highscore"], 4242)
+        self.assertEqual(cfg["language"], "en")
+
     def test_corrupt_file_falls_back_to_backup(self):
         cfg = g.default_config()
         cfg["highscore"] = 777
