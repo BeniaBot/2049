@@ -796,17 +796,24 @@ def ease_out(t):
 class ScaledScreen:
     """Proxy that scales every draw/blit coordinate by a factor, so all UI code
     can be written in logical coordinates while rendering at higher resolution
-    for crisp, anti-aliased output. Wraps a larger pygame Surface."""
+    for crisp, anti-aliased output. Wraps a larger pygame Surface.
+    The factor may be fractional (twice the window's display scaling, e.g.
+    2.5 at 125%) - so the final shrink onto the window is always exactly
+    2:1, which keeps edges and text sharp. Everything that pygame wants in
+    whole pixels is rounded here."""
     def __init__(self, surface, scale):
         self.surf = surface
         self.s = scale
+    def _i(self, v):
+        return int(round(v * self.s))
     def _rz(self, rect):
-        # scale a rect-like (Rect or 4-tuple) by s
+        # scale a rect-like (Rect or 4-tuple) by s, snapped to whole pixels
         if isinstance(rect, pygame.Rect):
-            return pygame.Rect(rect.x*self.s, rect.y*self.s,
-                               rect.w*self.s, rect.h*self.s)
-        x, y, w, h = rect
-        return (x*self.s, y*self.s, w*self.s, h*self.s)
+            x, y, w, h = rect.x, rect.y, rect.w, rect.h
+        else:
+            x, y, w, h = rect
+        x0, y0 = self._i(x), self._i(y)
+        return pygame.Rect(x0, y0, self._i(x + w) - x0, self._i(y + h) - y0)
     def _pz(self, pt):
         return (pt[0]*self.s, pt[1]*self.s)
     def fill(self, color, rect=None):
@@ -834,35 +841,39 @@ class ScaledScreen:
         self.surf.blit(src, (round(logical_xy[0]*self.s),
                              round(logical_xy[1]*self.s)))
     def get_size(self):
-        return (self.surf.get_width()//self.s, self.surf.get_height()//self.s)
+        return (self.surf.get_width()/self.s, self.surf.get_height()/self.s)
     def get_width(self):
-        return self.surf.get_width()//self.s
+        return self.surf.get_width()/self.s
     def get_height(self):
-        return self.surf.get_height()//self.s
+        return self.surf.get_height()/self.s
     # scaled primitive helpers (called by draw_* wrappers)
     def rect(self, color, rect, width=0, border_radius=0):
-        pygame.draw.rect(self.surf, color, self._rz(rect), width*self.s,
-                         border_radius=border_radius*self.s)
+        pygame.draw.rect(self.surf, color, self._rz(rect),
+                         self._i(width) if width else 0,
+                         border_radius=self._i(border_radius))
     def circle(self, color, center, radius, width=0):
         pygame.draw.circle(self.surf, color, self._pz(center),
-                           radius*self.s, width*self.s)
+                           radius*self.s, self._i(width) if width else 0)
     def line(self, color, p1, p2, width=1):
         pygame.draw.line(self.surf, color, self._pz(p1), self._pz(p2),
-                         max(1, width*self.s))
+                         max(1, self._i(width)))
     def polygon(self, color, points, width=0):
         pts = [self._pz(p) for p in points]
-        pygame.draw.polygon(self.surf, color, pts, width*self.s)
+        pygame.draw.polygon(self.surf, color, pts, self._i(width) if width else 0)
     def arc(self, color, rect, a0, a1, width=1):
         pygame.draw.arc(self.surf, color, self._rz(rect), a0, a1,
-                        max(1, width*self.s))
+                        max(1, self._i(width)))
     def card(self, color, rect, radius=12, shadow=True):
         """Rounded card with an optional soft drop shadow for depth."""
         r = self._rz(rect)
+        rad = self._i(radius)
         if shadow:
-            sh = pygame.Surface((r[2]+16*self.s, r[3]+16*self.s), pygame.SRCALPHA)
+            pad = self._i(16)
+            sh = pygame.Surface((r.w + pad, r.h + pad), pygame.SRCALPHA)
+            sh.fill((60, 50, 40, 0))     # keep blur from dragging in black
             pygame.draw.rect(sh, (60, 50, 40, 45),
-                             (8*self.s, 10*self.s, r[2], r[3]),
-                             border_radius=radius*self.s)
+                             (self._i(8), self._i(10), r.w, r.h),
+                             border_radius=rad)
             try:
                 # cheap blur: scale down and up
                 small = pygame.transform.smoothscale(sh, (max(1,sh.get_width()//4),
@@ -870,8 +881,8 @@ class ScaledScreen:
                 sh = pygame.transform.smoothscale(small, sh.get_size())
             except Exception:
                 pass
-            self.surf.blit(sh, (r[0]-8*self.s, r[1]-10*self.s))
-        pygame.draw.rect(self.surf, color, r, border_radius=radius*self.s)
+            self.surf.blit(sh, (r.x - self._i(8), r.y - self._i(10)))
+        pygame.draw.rect(self.surf, color, r, border_radius=rad)
 
 # ============================================================================
 #  Platform helpers: window sizing, single instance, accessibility hotkeys
@@ -1195,7 +1206,6 @@ class Game:
         pygame.font.init()
         _trace("pygame.init")
         self.cfg = load_config()
-        self.SS = 2                        # supersampling factor
         self.W, self.H = 560, 780          # logical coordinate space (larger)
         # Set the window icon BEFORE creating the window so the taskbar picks
         # it up. Use a PNG (pygame loads PNG reliably; ICO support is patchy).
@@ -1217,6 +1227,9 @@ class Game:
             os.environ["SDL_VIDEO_WINDOW_POS"] = "%d,%d" % pos
         self.win_w = round(self.W * self.view_scale)
         self.win_h = round(self.H * self.view_scale)
+        # drawing scale = exactly twice the window's pixels per logical unit,
+        # so the final shrink is 2:1 (a 1.6:1 shrink at 125% made it soft)
+        self.SS = 2 * self.win_w / self.W
         self.window = pygame.display.set_mode((self.win_w, self.win_h))
         # paint the background at once: the window never shows black
         # while the rest of startup finishes
@@ -1245,7 +1258,7 @@ class Game:
             self.avatar = None
         # We render into a surface SS times larger, using a scaling draw wrapper,
         # then smooth-downscale to the window for crisp anti-aliased output.
-        self._render_surf = pygame.Surface((self.W*self.SS, self.H*self.SS)).convert_alpha()
+        self._render_surf = pygame.Surface((2 * self.win_w, 2 * self.win_h)).convert_alpha()
         self.screen = ScaledScreen(self._render_surf, self.SS)
         pygame.display.set_caption("2049")
         self.clock = pygame.time.Clock()
@@ -1441,9 +1454,9 @@ class Game:
     def _load_fonts(self):
         self._font_files = self._find_font_files()
         s = self.SS
-        self.f_title=self._mk(48*s,True); self.f_big=self._mk(30*s,True)
-        self.f_med=self._mk(24*s,True); self.f_small=self._mk(19*s,True)
-        self.f_tiny=self._mk(15*s); self._tile_fonts={}
+        self.f_title=self._mk(round(48*s),True); self.f_big=self._mk(round(30*s),True)
+        self.f_med=self._mk(round(24*s),True); self.f_small=self._mk(round(19*s),True)
+        self.f_tiny=self._mk(round(15*s)); self._tile_fonts={}
 
     def shape(self, text):
         return shape_text(text)
@@ -1860,13 +1873,14 @@ class Game:
         if key not in cache:
             m = max(4, int(ic * 0.16))
             S = self.SS
-            size = (ic + 2 * m) * S
+            size = int(round((ic + 2 * m) * S))
             surf = pygame.Surface((size, size), pygame.SRCALPHA)
             # transparent pixels carry the glow's own colour: blurring then
             # never drags in black (that made a muddy brown frame)
             surf.fill((243, 215, 116, 0))
             pygame.draw.rect(surf, (243, 215, 116, int(255 * k * 0.55)),
-                             (m * S // 2, m * S // 2, size - m * S, size - m * S),
+                             (int(m * S // 2), int(m * S // 2),
+                              int(size - m * S), int(size - m * S)),
                              border_radius=int(12 * S))
             small = pygame.transform.smoothscale(surf, (max(1, size // 6), max(1, size // 6)))
             surf = pygame.transform.smoothscale(small, (size, size))
@@ -1883,7 +1897,7 @@ class Game:
         glow = self._tile_glow(value, ic)
         if glow is not None:
             g, m = glow
-            self.screen.surf.blit(g, ((ix - m) * self.SS, (iy - m) * self.SS))
+            self.screen.surf.blit(g, (round((ix - m) * self.SS), round((iy - m) * self.SS)))
         self.screen.rect(tile_color(value),
                          (ix, iy, ic, ic), border_radius=8)
         if value:
@@ -2154,9 +2168,9 @@ class Game:
         """Board overlay (win / game over) with real buttons. The first
         button is also what Enter does."""
         bx0, by0, board_px, _, _ = self.board_geometry()
-        s = pygame.Surface((board_px*self.SS, board_px*self.SS), pygame.SRCALPHA)
+        s = pygame.Surface((round(board_px*self.SS), round(board_px*self.SS)), pygame.SRCALPHA)
         s.fill((250,248,239,228))
-        self._render_surf.blit(s, (bx0*self.SS, by0*self.SS))
+        self._render_surf.blit(s, (round(bx0*self.SS), round(by0*self.SS)))
         t1 = self.f_big.render(self.shape(big), True, TEXT_DARK)
         cx = bx0+board_px/2; cy = by0+board_px/2
         self.screen.blit(t1, t1.get_rect(center=(cx, cy-36)))
@@ -2391,7 +2405,7 @@ class Game:
         ry = iy
         # draw avatar circle
         if self.avatar:
-            ava = pygame.transform.smoothscale(self.avatar, (av*self.SS, av*self.SS))
+            ava = pygame.transform.smoothscale(self.avatar, (round(av*self.SS), round(av*self.SS)))
             self.screen.surf.blit(ava, (int(sx*self.SS), int((ry-4)*self.SS)))
         else:
             self.screen.circle(BOARD_BG, (sx+av/2, ry+av/2-4), av/2)
@@ -2582,7 +2596,7 @@ class Game:
     def _draw_confession(self):
         L = self.L
         # dim the screen
-        dim = pygame.Surface((self.W*self.SS, self.H*self.SS), pygame.SRCALPHA)
+        dim = pygame.Surface(self._render_surf.get_size(), pygame.SRCALPHA)
         dim.fill((30, 26, 22, 180))
         self.screen.surf.blit(dim, (0, 0))
         # dialog box
@@ -2613,7 +2627,7 @@ class Game:
     def _draw_praise(self):
         L = self.L
         GREEN = (60, 170, 110)
-        dim = pygame.Surface((self.W*self.SS, self.H*self.SS), pygame.SRCALPHA)
+        dim = pygame.Surface(self._render_surf.get_size(), pygame.SRCALPHA)
         dim.fill((22, 34, 26, 180))
         self.screen.surf.blit(dim, (0, 0))
         dw, dh = 420, 250
@@ -2740,7 +2754,7 @@ class Game:
     def _draw_confirm(self):
         L = self.L
         q, _ = self._confirm
-        dim = pygame.Surface((self.W*self.SS, self.H*self.SS), pygame.SRCALPHA)
+        dim = pygame.Surface(self._render_surf.get_size(), pygame.SRCALPHA)
         dim.fill((30, 26, 22, 180)); self.screen.surf.blit(dim, (0, 0))
         dw, dh = 400, 180
         dx, dy = (self.W-dw)//2, (self.H-dh)//2
