@@ -76,12 +76,12 @@
   #board{position:relative;background:var(--board);border-radius:var(--r-lg);
     padding:var(--gap);direction:ltr;touch-action:none;aspect-ratio:1/1;
     box-shadow:0 10px 30px rgba(120,100,80,.18),inset 0 0 0 1px rgba(255,255,255,.06);}
-  .grid-bg{display:grid;gap:var(--gap);width:100%;height:100%;}
-  .cell{background:rgba(238,228,218,.35);border-radius:var(--r-sm);}
+  .grid-bg{position:absolute;inset:var(--gap);}
+  .cell{position:absolute;left:0;top:0;background:rgba(238,228,218,.35);border-radius:var(--r-sm);}
   #tiles{position:absolute;inset:var(--gap);}
   .tile{position:absolute;left:0;top:0;border-radius:var(--r-sm);display:flex;align-items:center;
     justify-content:center;font-weight:700;font-variant-numeric:tabular-nums;line-height:1;
-    transition:transform 110ms ease-in-out;will-change:transform;z-index:2;}
+    transition:transform 110ms ease-in-out;z-index:2;}
   .tile .in{width:100%;height:100%;border-radius:inherit;display:flex;align-items:center;
     justify-content:center;}
   .tile.new .in{animation:appear .2s ease .1s backwards;}
@@ -823,13 +823,25 @@ class Game{
     const board=document.getElementById("board"); if(!board) return null;
     const n=this.board.size, w=board.clientWidth, gap=Math.max(6,Math.round(w*(n===4?.028:n===5?.022:.018)));
     board.style.setProperty("--gap",gap+"px");
-    const inner=w-2*gap, cell=(inner-gap*(n-1))/n;
-    return {cell,gap,step:cell+gap};
+    const inner=w-2*gap, cell=(inner-gap*(n-1))/n, step=cell+gap;
+    // every tile and empty cell lands on whole DEVICE pixels, measured from
+    // the screen, not from the board: the board itself usually sits at a
+    // fraction of a pixel (at 125% it was 0.375 px off), and text and edges
+    // drawn between pixels come out soft
+    const dpr=window.devicePixelRatio||1, box=board.getBoundingClientRect();
+    const ox=(box.left+board.clientLeft+gap)*dpr, oy=(box.top+board.clientTop+gap)*dpr;
+    const px=(o,k)=>(Math.round(o+k*step*dpr)-o)/dpr;          // offset inside #tiles
+    const size=Math.round(cell*dpr)/dpr;
+    const at=(r,c)=>`translate(${px(ox,c)}px,${px(oy,r)}px)`;
+    const bg=document.getElementById("gridbg");
+    if(bg) [...bg.children].forEach((el,i)=>{ el.style.width=el.style.height=size+"px";
+      el.style.transform=at(Math.floor(i/n),i%n); });
+    return {cell:size,gap,step,at};
   }
   tileEl(v,r,c,g,cls){
     const t=document.createElement("div"); t.className="tile"+(cls?" "+cls:"");
     t.style.width=t.style.height=g.cell+"px";
-    t.style.transform=`translate(${c*g.step}px,${r*g.step}px)`;
+    t.style.transform=g.at(r,c);
     const i=document.createElement("div"); i.className="in"; i.textContent=v;
     i.style.background=tileColor(v); i.style.color=tileText(v); i.style.fontSize=tileFont(v,g.cell);
     i.style.boxShadow=tileShadow(v); t.appendChild(i); return t;
@@ -851,7 +863,7 @@ class Game{
     for(const a of anims){ const t=this.tileEl(a.value,a.from[0],a.from[1],g,a.ghost?"ghost":""); tiles.appendChild(t); els.push([t,a]); }
     void tiles.offsetHeight;                 // start the CSS transitions
     for(const [t,a] of els){
-      t.style.transform=`translate(${a.to[1]*g.step}px,${a.to[0]*g.step}px)`;
+      t.style.transform=g.at(a.to[0],a.to[1]);
       if(a.ghost){ t.style.opacity="0"; t.firstChild.style.scale=".5"; }
     }
   }
