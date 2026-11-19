@@ -547,6 +547,7 @@
     tip_good_record: 0, tip_danger: 0, tip_hint_order: 40
   };
   var SCATTER_MOVES = 3;
+  var GAP = 5, URGENT = ["tip_danger", "tip_trap", "tip_good_record"];   // pacing: see brain2049.py
   var RECORD_RANK = 8, OFF_CORNER_MOVES = 4;
   var LOST_MARGIN = 0.25, GOAL_REGRET = 0.15;   // measured - see brain2049.py
   var STUCK_KEYS = ["tip_stuck_block", "tip_stuck_chain", "tip_stuck_corner"];
@@ -565,6 +566,7 @@
   function Coach() { this.opened = false; this.reset(); }
   Coach.prototype.reset = function () {
     this.moveNo = 0; this.last = {}; this.prev = null; this.track = new Map();
+    this.times = {}; this.lastAny = null;
     this.danger = false; this.cornerTold = null; this.offCorner = 0; this.current = null;
     this.scattered = 0;
   };
@@ -586,8 +588,10 @@
   Coach.prototype.ready = function (key) {
     if (isStuckKey(key)) key = "stuck";
     var last = this.last[key];
-    var cd = COOLDOWN[key] === undefined ? 5 : COOLDOWN[key];
-    return last === undefined || this.moveNo - last >= cd;
+    var cd = (COOLDOWN[key] === undefined ? 5 : COOLDOWN[key]) <<
+             Math.min(3, Math.max(0, (this.times[key] || 0) - 1));
+    if (last !== undefined && this.moveNo - last < cd) return false;
+    return URGENT.indexOf(key) >= 0 || this.lastAny === null || this.moveNo - this.lastAny >= GAP;
   };
   Coach.prototype.isValid = function (tip, a) {
     if (this.moveNo - tip.born > tip.maxMoves) return false;
@@ -711,7 +715,10 @@
       if (cur === null || top.prio >= cur.prio) {
         if (!(cur !== null && cur.key === top.key && sameParams(cur.params, top.params))) {
           cur = top;
-          this.last[isStuckKey(top.key) ? "stuck" : top.key] = m;
+          var lk = isStuckKey(top.key) ? "stuck" : top.key;
+          this.last[lk] = m;
+          this.times[lk] = (this.times[lk] || 0) + 1;
+          if (URGENT.indexOf(lk) < 0) this.lastAny = m;
           if (isStuckKey(top.key)) this.track.get(top.track).told = true;
           if (top.key === "tip_corner_lost" || top.key === "tip_corner_made" ||
               top.key === "tip_corner_goal") this.cornerTold = m;

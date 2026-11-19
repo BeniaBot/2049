@@ -732,6 +732,14 @@ GOAL_REGRET = 0.15       # "you can get it back now": some move does it, is
 # clearly worse ones started at 0.19.
 STUCK_KEYS = ("tip_stuck_block", "tip_stuck_chain", "tip_stuck_corner")
 SCATTER_MOVES = 3        # big tiles spread out this long -> the general tip
+# Pacing. Review games (19.11) gave a careful player a tip every 12 moves
+# and the same "left the corner" every 6 moves to someone who keeps doing
+# it: right each time, but a good coach does not repeat himself. So each
+# repeat of a key in a game doubles its cooldown (x2, x4, at most x8), and
+# two non-urgent tips are at least GAP moves apart. Danger, traps and a new
+# record are never held back.
+GAP = 5
+URGENT = ("tip_danger", "tip_trap", "tip_good_record")
 
 
 class Coach:
@@ -742,6 +750,8 @@ class Coach:
     def reset(self):
         self.move_no = 0
         self.last = {}
+        self.times = {}              # key -> tips of that key so far this game
+        self.last_any = None         # move of the last non-urgent tip
         self.prev = None
         self.track = {}              # cell -> {"age", "told"}
         self.danger = False
@@ -775,7 +785,11 @@ class Coach:
     def _ready(self, key):
         key = "stuck" if key in STUCK_KEYS else key
         last = self.last.get(key)
-        return last is None or self.move_no - last >= COOLDOWN.get(key, 5)
+        cd = COOLDOWN.get(key, 5) << min(3, max(0, self.times.get(key, 0) - 1))
+        if last is not None and self.move_no - last < cd:
+            return False
+        return key in URGENT or self.last_any is None \
+            or self.move_no - self.last_any >= GAP
 
     # ---- validity -------------------------------------------------------
     def is_valid(self, tip, a):
@@ -936,7 +950,11 @@ class Coach:
                 if not (cur is not None and cur.key == top.key
                         and cur.params == top.params):
                     cur = top
-                    self.last["stuck" if top.key in STUCK_KEYS else top.key] = m
+                    k = "stuck" if top.key in STUCK_KEYS else top.key
+                    self.last[k] = m
+                    self.times[k] = self.times.get(k, 0) + 1
+                    if k not in URGENT:
+                        self.last_any = m
                     if top.key in STUCK_KEYS:
                         self.track[top.track]["told"] = True
                     if top.key in ("tip_corner_lost", "tip_corner_made",
