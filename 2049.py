@@ -34,6 +34,7 @@ _trace("python + imports ready")
 
 APP_NAME    = "2049"
 APP_VERSION = "0.18.0"
+_trace("version " + APP_VERSION)
 GITHUB_REPO = "BeniaBot/2049"   # owner/repo for auto-update checks
 
 # Optional RTL shaping for Hebrew. Falls back gracefully if unavailable.
@@ -971,6 +972,19 @@ def release_single_instance():
             h.close()
     except Exception:
         pass
+
+
+def independent_env():
+    """Environment for a process that must run as its own, separate copy.
+    A one-file PyInstaller exe hands its children hidden variables
+    (_PYI_*, _MEIPASS2) that make a newly started copy think it is a part
+    of THIS one and run from this copy's temporary folder - which is gone
+    the moment we exit. The relaunch after an update failed exactly so.
+    PYINSTALLER_RESET_ENVIRONMENT=1 is PyInstaller's documented switch."""
+    env = {k: v for k, v in os.environ.items()
+           if not (k.upper().startswith("_PYI_") or k.upper().startswith("_MEIPASS"))}
+    env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    return env
 
 
 def _cleanup_after_update():
@@ -3052,13 +3066,16 @@ class Game:
         the main thread; on success the game exits."""
         import subprocess
         path = self._update_file
+        env = independent_env()
         try:
             if self.update_kind == "installer":
                 release_single_instance()      # the installer checks our mutex
+                log = os.path.join(os.path.dirname(path), "setup.log")
                 subprocess.Popen([path, "/SILENT", "/SUPPRESSMSGBOXES",
                                   "/NORESTART", "/CLOSEAPPLICATIONS",
-                                  "/UPDATE=1", "/FROM=" + APP_VERSION],
-                                 close_fds=True)
+                                  "/UPDATE=1", "/FROM=" + APP_VERSION,
+                                  "/LOG=" + log],
+                                 close_fds=True, env=env)
             else:
                 exe = sys.executable if getattr(sys, "frozen", False) else None
                 if not exe:
@@ -3075,7 +3092,7 @@ class Game:
                     raise
                 release_single_instance()
                 subprocess.Popen([exe, "--updated-from=" + APP_VERSION],
-                                 cwd=os.path.dirname(exe), close_fds=True)
+                                 cwd=os.path.dirname(exe), close_fds=True, env=env)
             self.running = False               # leave: the new version takes over
         except Exception:
             self.update_status = "failed"
