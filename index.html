@@ -8,6 +8,9 @@
 <title>2049</title>
 <link rel="icon" type="image/png" sizes="64x64" href="icon_64.png">
 <link rel="apple-touch-icon" href="icon_256.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="2049">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -973,7 +976,12 @@ class Game{
   }
 }
 
-window.addEventListener("load",()=>{ window._game=new Game(); });
+window.addEventListener("load",()=>{
+  window._game=new Game();
+  // installable + playable offline (the page itself is always fetched fresh first)
+  if("serviceWorker" in navigator && (location.protocol==="https:"||location.hostname==="127.0.0.1"||location.hostname==="localhost"))
+    navigator.serviceWorker.register("sw.js").catch(()=>{});
+});
 </script>
 </body>
 </html>

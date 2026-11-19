@@ -35,7 +35,8 @@ try {
   Invoke-Command -Session $s { Remove-Item C:\bench -Recurse -Force -ErrorAction SilentlyContinue; New-Item -ItemType Directory C:\bench | Out-Null }
   Copy-Item $Exe -Destination ("C:\bench\" + $ExeName) -ToSession $s
   Copy-Item (Join-Path $PSScriptRoot $GuestScript) -Destination C:\bench\guest.ps1 -ToSession $s
-  foreach ($f in $Folders) {
+  # via "powershell -File" a list arrives as one comma-joined string
+  foreach ($f in ($Folders | ForEach-Object { $_ -split ',' } | Where-Object { $_ })) {
     $name = Split-Path $f -Leaf
     Invoke-Command -Session $s { param($n) New-Item -ItemType Directory -Force ("C:\bench\" + $n) | Out-Null } -ArgumentList $name
     Get-ChildItem $f -File -Filter *.exe | ForEach-Object {

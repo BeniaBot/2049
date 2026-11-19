@@ -1,0 +1,17 @@
+{
+  "name": "2049",
+  "short_name": "2049",
+  "description": "2048 במהדורה משוכללת, עם מוח שמבין את הלוח",
+  "lang": "he",
+  "dir": "rtl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#faf8ef",
+  "theme_color": "#faf8ef",
+  "icons": [
+    { "src": "icon_256.png", "sizes": "256x256", "type": "image/png" },
+    { "src": "icon_512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
