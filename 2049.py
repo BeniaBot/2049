@@ -1103,6 +1103,8 @@ class Game:
         self._move_no = 0
         self._game_dirty = False
         self._game_saved_at = 0.0
+        self._cfg_dirty = False
+        self._cfg_saved_at = 0.0
         self.overlay_buttons = {}
         self.update_status = "checking"
         self._start_update_check()
@@ -1303,12 +1305,13 @@ class Game:
                 "moves": self._move_no}
 
     def _save_game(self, force=False):
+        """Mark the game for saving; the actual write happens at rest
+        (see _flush_saves) unless forced."""
         self._game_dirty = True
-        now = time.monotonic()
-        if force or now - self._game_saved_at > 2.0:
+        if force:
             save_game_state(self._game_state())
             self._game_dirty = False
-            self._game_saved_at = now
+            self._game_saved_at = time.monotonic()
 
     def update_highscore(self):
         # A game "counts" for the saved best if it was cheat-free, OR the player
@@ -1318,7 +1321,25 @@ class Game:
         if cheating and not self.cfg.get("count_cheats_in_best", False):
             return
         if self.board.score > self.cfg["highscore"]:
-            self.cfg["highscore"] = self.board.score; save_config(self.cfg)
+            # written when the board is at rest (and on quit) - a safe write
+            # on every record-breaking move used to cost a frame mid-slide
+            self.cfg["highscore"] = self.board.score
+            self._cfg_dirty = True
+
+    def _flush_saves(self, force=False):
+        """Persist best score / current game - only while nothing moves
+        (or when forced), at most every 2 seconds."""
+        if not force and (self.animating or self.pop_tiles):
+            return
+        now = time.monotonic()
+        if getattr(self, "_cfg_dirty", False) and (force or now - self._cfg_saved_at > 2.0):
+            save_config(self.cfg)
+            self._cfg_dirty = False
+            self._cfg_saved_at = now
+        if self._game_dirty and (force or now - self._game_saved_at > 2.0):
+            save_game_state(self._game_state())
+            self._game_dirty = False
+            self._game_saved_at = now
 
     def held_spawn_params(self):
         """Hold-assists read at the moment of the move. Returns
@@ -2740,8 +2761,7 @@ class Game:
             if self.toast[1] <= 0: self.toast = None
         self._poll_brain()
         self._tick_tip()
-        if self._game_dirty and time.monotonic() - self._game_saved_at > 2.0:
-            self._save_game()
+        self._flush_saves()
         if self.state=="game": self.draw_game()
         elif self.state=="settings": self.draw_settings()
         elif self.state=="preferences": self.draw_preferences()
