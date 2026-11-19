@@ -510,16 +510,31 @@ STUCK_ORDER = {"block": 0, "chain": 1, "corner": 2}
 
 
 def big_tiles_scattered(b, n):
-    """The biggest tile (128+) sits in a corner, but another big tile - at
+    """The biggest tile (64+) sits in a corner, but another big tile - at
     least a quarter of it - stands alone, next to no other big tile: the
-    big numbers are spread out instead of side by side."""
+    big numbers are spread out instead of side by side. From 64 up: early
+    in the game is exactly when this habit is formed."""
     mx = max(b)
-    if mx < 7 or not max_in_corner(b, n):
+    if mx < 6 or not max_in_corner(b, n):
         return False
     big = {i for i, v in enumerate(b) if v >= mx - 2}
     if len(big) < 2:
         return False
     return any(not any(j in big for j in neighbours(i, n)) for i in big)
+
+
+def compose_moves(first, then):
+    """The tiles' paths through two moves in a row: {from: (to, merged)}
+    maps, as on_move takes them. A tile the first move does not list stayed
+    where it was."""
+    out = {}
+    for cell, (mid, merged) in first.items():
+        to, merged2 = then.get(mid, (mid, False))
+        out[cell] = (to, merged or merged2)
+    for cell, v in then.items():
+        if cell not in out and cell not in {mid for mid, _ in first.values()}:
+            out[cell] = v
+    return out
 
 
 def place_of(i, n):
@@ -712,7 +727,7 @@ COOLDOWN = {             # moves between two tips of the same key
     "stuck": 8, "tip_corner_lost": 6, "tip_corner_made": 6,
     "tip_corner_goal": 20, "tip_good_escape": 10, "tip_good_freed": 6,
     "tip_good_corner": 20, "tip_good_record": 0, "tip_danger": 0,
-    "tip_hint_order": 40,
+    "tip_hint_order": 40, "tip_hint_dirs": 40,
 }
 RECORD_RANK = 8          # praise new records from 256 up
 OFF_CORNER_MOVES = 4     # biggest tile out of a corner this long -> corner tip
@@ -731,6 +746,11 @@ GOAL_REGRET = 0.15       # "you can get it back now": some move does it, is
 # clearly worse ones started at 0.19.
 STUCK_KEYS = ("tip_stuck_block", "tip_stuck_chain", "tip_stuck_corner")
 SCATTER_MOVES = 3        # big tiles spread out this long -> the general tip
+DIRS_WINDOW = 12         # "all four directions in turn": the last 12 moves...
+DIRS_EACH = 2            # ...use every direction at least twice
+GOAL_RANK = 5            # "you can get it back into a corner" from 32 up
+OPEN_KEEP = 0.7          # the corner habit the opening tip asks for: kept for
+                         # at least this share of the last game -> not repeated
 # Pacing. Review games (19.11) gave a careful player a tip every 12 moves
 # and the same "left the corner" every 6 moves to someone who keeps doing
 # it: right each time, but a good coach does not repeat himself. So each
@@ -744,7 +764,8 @@ URGENT_BOARD = ("tip_danger", "tip_trap")    # about the board on screen only
 
 class Coach:
     def __init__(self):
-        self.opened = False          # opening tip: once per app session
+        self.opened = False          # the opening tip was shown this session
+        self.habit = None            # share of the last game the top tile kept a corner
         self.reset()
 
     def reset(self):
@@ -758,13 +779,21 @@ class Coach:
         self.corner_told = None      # move number of the last corner tip
         self.off_corner = 0          # moves the biggest tile spent off a corner
         self.scattered = 0           # moves the big tiles stayed spread out
+        self.recent_dirs = []        # directions of the last DIRS_WINDOW moves
+        self.corner_moves = 0        # moves (top tile 32+) with it in a corner
+        self.counted_moves = 0       # moves (top tile 32+) counted at all
         self.current = None
 
     # ---- lifecycle ------------------------------------------------------
     def new_game(self, analysis):
+        # how the last game went: a player who already keeps the corner is
+        # not told again; one who does not, is - at the start of every game,
+        # where this matters most
+        if self.counted_moves >= 20:
+            self.habit = self.corner_moves / self.counted_moves
         self.reset()
         self.prev = analysis
-        if not self.opened:
+        if not self.opened or self.habit is None or self.habit < OPEN_KEEP:
             self.opened = True
             self.current = Tip("tip_open", PRIO_OPEN, 0, max_moves=5,
                                kind="info", max_secs=7.0)
@@ -838,14 +867,24 @@ class Coach:
                 and x not in a.deadly and a.regret(x) <= GOAL_REGRET]
 
     # ---- the per-move step ---------------------------------------------
-    def on_move(self, d, moved, a, cheated=False):
+    def on_move(self, d, moved, a, cheated=False, steps=1, dirs=None):
         """d: direction played on self.prev; moved: {from_cell: (to_cell,
         merged)} for every tile of that move; a: analysis after the spawn.
+        A burst of moves too fast to analyse one by one arrives as ONE call:
+        steps = how many moves, dirs = their directions, moved = the tiles'
+        paths through all of them (compose_moves). Everything about the
+        board works the same; only the tips about one particular move (the
+        corner just lost or a tile made outside it) need steps == 1.
         Returns the tip to show now (may be the same object as before)."""
         p = self.prev
-        self.move_no += 1
+        self.move_no += steps
         m = self.move_no
         cands = []
+        self.recent_dirs = (self.recent_dirs + list(dirs or [d]))[-DIRS_WINDOW:]
+        if a.max_rank >= GOAL_RANK:
+            self.counted_moves += steps
+            if a.corner:
+                self.corner_moves += steps
 
         # -- stuck tracking, through the move --------------------------------
         new_track = {}
@@ -865,8 +904,8 @@ class Coach:
                 new_track[cell] = {"age": 0, "told": False}
             new_track[cell]["kind"] = a.stuck_info[cell][0]
         self.track = new_track
-        self.off_corner = 0 if a.corner else self.off_corner + 1
-        self.scattered = self.scattered + 1 if big_tiles_scattered(a.b, a.n) else 0
+        self.off_corner = 0 if a.corner else self.off_corner + steps
+        self.scattered = self.scattered + steps if big_tiles_scattered(a.b, a.n) else 0
 
         # -- danger ------------------------------------------------------------
         was_danger = self.danger
@@ -906,7 +945,7 @@ class Coach:
 
         # -- the biggest tile left its corner ---------------------------------
         if p is not None and p.corner and not a.corner \
-                and a.max_rank >= 6 and d in p.values:
+                and a.max_rank >= 6 and d in p.values and steps == 1:
             # blamed only when it was avoidable AND it mattered: a move that
             # kept the corner was clearly better. A forced or sensible exit
             # gets no tip at all.
@@ -924,7 +963,7 @@ class Coach:
                     (max(p.values[x] for x in keep) - p.values[d]) / p.unit >= LOST_MARGIN:
                 cands.append(Tip(key, PRIO_CORNER, m,
                                  {"value": 1 << a.max_rank}, max_moves=3))
-        elif not a.corner and a.max_rank >= 6 \
+        elif not a.corner and a.max_rank >= GOAL_RANK \
                 and self.off_corner >= OFF_CORNER_MOVES \
                 and (self.corner_told is None or m - self.corner_told > 8) \
                 and self._ready("tip_corner_goal"):
@@ -947,6 +986,14 @@ class Coach:
         if self.scattered >= SCATTER_MOVES and not self.danger and not a.deadly \
                 and self._ready("tip_hint_order"):
             cands.append(Tip("tip_hint_order", PRIO_HINT, m, max_moves=4,
+                             kind="info", max_secs=6.0))
+        # ...and the beginner's habit behind most lost corners: every one of
+        # the four directions in turn (each at least twice in the last 12
+        # moves). Pick one and leave it alone, and the corner holds.
+        elif len(self.recent_dirs) >= DIRS_WINDOW and a.max_rank >= 4 \
+                and min(self.recent_dirs.count(x) for x in DIRS) >= DIRS_EACH \
+                and not self.danger and not a.deadly and self._ready("tip_hint_dirs"):
+            cands.append(Tip("tip_hint_dirs", PRIO_HINT, m, max_moves=4,
                              kind="info", max_secs=6.0))
 
         # -- earned praise --------------------------------------------------------

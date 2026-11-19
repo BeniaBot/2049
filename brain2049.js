@@ -350,7 +350,7 @@
   /* = brain2049.stuck_kind: ["block"|"chain"|"corner", bigRank] or null */
   function bigTilesScattered(b, n) {      // = Python big_tiles_scattered
     var mx = maxOf(b);
-    if (mx < 7 || !maxInCorner(b, n)) return false;
+    if (mx < 6 || !maxInCorner(b, n)) return false;
     var big = [];
     for (var i = 0; i < b.length; i++) if (b[i] >= mx - 2) big.push(i);
     if (big.length < 2) return false;
@@ -396,6 +396,19 @@
   }
   var STUCK_ORDER = { block: 0, chain: 1, corner: 2 };
 
+  /* = Python compose_moves: Maps from -> [to, merged] */
+  function composeMoves(first, then) {
+    var out = new Map(), mids = new Set();
+    first.forEach(function (v) { mids.add(v[0]); });
+    first.forEach(function (v, cell) {
+      var t = then.has(v[0]) ? then.get(v[0]) : [v[0], false];
+      out.set(cell, [t[0], v[1] || t[1]]);
+    });
+    then.forEach(function (v, cell) {
+      if (!out.has(cell) && !mids.has(cell)) out.set(cell, v);
+    });
+    return out;
+  }
   function placeOf(i, n) {
     var r = Math.floor(i / n), c = i % n;
     var top = r === 0, bottom = r === n - 1, left = c === 0, right = c === n - 1;
@@ -540,9 +553,9 @@
   var COOLDOWN = {
     stuck: 8, tip_corner_lost: 6, tip_corner_made: 6, tip_corner_goal: 20,
     tip_good_escape: 10, tip_good_freed: 6, tip_good_corner: 20,
-    tip_good_record: 0, tip_danger: 0, tip_hint_order: 40
+    tip_good_record: 0, tip_danger: 0, tip_hint_order: 40, tip_hint_dirs: 40
   };
-  var SCATTER_MOVES = 3;
+  var SCATTER_MOVES = 3, DIRS_WINDOW = 12, DIRS_EACH = 2, GOAL_RANK = 5, OPEN_KEEP = 0.7;   // see brain2049.py
   var GAP = 5, URGENT = ["tip_danger", "tip_trap", "tip_good_record"];   // pacing: see brain2049.py
   var RECORD_RANK = 8, OFF_CORNER_MOVES = 4;
   var LOST_MARGIN = 0.25, GOAL_REGRET = 0.15;   // measured - see brain2049.py
@@ -559,17 +572,18 @@
   }
   function sameParams(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 
-  function Coach() { this.opened = false; this.reset(); }
+  function Coach() { this.opened = false; this.habit = null; this.reset(); }
   Coach.prototype.reset = function () {
     this.moveNo = 0; this.last = {}; this.prev = null; this.track = new Map();
     this.times = {}; this.lastAny = null;
     this.danger = false; this.cornerTold = null; this.offCorner = 0; this.current = null;
-    this.scattered = 0;
+    this.scattered = 0; this.recentDirs = []; this.cornerMoves = 0; this.countedMoves = 0;
   };
   Coach.prototype.newGame = function (a) {
+    if (this.countedMoves >= 20) this.habit = this.cornerMoves / this.countedMoves;
     this.reset();
     this.prev = a;
-    if (!this.opened) {
+    if (!this.opened || this.habit === null || this.habit < OPEN_KEEP) {
       this.opened = true;
       this.current = new Tip("tip_open", PRIO_OPEN, 0, {}, { maxMoves: 5, kind: "info", maxSecs: 7.0 });
     }
@@ -618,8 +632,17 @@
     });
   }
   /* moved: Map from_cell -> [to_cell, merged] */
-  Coach.prototype.onMove = function (d, moved, a, cheated) {
-    var p = this.prev, m = ++this.moveNo, cands = [], self = this;
+  /* a burst of moves arrives as one call: steps, dirs, and moved composed
+     through all of them (composeMoves) - see brain2049.py */
+  Coach.prototype.onMove = function (d, moved, a, cheated, steps, dirs) {
+    if (steps === undefined || steps === null) steps = 1;
+    this.moveNo += steps;
+    var p = this.prev, m = this.moveNo, cands = [], self = this;
+    this.recentDirs = this.recentDirs.concat(dirs && dirs.length ? dirs : [d]).slice(-DIRS_WINDOW);
+    if (a.maxRank >= GOAL_RANK) {
+      this.countedMoves += steps;
+      if (a.corner) this.cornerMoves += steps;
+    }
     var mv = function (cell) { return moved.has(cell) ? moved.get(cell) : [cell, false]; };
 
     // stuck tracking through the move
@@ -639,8 +662,8 @@
       newTrack.get(cell).kind = a.stuckInfo.get(cell)[0];
     });
     this.track = newTrack;
-    this.offCorner = a.corner ? 0 : this.offCorner + 1;
-    this.scattered = bigTilesScattered(a.b, a.n) ? this.scattered + 1 : 0;
+    this.offCorner = a.corner ? 0 : this.offCorner + steps;
+    this.scattered = bigTilesScattered(a.b, a.n) ? this.scattered + steps : 0;
 
     // danger / trap
     var wasDanger = this.danger;
@@ -677,7 +700,7 @@
     }
 
     // the biggest tile left its corner
-    if (p && p.corner && !a.corner && a.maxRank >= 6 && p.hasValue(d)) {
+    if (p && p.corner && !a.corner && a.maxRank >= 6 && p.hasValue(d) && steps === 1) {
       // blamed only when avoidable AND it mattered (see brain2049.py)
       // made by this very move (a merge): built outside the corner, not "left"
       var ckey = a.maxRank > p.maxRank ? "tip_corner_made" : "tip_corner_lost";
@@ -689,7 +712,7 @@
         if ((kv - p.values[d]) / p.unit >= LOST_MARGIN)
           cands.push(new Tip(ckey, PRIO_CORNER, m, { value: Math.pow(2, a.maxRank) }, { maxMoves: 3 }));
       }
-    } else if (!a.corner && a.maxRank >= 6 && this.offCorner >= OFF_CORNER_MOVES &&
+    } else if (!a.corner && a.maxRank >= GOAL_RANK && this.offCorner >= OFF_CORNER_MOVES &&
                (this.cornerTold === null || m - this.cornerTold > 8) &&
                this.ready("tip_corner_goal")) {
       // out of a corner for a while, and one move brings it back at a fair price
@@ -704,6 +727,16 @@
     if (this.scattered >= SCATTER_MOVES && !this.danger && !a.deadly.length &&
         this.ready("tip_hint_order")) {
       cands.push(new Tip("tip_hint_order", PRIO_HINT, m, {}, { maxMoves: 4, kind: "info", maxSecs: 6.0 }));
+    } else if (this.recentDirs.length >= DIRS_WINDOW && a.maxRank >= 4 && !this.danger &&
+               !a.deadly.length && this.ready("tip_hint_dirs")) {
+      var least = Infinity;
+      for (var di = 0; di < 4; di++) {
+        var cnt = 0;
+        for (var dj = 0; dj < this.recentDirs.length; dj++) if (this.recentDirs[dj] === DIRS[di]) cnt++;
+        if (cnt < least) least = cnt;
+      }
+      if (least >= DIRS_EACH)
+        cands.push(new Tip("tip_hint_dirs", PRIO_HINT, m, {}, { maxMoves: 4, kind: "info", maxSecs: 6.0 }));
     }
 
     // earned praise
@@ -745,7 +778,7 @@
     canMove: canMove, heuristic: heuristic, moveValues: moveValues,
     bestMove: bestMove, positionValue: positionValue, pickDepth: pickDepth,
     survival: survival, moveSurvival: moveSurvival, harmUnit: harmUnit,
-    tileHarms: tileHarms, chainBreaker: chainBreaker, placeOf: placeOf,
+    tileHarms: tileHarms, chainBreaker: chainBreaker, placeOf: placeOf, composeMoves: composeMoves,
     maxInCorner: maxInCorner, bestSpawn: bestSpawn, stuckKind: stuckKind,
     Analysis: Analysis, Coach: Coach, Tip: Tip,
     DANGER_ENTER: DANGER_ENTER, DANGER_EXIT: DANGER_EXIT, CHEAT_T: CHEAT_T

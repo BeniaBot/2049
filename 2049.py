@@ -181,6 +181,7 @@ STRINGS = {
         "tip_stuck_corner":"ה-{value} תפס את הפינה של ה-{big}",
         "tip_corner_lost":"ה-{value} יצא מהפינה – כדאי לשמור אותו שם",
         "tip_corner_goal":"אפשר להחזיר עכשיו את ה-{value} לפינה",
+        "tip_hint_dirs":"טיפ: בחר כיוון אחד והימנע ממנו – כך הגדול נשאר בפינה",
         "tip_hint_order":"טיפ: שמור את הגדולים צמודים ובסדר יורד – כך קל לאחד אותם",
         "tip_corner_made":"ה-{value} נוצר מחוץ לפינה – כדאי לאחד לכיוון הפינה",
         "tip_good_escape":"\u05d9\u05e4\u05d4! \u05d9\u05e6\u05d0\u05ea \u05de\u05d4\u05de\u05e6\u05d1 \u05d4\u05e7\u05e9\u05d4",
@@ -286,6 +287,7 @@ STRINGS = {
         "tip_stuck_corner":"The {value} took your {big}'s corner",
         "tip_corner_lost":"Your {value} left its corner - try to keep it there",
         "tip_corner_goal":"You can get your {value} back into a corner now",
+        "tip_hint_dirs":"Tip: pick one direction and avoid it - your biggest tile stays in its corner",
         "tip_hint_order":"Tip: keep big tiles side by side, in descending order - they merge easily",
         "tip_corner_made":"Your {value} was made outside the corner - merge toward the corner",
         "tip_good_escape":"Nice - you got out of that tight spot",
@@ -1147,10 +1149,16 @@ class Analyst:
     interpreter lock, so thinking WHILE tiles slide made frames late
     (measured: 9-12% of frames over budget). The worker therefore waits
     while anything animates and thinks once the board settles; only the
-    newest board is kept waiting (a burst of fast moves = one analysis)."""
+    newest board is kept waiting (a burst of fast moves = one analysis).
+    But a player who never stops would never be analysed at all - no tip,
+    not even a warning (measured 20.11: 0 tips in 771 fast moves) - so a
+    board never waits longer than MAX_WAIT: then it is analysed even while
+    tiles move, and the coach gets the whole burst at once."""
+    MAX_WAIT = 0.35
 
     def __init__(self):
         self._job = None
+        self._since = None           # when the oldest unanalysed board arrived
         self._done = deque()
         self._busy_ui = False
         self._working = False
@@ -1162,6 +1170,8 @@ class Analyst:
         snap = [row[:] for row in grid]
         with self._cv:
             self._job = (tag, snap)              # newer board supersedes
+            if self._since is None:
+                self._since = time.monotonic()
             self._cv.notify()
 
     def set_ui_busy(self, busy):
@@ -1173,10 +1183,17 @@ class Analyst:
     def _run(self):
         while True:
             with self._cv:
-                while self._job is None or self._busy_ui:
-                    self._cv.wait()
+                while True:
+                    if self._job is not None:
+                        waited = time.monotonic() - self._since
+                        if not self._busy_ui or waited >= self.MAX_WAIT:
+                            break
+                        self._cv.wait(self.MAX_WAIT - waited)
+                    else:
+                        self._cv.wait()
                 tag, grid = self._job
                 self._job = None
+                self._since = None
                 self._working = True
             try:
                 a = brain.Analysis.of_grid(grid)
@@ -1747,19 +1764,29 @@ class Game:
         for tag, a in self.analyst.results():
             how = self._pending_coach.pop(tag, None)
             # boards superseded by a burst of fast moves were never analysed
-            skipped = [t for t in self._pending_coach if t < tag]
+            skipped = sorted(t for t in self._pending_coach if t < tag)
             news = any(self._pending_coach[t] == "new" for t in skipped)
+            burst = [(t, self._pending_coach[t]) for t in skipped] + [(tag, how)]
             for t in skipped:
                 del self._pending_coach[t]
             if a is None or how is None:
                 continue
             if how == "new" or news:
                 self.coach.new_game(a)
-            elif how == "resync" or tag != self._coach_tag + 1:
-                self.coach.resync(a)      # can't follow tiles across a gap
+            elif burst and burst[0][0] == self._coach_tag + 1 and \
+                    all(isinstance(h, tuple) for _, h in burst):
+                # one move, or a burst too fast to analyse move by move: the
+                # tiles are followed through every move of it
+                moved, dirs, cheated = burst[0][1][2], [], False
+                for i, (_, h) in enumerate(burst):
+                    if i:
+                        moved = brain.compose_moves(moved, h[2])
+                    dirs.append(h[1])
+                    cheated = cheated or h[3]
+                self.coach.on_move(dirs[-1], moved, a, cheated,
+                                   steps=len(burst), dirs=dirs)
             else:
-                _, d, moved, cheated = how
-                self.coach.on_move(d, moved, a, cheated)
+                self.coach.resync(a)      # an assist / undo in between
             self._coach_tag = tag
             if tag == self._board_tag:
                 self._analysis = a

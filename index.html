@@ -262,6 +262,7 @@ he: {
   tip_stuck_corner:"ה-{value} תפס את הפינה של ה-{big}",
   tip_corner_lost:"ה-{value} יצא מהפינה – כדאי לשמור אותו שם",
   tip_corner_goal:"אפשר להחזיר עכשיו את ה-{value} לפינה",
+  tip_hint_dirs:"טיפ: בחר כיוון אחד והימנע ממנו – כך הגדול נשאר בפינה",
   tip_hint_order:"טיפ: שמור את הגדולים צמודים ובסדר יורד – כך קל לאחד אותם",
   tip_corner_made:"ה-{value} נוצר מחוץ לפינה – כדאי לאחד לכיוון הפינה",
   tip_good_escape:"יפה! יצאת מהמצב הקשה", tip_good_freed:"יפה מאוד! שחררת את האריח התקוע",
@@ -315,6 +316,7 @@ en: {
   tip_stuck_corner:"The {value} took your {big}'s corner",
   tip_corner_lost:"Your {value} left its corner - try to keep it there",
   tip_corner_goal:"You can get your {value} back into a corner now",
+  tip_hint_dirs:"Tip: pick one direction and avoid it - your biggest tile stays in its corner",
   tip_hint_order:"Tip: keep big tiles side by side, in descending order - they merge easily",
   tip_corner_made:"Your {value} was made outside the corner - merge toward the corner",
   tip_good_escape:"Nice - you got out of that tight spot", tip_good_freed:"Great - you freed the stuck tile",
@@ -606,18 +608,29 @@ class Game{
     this.boardTag++; this.pending.set(this.boardTag,how); this.analysis=null;
     if(how==="new"){ this.tip=null; this.renderTip(); }
     clearTimeout(this._anaTimer);
-    // after the slide + pop: a burst of fast moves becomes one analysis
-    this._anaTimer=setTimeout(()=>this.runBrain(), how==="new"?60:300);
+    // after the slide + pop: a burst of fast moves becomes one analysis -
+    // but never more than 0.4 s after the first unanalysed move: a player
+    // who never stops used to get no tip at all, not even a warning
+    const now=Date.now();
+    if(this.pending.size===1) this._firstPending=now;
+    const wait=how==="new"?60:Math.max(0,Math.min(300,400-(now-this._firstPending)));
+    this._anaTimer=setTimeout(()=>this.runBrain(), wait);
   }
   runBrain(){
     const tag=this.boardTag, how=this.pending.get(tag); let news=false;
     for(const [t,h] of this.pending){ if(t<tag && h==="new") news=true; }
+    const burst=[...this.pending].sort((x,y)=>x[0]-y[0]);
     this.pending.clear();
     if(how===undefined) return;
     const a=B.Analysis.ofGrid(this.board.grid);
     if(how==="new"||news) this.coach.newGame(a);
-    else if(how==="resync"||tag!==this.coachTag+1) this.coach.resync(a);
-    else this.coach.onMove(how[1],how[2],a,how[3]);
+    else if(burst.length && burst[0][0]===this.coachTag+1 && burst.every(([,h])=>Array.isArray(h))){
+      // one move, or a burst: the tiles are followed through every move of it
+      let moved=burst[0][1][2]; const dirs=[]; let cheated=false;
+      burst.forEach(([,h],i)=>{ if(i) moved=B.composeMoves(moved,h[2]); dirs.push(h[1]); cheated=cheated||!!h[3]; });
+      this.coach.onMove(dirs[dirs.length-1],moved,a,cheated,burst.length,dirs);
+    }
+    else this.coach.resync(a);           // an assist / undo in between
     this.coachTag=tag; this.analysis=a;
     if(this.coach.current!==this.tip){ this.tip=this.coach.current; this.tipSince=Date.now(); this.renderTip(); }
   }

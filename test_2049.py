@@ -203,6 +203,7 @@ class TestCoach(unittest.TestCase):
     def fresh(self, rows):
         c = B.Coach()
         c.opened = True
+        c.habit = 1.0              # a player who keeps the corner: no opening tip
         c.new_game(ana(rows))
         return c
 
@@ -386,12 +387,51 @@ class TestCoach(unittest.TestCase):
         tip = c.on_move(B.RIGHT, moved, ana(after))
         self.assertTrue(tip is None or tip.key != "tip_corner_lost")
 
-    def test_opening_tip_once_per_session(self):
+    def test_opening_tip_until_the_corner_habit_shows(self):
+        start = ana([[2, 0, 0, 0], Z, Z, Z])
         c = B.Coach()
-        c.new_game(ana([[2, 0, 0, 0], Z, Z, Z]))
-        self.assertEqual(c.current.key, "tip_open")
-        c.new_game(ana([[2, 0, 0, 0], Z, Z, Z]))
+        c.new_game(start)
+        self.assertEqual(c.current.key, "tip_open")        # first game: always
+        c.counted_moves, c.corner_moves = 40, 8           # the corner was not kept
+        c.new_game(start)
+        self.assertEqual(c.current.key, "tip_open")        # so: again
+        c.counted_moves, c.corner_moves = 40, 36          # now it was
+        c.new_game(start)
+        self.assertIsNone(c.current)                       # not told again
+        c.counted_moves, c.corner_moves = 5, 0            # a short game says nothing
+        c.new_game(start)
         self.assertIsNone(c.current)
+
+    def test_beginner_directions_tip(self):
+        # all four directions in turn, each at least twice in the last 12
+        rows = [[2, 4, 0, 0], [4, 16, 2, 0], [8, 2, 0, 0], [2, 0, 0, 0]]
+        c = self.fresh(rows)
+        tip = None
+        for d in [B.LEFT, B.UP, B.RIGHT, B.DOWN] * 3:
+            tip = c.on_move(d, ident(rows), ana(rows)) or tip
+        self.assertIsNotNone(tip)
+        self.assertEqual(tip.key, "tip_hint_dirs")
+        # a player who sticks to three directions never hears it
+        c = self.fresh(rows)
+        tips = [c.on_move(d, ident(rows), ana(rows)) for d in [B.LEFT, B.DOWN, B.RIGHT] * 4]
+        self.assertTrue(all(t is None or t.key != "tip_hint_dirs" for t in tips))
+
+    def test_a_burst_of_moves_is_followed_tile_by_tile(self):
+        # three moves too fast to analyse one by one: the coach gets them as
+        # one step - tiles followed through all three (compose_moves)
+        m1 = {0: (1, False), 5: (5, False)}
+        m2 = {1: (2, False), 5: (6, True)}
+        m3 = {2: (3, False), 6: (6, False)}
+        both = B.compose_moves(B.compose_moves(m1, m2), m3)
+        self.assertEqual(both[0], (3, False))
+        self.assertEqual(both[5], (6, True))
+        # and the counters advance by the whole burst
+        rows = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [8, 4, 2, 128]]
+        c = self.fresh(rows)
+        c.on_move(B.LEFT, ident(rows), ana(rows), steps=5, dirs=[B.LEFT, B.UP] * 2 + [B.LEFT])
+        self.assertEqual(c.move_no, 5)
+        self.assertEqual(c.off_corner, 0)
+        self.assertEqual(len(c.recent_dirs), 5)
 
 
 # ===========================================================================
