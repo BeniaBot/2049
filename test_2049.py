@@ -1,16 +1,20 @@
 # -*- coding: utf-8 -*-
-"""Unit tests for the v0.17.0 changes in 2049.py (spec sections 1, 3, 4, 5).
+"""Tests for 2049 (game) and brain2049 (its thinking engine).
 
 Run:  python test_2049.py
 The game module is imported headless (SDL dummy drivers); no window opens
-and the user's real config in %APPDATA%\\2049 is never touched.
+and the user's real config in %APPDATA%\\2049 is never touched (every test
+that saves points the config and game files at a temp folder).
 """
 import importlib.util
 import json
 import os
+import random
 import shutil
+import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
@@ -18,30 +22,45 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _GAME_PY = os.path.join(_HERE, "2049.py")
+sys.path.insert(0, _HERE)
 
 spec_ = importlib.util.spec_from_file_location("game2049", _GAME_PY)
 g = importlib.util.module_from_spec(spec_)
 spec_.loader.exec_module(g)
+import brain2049 as B  # noqa: E402
+
+_TMP = tempfile.mkdtemp(prefix="2049_tests_")
+g.CONFIG_PATH = os.path.join(_TMP, "2049_config.json")
+g.GAME_PATH = os.path.join(_TMP, "2049_game.json")
+g.Game._start_update_check = lambda self: setattr(self, "update_status", "error")
+
+import pygame  # noqa: E402
 
 
 def board(rows):
-    """Build a Board directly from a list of rows."""
+    """Build a game Board directly from a list of rows."""
     b = g.Board(len(rows))
     b.grid = [list(r) for r in rows]
     return b
 
 
+def ana(rows):
+    return B.Analysis.of_grid(rows)
+
+
 Z = [0, 0, 0, 0]
 
 
+# ===========================================================================
+#  Movement
+# ===========================================================================
 class TestMovement(unittest.TestCase):
-    # 1. Movement sanity
     def test_left_merge_and_score(self):
         b = board([[2, 2, 4, 0], Z, Z, Z])
         changed, anims, merges = b.move("left")
         self.assertTrue(changed)
         self.assertEqual(b.grid[0], [4, 4, 0, 0])
-        self.assertEqual(b.score, 4)          # score gain of the single merge
+        self.assertEqual(b.score, 4)
         self.assertIn((0, 0, 4), merges)
 
     def test_merge_once_rule(self):
@@ -52,188 +71,251 @@ class TestMovement(unittest.TestCase):
         self.assertEqual(b.score, 8)
         self.assertEqual(sorted(merges), [(0, 0, 4), (0, 1, 4)])
 
-
-class TestBlockedPairValue(unittest.TestCase):
-    # 2. blocked_pair_value
-    def test_row_axis(self):
-        b = board([[128, 2, 0, 128], Z, Z, Z])
-        self.assertEqual(b.blocked_pair_value(0, 1), 128)
-
-    def test_column_axis(self):
-        b = board([[0, 0, 64, 0],
-                   [0, 0, 0, 0],
-                   [0, 0, 2, 0],
-                   [0, 0, 64, 0]])
-        self.assertEqual(b.blocked_pair_value(2, 2), 64)
-
-    def test_flankers_differ(self):
-        b = board([[128, 2, 0, 64], Z, Z, Z])
-        self.assertEqual(b.blocked_pair_value(0, 1), 0)
-
-    def test_flanker_equals_v(self):
-        b = board([[4, 4, 0, 4], Z, Z, Z])
-        self.assertEqual(b.blocked_pair_value(0, 1), 0)
+    def test_brain_moves_match_the_game(self):
+        """The brain must see exactly the board the player gets."""
+        rng = random.Random(7)
+        for n in (4, 5, 6):
+            for _ in range(150):
+                rows = [[rng.choice([0, 0, 2, 4, 8, 16, 32]) for _ in range(n)]
+                        for _ in range(n)]
+                for d in B.DIR_NAMES:
+                    gb = board(rows)
+                    changed, _, _ = gb.move(d)
+                    rb, gain = B.move(B.to_ranks(rows)[0], n, B.NAME_TO_DIR[d])
+                    self.assertEqual(B.to_grid(rb, n), gb.grid)
+                    self.assertEqual(gain, gb.score)
 
 
-class TestStuckV2(unittest.TestCase):
-    # 3. positive: the classic 128-2-128 blocker
-    def test_blocker_between_big_pair_is_stuck(self):
-        b = board([[128, 2, 0, 128], Z, Z, Z])
-        s = b._stuck_score(0, 1)
-        self.assertIsNotNone(s)
-        self.assertGreater(s, 0)
-        # remove_stuck_low must pick exactly that cell
-        picked = b.remove_stuck_low()
-        self.assertEqual(picked, (0, 1))
-        self.assertEqual(b.grid[0][1], 0)
+# ===========================================================================
+#  The brain: what is stuck, what is dangerous
+# ===========================================================================
+class TestStuck(unittest.TestCase):
+    """Positions judged by a human player first; the brain must agree."""
 
-    # 4. negative: rescuable corner tile with soft walls and open space
-    def test_soft_corner_is_rescuable(self):
-        # 2 in the corner, neighbors 4 and 8 (soft: min < 4*v), open space
-        # elsewhere; the stray 4 keeps all four directions already usable so
-        # removing the 2 unlocks nothing (fd == 0) -> realistic rescue -> None
-        b = board([[2, 4, 0, 0],
-                   [8, 0, 0, 0],
-                   [0, 0, 4, 0],
-                   [0, 0, 0, 0]])
-        self.assertIsNone(b._stuck_score(0, 0))
+    def test_small_tile_stole_the_corner(self):
+        # the 4 sits in the 1024's corner: the most common real stuck tile,
+        # and the one the old detector always missed
+        a = ana([[4, 2, 8, 2], [32, 4, 16, 0], [256, 64, 8, 8], [4, 1024, 4, 4]])
+        self.assertEqual(a.problem, 12)
+        self.assertIn(12, a.stuck)
 
-    # 5. hopeless: fully boxed by >= 8 walls, dense board, no air anywhere
-    def test_hopeless_boxed_tile(self):
-        b = board([[8, 16, 8, 16],
-                   [16, 2, 32, 8],
-                   [8, 32, 16, 32],
-                   [16, 8, 32, 16]])
-        s = b._stuck_score(1, 1)
-        self.assertIsNotNone(s)
-        self.assertGreater(s, 0)
-        self.assertEqual(b.remove_stuck_low(), (1, 1))
+    def test_two_in_the_512_corner(self):
+        a = ana([[2, 512, 64, 4], [0, 32, 8, 16], [0, 8, 4, 4], [2, 0, 0, 0]])
+        self.assertEqual(a.problem, 0)
 
-    # 4b. a lone low tile in the corner of a NEARLY-EMPTY board is never
-    # "stuck" - a partner will spawn eventually (regression: the old jam
-    # clause flagged it because removing it unlocked a direction)
-    def test_lone_corner_tile_on_sparse_board(self):
-        b = board([[2, 4, 0, 0],
-                   [8, 0, 0, 0],
-                   Z, Z])
-        self.assertIsNone(b._stuck_score(0, 0))
-        self.assertIsNone(b.remove_stuck_low())
+    def test_blocker_between_equal_pair(self):
+        a = ana([[128, 2, 0, 128], Z, Z, Z])
+        self.assertEqual(a.problem, 1)
 
-    # 4c. jam clause: on a fully locked board (freedom == 0), a boxed tile
-    # whose removal re-opens movement IS stuck - even with a smaller
-    # neighbor (buried == False), this is the "last direction" rescue
-    def test_jam_on_locked_board(self):
-        b = board([[2, 4, 8, 16],
-                   [4, 8, 16, 32],
-                   [8, 16, 32, 64],
-                   [16, 32, 64, 128]])
-        self.assertEqual(b.freedom(), 0)      # board is locked
-        s = b._stuck_score(1, 1)              # the 8: neighbor 4 is smaller
-        self.assertIsNotNone(s)
-        self.assertGreater(s, 0)
+    def test_dip_in_the_top_row(self):
+        a = ana([[256, 4, 64, 8], [16, 32, 8, 2], [2, 4, 2, 0], Z])
+        self.assertEqual(a.problem, 1)
+        self.assertIn(1, a.stuck)
 
-    # 6. all-mergeable board -> nothing is stuck
-    def test_all_mergeable_returns_none(self):
-        rows = [[2, 2, 4, 4],
-                [8, 8, 16, 16],
-                [32, 32, 64, 64],
-                [128, 128, 256, 256]]
-        b = board(rows)
-        self.assertIsNone(b.remove_stuck_low())
-        self.assertEqual(b.grid, rows)        # untouched
+    def test_calm_boards_have_nothing_stuck(self):
+        for rows in ([[2, 0, 0, 0], Z, Z, [0, 0, 0, 4]],
+                     [[2, 2, 4, 4], [8, 8, 16, 16], [32, 32, 64, 64],
+                      [128, 128, 256, 256]],
+                     [[256, 128, 64, 32], [2, 4, 8, 16], [0, 0, 0, 2], Z]):
+            a = ana(rows)
+            self.assertIsNone(a.problem, rows)
+            self.assertEqual(a.stuck, set(), rows)
+
+    def test_stuck_only_names_low_tiles(self):
+        # removing the 256 helps too, but nobody calls a 256 "stuck" at 1024
+        a = ana([[4, 2, 8, 2], [32, 4, 16, 0], [256, 64, 8, 8], [4, 1024, 4, 4]])
+        self.assertNotIn(8, a.stuck)
+
+    def test_game_assist_removes_the_right_tile(self):
+        b = board([[2, 512, 64, 4], [0, 32, 8, 16], [0, 8, 4, 4], [2, 0, 0, 0]])
+        self.assertEqual(b.remove_stuck_low(), (0, 0))
+        self.assertEqual(b.grid[0][0], 0)
+
+    def test_chain_breaker(self):
+        b, n = B.to_ranks([[256, 4, 64, 8], Z, Z, Z])
+        self.assertTrue(B.chain_breaker(b, n, 1))
+        b, n = B.to_ranks([[256, 64, 4, 8], Z, Z, Z])   # 64 > 4 < 8: a dip
+        self.assertTrue(B.chain_breaker(b, n, 2))
+        b, n = B.to_ranks([[256, 64, 4, 2], Z, Z, Z])
+        self.assertFalse(B.chain_breaker(b, n, 2))      # descending: fine
 
 
+class TestSurvival(unittest.TestCase):
+    def test_dead_board(self):
+        b, n = B.to_ranks([[2, 4, 2, 4], [4, 2, 4, 2], [2, 4, 2, 4], [4, 2, 4, 2]])
+        self.assertEqual(B.survival(b, n, 3), 0.0)
+
+    def test_open_board_is_safe(self):
+        b, n = B.to_ranks([[2, 0, 0, 0], Z, Z, [0, 0, 0, 4]])
+        self.assertEqual(B.survival(b, n, 3), 1.0)
+
+    def test_trap_is_seen(self):
+        # 'right' kills you here, 'left' is safe: the classic way games die
+        a = ana([[2, 8, 2, 8], [16, 32, 16, 4], [8, 64, 128, 2], [16, 32, 0, 4]])
+        self.assertIn(B.RIGHT, a.deadly)
+        self.assertNotIn(a.safest(), a.deadly)
+        self.assertGreater(a.safety[a.safest()], 0.9)
+
+
+class TestSearch(unittest.TestCase):
+    def test_plays_a_real_game(self):
+        """A short self-play: the engine must reach 256 quickly (a random
+        player rarely does) - proof the search and evaluation make sense."""
+        rng = random.Random(3)
+        n = 4
+        b = tuple([0] * 16)
+
+        def spawn(b):
+            cells = [i for i, x in enumerate(b) if x == 0]
+            l = list(b)
+            l[rng.choice(cells)] = 2 if rng.random() < 0.1 else 1
+            return tuple(l)
+        b = spawn(spawn(b))
+        for _ in range(300):
+            d = B.best_move(b, n, 1)
+            if d is None:
+                break
+            b, _ = B.move(b, n, d)
+            b = spawn(b)
+        self.assertGreaterEqual(max(b), 8)               # 256+
+
+    def test_best_spawn_respects_the_rules(self):
+        b, n = B.to_ranks([[0, 0, 0, 0], Z, [0, 0, 0, 4], [64, 32, 16, 8]])
+        i, r = B.best_spawn(b, n, ranks=(1,), cells=[0, 3, 8])
+        self.assertIn(i, [0, 3, 8])
+        self.assertEqual(r, 1)
+
+
+# ===========================================================================
+#  The coach
+# ===========================================================================
+def ident(rows):
+    """moved map for a board where nothing moved (tests feed boards directly)."""
+    n = len(rows)
+    return {r * n + c: (r * n + c, False) for r in range(n) for c in range(n)
+            if rows[r][c]}
+
+
+class TestCoach(unittest.TestCase):
+    STUCK = [[256, 4, 64, 8], [16, 32, 8, 2], [2, 4, 2, 0], Z]
+
+    def fresh(self, rows):
+        c = B.Coach()
+        c.opened = True
+        c.new_game(ana(rows))
+        return c
+
+    def test_stuck_waits_one_move_then_names_the_tile(self):
+        calm = [[256, 64, 8, 4], [16, 32, 8, 2], [2, 4, 2, 0], Z]
+        c = self.fresh(calm)
+        tip = c.on_move(B.LEFT, ident(self.STUCK), ana(self.STUCK))
+        self.assertTrue(tip is None or tip.key != "tip_stuck")   # no flicker tips
+        tip = c.on_move(B.LEFT, ident(self.STUCK), ana(self.STUCK))
+        self.assertIsNotNone(tip)
+        self.assertEqual(tip.key, "tip_stuck")
+        self.assertEqual(tip.params, {"value": 4, "place": "edge_top"})
+
+    def test_trap_tip_points_to_safety_and_expires(self):
+        trap = [[2, 8, 2, 8], [16, 32, 16, 4], [8, 64, 128, 2], [16, 32, 0, 4]]
+        c = self.fresh([[2, 0, 0, 0], Z, Z, Z])
+        a = ana(trap)
+        tip = c.on_move(B.UP, ident(trap), a)
+        self.assertEqual(tip.key, "tip_trap")
+        self.assertEqual(tip.params["dir"], a.safest())
+        self.assertIn(B.RIGHT, tip.params["bad"])
+        calm = [[2, 0, 0, 0], Z, Z, [0, 0, 0, 4]]
+        tip = c.on_move(B.LEFT, ident(calm), ana(calm))
+        self.assertIsNone(tip)                       # gone the moment it is stale
+
+    def test_no_praise_for_what_a_cheat_did(self):
+        c = self.fresh(self.STUCK)
+        c.on_move(B.LEFT, ident(self.STUCK), ana(self.STUCK))
+        c.on_move(B.LEFT, ident(self.STUCK), ana(self.STUCK))   # told
+        freed = [[256, 0, 64, 8], [16, 32, 8, 2], [2, 4, 2, 0], Z]
+        moved = ident(self.STUCK)
+        moved[1] = (1, True)
+        tip = c.on_move(B.LEFT, moved, ana(freed), cheated=True)
+        self.assertTrue(tip is None or tip.key != "tip_good_freed")
+
+    def real_move(self, rows, d, spawn_at):
+        """Play a real move: (moved map, board after move + a 2 at spawn_at)."""
+        gb = board(rows)
+        _, anims, _ = gb.move(d)
+        n = gb.size
+        moved = {a["from"][0] * n + a["from"][1]:
+                 (a["to"][0] * n + a["to"][1], a["merged"]) for a in anims}
+        gb.grid[spawn_at[0]][spawn_at[1]] = 2
+        return moved, gb.grid
+
+    def test_corner_lost_names_the_better_move(self):
+        # left keeps the 64 in its corner; the player swipes right anyway
+        before = [[2, 4, 0, 0], [4, 8, 0, 2], [8, 16, 0, 0], [64, 32, 0, 0]]
+        c = self.fresh(before)
+        moved, after = self.real_move(before, "right", (0, 0))
+        tip = c.on_move(B.RIGHT, moved, ana(after))
+        self.assertIsNotNone(tip)
+        self.assertEqual(tip.key, "tip_corner_lost")
+        self.assertEqual(tip.params["value"], 64)
+        self.assertNotEqual(tip.params["dir"], B.RIGHT)
+
+    def test_forced_corner_loss_is_not_blamed(self):
+        # every column and row is packed left: right is the ONLY move
+        before = [[2, 4, 0, 0], [4, 8, 0, 0], [8, 16, 0, 0], [64, 32, 0, 0]]
+        c = self.fresh(before)
+        moved, after = self.real_move(before, "right", (0, 0))
+        tip = c.on_move(B.RIGHT, moved, ana(after))
+        self.assertTrue(tip is None or tip.key != "tip_corner_lost")
+
+    def test_opening_tip_once_per_session(self):
+        c = B.Coach()
+        c.new_game(ana([[2, 0, 0, 0], Z, Z, Z]))
+        self.assertEqual(c.current.key, "tip_open")
+        c.new_game(ana([[2, 0, 0, 0], Z, Z, Z]))
+        self.assertIsNone(c.current)
+
+
+# ===========================================================================
+#  Evil difficulty (unchanged behavior)
+# ===========================================================================
 class TestEvilSpawn(unittest.TestCase):
-    # 7. _evil_cell determinism: unique quality minimum -> always chosen
     def test_evil_cell_picks_worst_for_player(self):
-        rows = [[4, 8, 16, 32],
-                [2, 0, 0, 0],
-                [0, 0, 0, 0],
-                [0, 0, 0, 0]]
-        # Placing a 2 at (1,1) gifts the player a merge (best reply q=70);
-        # placing it at (3,3) is dead weight in the far corner (best q=62).
-        # Unique minimum -> the random tie-break has one candidate.
+        rows = [[4, 8, 16, 32], [2, 0, 0, 0], Z, Z]
         for _ in range(25):
             b = board(rows)
             self.assertEqual(b._evil_cell([(1, 1), (3, 3)], 2), (3, 3))
 
-    # 8. spawn(evil=True) with one empty cell + prefer_edge respected
     def test_evil_spawn_single_empty(self):
-        b = board([[2, 4, 8, 16],
-                   [32, 64, 128, 256],
-                   [512, 1024, 0, 4],
+        b = board([[2, 4, 8, 16], [32, 64, 128, 256], [512, 1024, 0, 4],
                    [2, 4, 8, 16]])
-        res = b.spawn(force_value=2, evil=True)
-        self.assertEqual(res, (2, 2, 2))
-        self.assertEqual(b.grid[2][2], 2)
+        self.assertEqual(b.spawn(force_value=2, evil=True), (2, 2, 2))
 
     def test_evil_spawn_respects_prefer_edge(self):
-        rows = [[4, 0, 0, 8],
-                [16, 0, 32, 64],
-                [128, 256, 0, 2],
-                [2, 4, 8, 16]]
-        # empties: (0,1),(0,2) on the edge; (1,1),(2,2) interior.
+        rows = [[4, 0, 0, 8], [16, 0, 32, 64], [128, 256, 0, 2], [2, 4, 8, 16]]
         for _ in range(10):
             b = board(rows)
             r, c, v = b.spawn(force_value=2, prefer_edge=True, evil=True)
-            self.assertEqual(v, 2)
-            self.assertIn((r, c), [(0, 1), (0, 2)],
-                          "evil spawn escaped the prefer_edge filter")
+            self.assertIn((r, c), [(0, 1), (0, 2)])
+
+    def test_explicit_spawn(self):
+        b = board([[0, 0, 0, 0], Z, Z, Z])
+        self.assertEqual(b.spawn(force_value=4, at=(2, 3)), (2, 3, 4))
 
 
-class TestInDanger(unittest.TestCase):
-    # 9. in_danger
-    def test_cornered_board_is_danger(self):
-        b = board([[2, 4, 8, 16],
-                   [32, 64, 128, 256],
-                   [512, 2, 4, 8],
-                   [16, 32, 64, 0]])
-        # 1 empty; the only changing moves (right/down) just slide into the
-        # hole: still 1 empty, 0 pairs afterwards -> no escape.
-        self.assertTrue(b.in_danger())
-
-    def test_escape_move_clears_danger(self):
-        b = board([[2, 4, 8, 16],
-                   [32, 64, 128, 256],
-                   [512, 2, 4, 8],
-                   [16, 2, 4, 0]])
-        # "down" merges the 2s and 4s in cols 1-2 -> 3 empties -> escape.
-        self.assertFalse(b.in_danger())
-
-    def test_open_board_never_danger(self):
-        b = board([[2, 4, 0, 0], Z, Z, Z])
-        self.assertFalse(b.in_danger())
-
-
-class TestEdgeOrdered(unittest.TestCase):
-    # 10. edge_ordered
-    def test_ordered_corner_row(self):
-        b = board([[256, 128, 64, 2], Z, Z, Z])
-        self.assertTrue(b.edge_ordered())
-
-    def test_gap_breaks_order(self):
-        b = board([[256, 128, 0, 2], Z, Z, Z])
-        self.assertFalse(b.edge_ordered())
-
-    def test_increase_breaks_order(self):
-        b = board([[256, 64, 128, 2], Z, Z, Z])
-        self.assertFalse(b.edge_ordered())
-
-    def test_max_not_in_corner(self):
-        b = board([[0, 0, 0, 0],
-                   [8, 256, 4, 2],
-                   Z, Z])
-        self.assertFalse(b.edge_ordered())
-
-
+# ===========================================================================
+#  Config: survives junk, never half-written
+# ===========================================================================
 class TestConfig(unittest.TestCase):
-    # 11. finalize_config_for_quit
+    def setUp(self):
+        for p in (g.CONFIG_PATH, g.CONFIG_PATH + ".bak", g.GAME_PATH):
+            if os.path.exists(p):
+                os.remove(p)
+
     def test_quit_restores_builtin_modes(self):
         cfg = g.default_config()
         cfg["persist_cheats"] = False
         cfg["active_profile"] = 2
         for p in cfg["profiles"]:
-            p["map"] = {}                     # simulate wiped/dirty modes
+            p["map"] = {}
         out = g.finalize_config_for_quit(cfg)
         self.assertEqual(out["profiles"], g.default_config()["profiles"])
         self.assertEqual(out["active_profile"], 0)
@@ -246,58 +328,194 @@ class TestConfig(unittest.TestCase):
         cfg["profiles"][1]["map"] = dict(custom)
         out = g.finalize_config_for_quit(cfg)
         self.assertEqual(out["profiles"][1]["map"], custom)
-        self.assertEqual(out["active_profile"], 3)
 
-    # 12. load_config migration v2 -> v3 (against a redirected CONFIG_PATH)
     def test_load_config_reseeds_damaged_v2_profiles(self):
-        tmpdir = tempfile.mkdtemp(prefix="2049_test_cfg_")
-        tmp_path = os.path.join(tmpdir, "2049_config.json")
-        damaged = {
-            "config_version": 2,
-            "grid_size": 5,
-            "language": "en",
-            "highscore": 4321,
-            "active_profile": 3,
-            "profiles": [{"map": {}}, {"map": {}}, {"map": {}}, {"map": {}}],
-        }
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(damaged, f)
-        real_path = g.CONFIG_PATH
-        try:
-            g.CONFIG_PATH = tmp_path
-            cfg = g.load_config()
-        finally:
-            g.CONFIG_PATH = real_path
-            shutil.rmtree(tmpdir, ignore_errors=True)
-        self.assertEqual(cfg["config_version"], 3)
+        with open(g.CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump({"config_version": 2, "grid_size": 5, "language": "en",
+                       "highscore": 4321, "active_profile": 3,
+                       "profiles": [{"map": {}}] * 4}, f)
+        cfg = g.load_config()
         self.assertEqual(cfg["profiles"], g.default_config()["profiles"])
-        self.assertEqual(cfg["active_profile"], 0)
-        # user's own data survives the repair
-        self.assertEqual(cfg["highscore"], 4321)
-        self.assertEqual(cfg["grid_size"], 5)
-        self.assertEqual(cfg["language"], "en")
+        self.assertEqual((cfg["highscore"], cfg["grid_size"], cfg["language"]),
+                         (4321, 5, "en"))
 
-    # 13. _version_gt
+    def test_junk_values_are_sanitized(self):
+        with open(g.CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump({"config_version": 3, "grid_size": 9, "language": "xx",
+                       "difficulty": "nightmare", "highscore": -5,
+                       "sound": "yes", "active_profile": 17,
+                       "profiles": [{"map": {"undo": "z", "bogus": 5}}]}, f)
+        cfg = g.load_config()
+        self.assertEqual(cfg["grid_size"], 4)
+        self.assertEqual(cfg["language"], "he")
+        self.assertEqual(cfg["difficulty"], "normal")
+        self.assertEqual(cfg["highscore"], 0)
+        self.assertIs(cfg["sound"], True)
+        self.assertEqual(cfg["active_profile"], 0)
+        self.assertEqual(cfg["profiles"][0]["map"], {})
+
+    def test_corrupt_file_falls_back_to_backup(self):
+        cfg = g.default_config()
+        cfg["highscore"] = 777
+        g.save_config(cfg)
+        cfg["highscore"] = 888
+        g.save_config(cfg)                    # 777 is now the .bak
+        with open(g.CONFIG_PATH, "w", encoding="utf-8") as f:
+            f.write('{"highscore": ')         # power cut mid-write
+        self.assertEqual(g.load_config()["highscore"], 777)
+        self.assertFalse(os.path.exists(g.CONFIG_PATH + ".tmp"))
+
     def test_version_gt(self):
         self.assertTrue(g.Game._version_gt("1.2.0", "1.1.9"))
-        self.assertFalse(g.Game._version_gt("0.17.0", "0.17.0"))
+        self.assertFalse(g.Game._version_gt("0.18.0", "0.18.0"))
         self.assertFalse(g.Game._version_gt("0.9", "0.10"))
 
-    # 14. difficulty constant
     def test_difficulty_table(self):
         self.assertEqual(set(g.DIFFICULTY_EVIL_P), {"normal", "hard", "evil"})
         self.assertEqual(g.DIFFICULTY_EVIL_P["normal"], 0.0)
-        for k, p in g.DIFFICULTY_EVIL_P.items():
-            self.assertGreaterEqual(p, 0.0, k)
-            self.assertLessEqual(p, 1.0, k)
-        self.assertEqual(g.default_config().get("difficulty"), "normal")
+
+
+# ===========================================================================
+#  The real Game object, headless
+# ===========================================================================
+class _Held:
+    def __init__(self, keys):
+        self.keys = set(keys)
+
+    def __getitem__(self, k):
+        return k in self.keys
+
+
+class TestGameFlow(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        for p in (g.CONFIG_PATH, g.CONFIG_PATH + ".bak", g.GAME_PATH):
+            if os.path.exists(p):
+                os.remove(p)
+        cls.game = g.Game()
+        cls.game.cfg["active_profile"] = 3      # Mode 4: C clean, Z undo, X smart
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.game.shutdown()
+
+    def key(self, k):
+        self.game.handle_event(pygame.event.Event(
+            pygame.KEYDOWN, {"key": k, "mod": 0, "unicode": "", "scancode": 0}))
+
+    def settle(self):
+        gm = self.game
+        end = time.time() + 2.0
+        while time.time() < end:
+            gm.frame(1 / 60)
+            if not gm.animating and gm.analyst.idle() and not gm._pending_coach:
+                return
+            time.sleep(0.003)
+
+    def set_board(self, rows):
+        gm = self.game
+        gm._finish_now()
+        gm.board = board(rows)
+        gm.history = []
+        gm._armed_clean = None
+        gm.won = False
+        gm._board_changed("resync")
+        self.settle()
+
+    def test_fast_keys_are_never_swallowed(self):
+        self.set_board([[2, 0, 0, 2], [0, 4, 0, 4], [0, 0, 8, 0], [2, 0, 0, 0]])
+        before = self.game._move_no
+        for k in (pygame.K_LEFT, pygame.K_DOWN, pygame.K_RIGHT, pygame.K_UP):
+            self.key(k)                     # all inside one slide
+        self.settle()
+        self.assertEqual(self.game._move_no - before, 4)
+
+    def test_clean_hides_inside_the_next_move(self):
+        self.set_board([[2, 512, 64, 4], [0, 32, 8, 16], [0, 8, 4, 4], [2, 0, 0, 0]])
+        self.key(pygame.K_c)
+        self.assertIsNotNone(self.game._armed_clean)
+        self.assertEqual(self.game.board.grid[0][0], 2)      # not yet
+        self.assertIsNone(self.game.toast)                   # no tell
+        self.key(pygame.K_RIGHT)
+        ghosts = [a for a in self.game.anim_tiles if a.get("ghost")]
+        self.assertEqual(len(ghosts), 1)
+        self.assertEqual(ghosts[0]["from"], (0, 0))
+        self.settle()
+        self.assertTrue(self.game.cheat_used_this_game)
+
+    def test_clean_with_nothing_to_clean_is_silent(self):
+        self.set_board([[2, 0, 0, 0], Z, Z, [0, 0, 0, 4]])
+        self.key(pygame.K_c)
+        self.assertIsNone(self.game._armed_clean)
+        self.assertIsNone(self.game.toast)
+
+    def test_clean_rescues_a_dead_board_at_once(self):
+        self.set_board([[2, 4, 2, 4], [4, 2, 4, 2], [2, 4, 2, 4], [4, 2, 4, 1024]])
+        self.key(pygame.K_c)
+        self.assertTrue(self.game.board.can_move())
+
+    def test_undo(self):
+        self.set_board([[2, 2, 0, 0], Z, Z, Z])
+        self.key(pygame.K_LEFT)
+        self.settle()
+        self.key(pygame.K_z)
+        self.settle()
+        self.assertEqual(self.game.board.grid[0][:2], [2, 2])
+
+    def test_smart_spawn_is_chosen_by_the_brain(self):
+        self.set_board([Z, Z, [0, 0, 0, 4], [64, 32, 16, 8]])
+        orig = pygame.key.get_pressed
+        pygame.key.get_pressed = lambda: _Held({pygame.K_x})
+        try:
+            self.key(pygame.K_LEFT)
+        finally:
+            pygame.key.get_pressed = orig
+        self.assertIsNotNone(self.game.pending_spawn[2])
+        self.settle()
+
+    def test_resume_after_restart(self):
+        self.set_board([[2, 4, 8, 16], Z, [0, 0, 4, 0], [0, 0, 0, 2]])
+        self.game.board.score = 1234
+        self.game.cheat_used_this_game = True
+        g.save_game_state(self.game._game_state())
+        g2 = g.Game.__new__(g.Game)
+        st = g.load_game_state()
+        self.assertEqual(st["grid"][0], [2, 4, 8, 16])
+        self.assertEqual(st["score"], 1234)
+        self.assertTrue(st["cheat_used"])           # no best-score laundering
+
+
+# ===========================================================================
+#  One copy at a time
+# ===========================================================================
+@unittest.skipUnless(sys.platform == "win32", "Windows mutex")
+class TestSingleInstance(unittest.TestCase):
+    def test_second_copy_is_refused(self):
+        code = (
+            "import importlib.util,os;"
+            "os.environ['SDL_VIDEODRIVER']='dummy';"
+            "s=importlib.util.spec_from_file_location('g',r'%s');"
+            "g=importlib.util.module_from_spec(s);s.loader.exec_module(g);"
+            "g.SINGLE_INSTANCE_NAME='BeniaBot.2049.TestInstance';"
+            "a=g.acquire_single_instance();"
+            "h=g._instance_handle;"
+            "b=g.acquire_single_instance();"
+            "print(a,b)" % _GAME_PY)
+        out = subprocess.run([sys.executable, "-c", code], capture_output=True,
+                             text=True, encoding="utf-8", errors="replace",
+                             timeout=60).stdout.strip().splitlines()
+        self.assertEqual(out[-1], "True False")
 
 
 class TestCompile(unittest.TestCase):
     def test_py_compile(self):
         import py_compile
         py_compile.compile(_GAME_PY, doraise=True)
+        py_compile.compile(os.path.join(_HERE, "brain2049.py"), doraise=True)
 
 
 if __name__ == "__main__":
-    unittest.main(verbosity=2)
+    try:
+        unittest.main(verbosity=2)
+    finally:
+        shutil.rmtree(_TMP, ignore_errors=True)

@@ -13,9 +13,14 @@ import os
 import sys
 import copy
 import math
+import threading
+import time
+from collections import deque
+
+import brain2049 as brain
 
 APP_NAME    = "2049"
-APP_VERSION = "0.17.0"
+APP_VERSION = "0.18.0"
 GITHUB_REPO = "BeniaBot/2049"   # owner/repo for auto-update checks
 
 # Optional RTL shaping for Hebrew. Falls back gracefully if unavailable.
@@ -139,7 +144,7 @@ STRINGS = {
         "hold":"\u05d4\u05d7\u05d6\u05e7", "tap":"\u05dc\u05d7\u05d9\u05e6\u05d4", "none":"\u05dc\u05dc\u05d0",
         "hebrew":"\u05e2\u05d1\u05e8\u05d9\u05ea", "english":"English",
         "mode_infinite":"\u05de\u05e6\u05d1 \u05d0\u05d9\u05e0\u05e1\u05d5\u05e4\u05d9",
-        "mode_target":"\u05de\u05e6\u05d1 \u05e9\u05d1\u05d9\u05e8\u05ea \u05e9\u05d9\u05d0",
+        "mode_target":"\u05de\u05e6\u05d1 \u05e2\u05e6\u05d9\u05e8\u05d4 \u05d1-2048",
         "sound_on":"\u05e7\u05d5\u05dc \u05d3\u05dc\u05d5\u05e7", "sound_off":"\u05e7\u05d5\u05dc \u05db\u05d1\u05d5\u05d9",
         "sound":"\u05e6\u05dc\u05d9\u05dc\u05d9\u05dd", "on":"\u05d3\u05dc\u05d5\u05e7", "off":"\u05db\u05d1\u05d5\u05d9",
         "win_mode":"\u05de\u05e6\u05d1 \u05e0\u05d9\u05e6\u05d7\u05d5\u05df",
@@ -151,24 +156,28 @@ STRINGS = {
         "yes":"\u05db\u05df",
         "no":"\u05dc\u05d0",
         "done_reset":"\u05d0\u05d5\u05e4\u05e1 \u05d1\u05d4\u05e6\u05dc\u05d7\u05d4",
-        "no_stuck_now":"\u05d0\u05d9\u05df \u05db\u05e8\u05d2\u05e2 \u05d0\u05e8\u05d9\u05d7 \u05e9\u05d1\u05d0\u05de\u05ea \u05ea\u05e7\u05d5\u05e2",
-        "no_undo":"\u05d0\u05d9\u05df \u05de\u05d4\u05dc\u05da \u05dc\u05d1\u05d8\u05dc",
-        "tips_list":[
-            "\u05e9\u05de\u05d5\u05e8 \u05d0\u05ea \u05d4\u05d0\u05e8\u05d9\u05d7 \u05d4\u05d2\u05d1\u05d5\u05d4 \u05d1\u05e4\u05d9\u05e0\u05d4 \u05d5\u05d0\u05dc \u05ea\u05d6\u05d9\u05d6 \u05d0\u05d5\u05ea\u05d5",
-            "\u05e0\u05e1\u05d4 \u05dc\u05e9\u05de\u05d5\u05e8 \u05e9\u05d5\u05e8\u05d4 \u05d0\u05d7\u05ea \u05de\u05dc\u05d0\u05d4 \u05d5\u05de\u05e1\u05d5\u05d3\u05e8\u05ea",
-            "\u05d1\u05e0\u05d4 \u05e9\u05e8\u05e9\u05e8\u05ea \u05de\u05e1\u05e4\u05e8\u05d9\u05dd \u05d9\u05d5\u05e8\u05d3\u05ea \u05dc\u05d0\u05d5\u05e8\u05da \u05e9\u05d5\u05e8\u05d4",
-            "\u05d4\u05d6\u05d6 \u05d1\u05e2\u05d9\u05e7\u05e8 \u05dc\u05e9\u05e0\u05d9 \u05db\u05d9\u05d5\u05d5\u05e0\u05d9\u05dd \u05e7\u05d1\u05d5\u05e2\u05d9\u05dd",
-            "\u05d0\u05dc \u05ea\u05de\u05dc\u05d0 \u05d0\u05ea \u05d4\u05dc\u05d5\u05d7 \u2013 \u05d4\u05e9\u05d0\u05e8 \u05de\u05e7\u05d5\u05dd \u05dc\u05ea\u05de\u05e8\u05d5\u05df",
-        ],
-        "tip_stuck":"\u05d9\u05e9 \u05d0\u05e8\u05d9\u05d7 \u05e0\u05de\u05d5\u05da \u05ea\u05e7\u05d5\u05e2 \u2013 \u05e0\u05e1\u05d4 \u05dc\u05e9\u05d7\u05e8\u05e8 \u05d0\u05d5\u05ea\u05d5",
-        "tip_full":"\u05d4\u05dc\u05d5\u05d7 \u05de\u05ea\u05de\u05dc\u05d0! \u05de\u05d6\u05d2 \u05d0\u05e8\u05d9\u05d7\u05d9\u05dd \u05d1\u05d3\u05d7\u05d9\u05e4\u05d5\u05ea",
-        "tip_corner":"\u05e9\u05de\u05d5\u05e8 \u05d0\u05ea \u05d4\u05d0\u05e8\u05d9\u05d7 \u05d4\u05d2\u05d1\u05d5\u05d4 \u05d1\u05e4\u05d9\u05e0\u05d4",
-        "tip_lost_corner":"\u05d4\u05d0\u05e8\u05d9\u05d7 \u05d4\u05d2\u05d1\u05d5\u05d4 \u05d9\u05e6\u05d0 \u05de\u05d4\u05e4\u05d9\u05e0\u05d4 \u2013 \u05d4\u05d7\u05d6\u05e8 \u05d0\u05d5\u05ea\u05d5!",
-        "tip_good_corner":"\u05d9\u05d5\u05e4\u05d9! \u05d4\u05d7\u05d6\u05e8\u05ea \u05d0\u05ea \u05d4\u05d2\u05d1\u05d5\u05d4 \u05dc\u05e4\u05d9\u05e0\u05d4",
-        "tip_good_clear":"\u05d9\u05e4\u05d4 \u05de\u05d0\u05d5\u05d3! \u05e9\u05d7\u05e8\u05e8\u05ea \u05d0\u05ea \u05d4\u05dc\u05d5\u05d7",
-        "tip_good_merge":"\u05de\u05e6\u05d5\u05d9\u05df! \u05de\u05d9\u05d6\u05d5\u05d2 \u05d2\u05d3\u05d5\u05dc",
-        "tip_good_space":"\u05d9\u05e4\u05d4! \u05e4\u05d9\u05e0\u05d9\u05ea \u05d4\u05e8\u05d1\u05d4 \u05de\u05e7\u05d5\u05dd",
-        "infinite":"\u05d0\u05d9\u05e0\u05e1\u05d5\u05e4\u05d9", "target":"\u05e9\u05d1\u05d9\u05e8\u05ea \u05e9\u05d9\u05d0",
+        # --- coach tips: {dir} {bad} {value} {place} are filled in ---
+        "tip_open":"\u05d8\u05d9\u05e4: \u05d1\u05d7\u05e8 \u05e4\u05d9\u05e0\u05d4 \u05dc\u05d0\u05e8\u05d9\u05d7 \u05d4\u05d2\u05d1\u05d5\u05d4 \u05d5\u05e9\u05de\u05d5\u05e8 \u05d0\u05d5\u05ea\u05d5 \u05e9\u05dd",
+        "tip_danger":"\u05de\u05e6\u05d1 \u05e7\u05e9\u05d4 \u2013 \u05d4\u05de\u05d4\u05dc\u05da \u05d4\u05d1\u05d8\u05d5\u05d7 \u05d1\u05d9\u05d5\u05ea\u05e8: {dir}",
+        "tip_trap":"\u05d6\u05d4\u05d9\u05e8\u05d5\u05ea: {bad} \u05e2\u05dc\u05d5\u05dc \u05dc\u05d2\u05de\u05d5\u05e8 \u05d0\u05ea \u05d4\u05de\u05e9\u05d7\u05e7 \u00b7 \u05d1\u05d8\u05d5\u05d7: {dir}",
+        "tip_stuck":"\u05d4-{value} {place} \u05ea\u05e7\u05d5\u05e2 \u2013 \u05d1\u05e0\u05d4 \u05dc\u05d9\u05d3\u05d5 {value} \u05db\u05d3\u05d9 \u05dc\u05e9\u05d7\u05e8\u05e8 \u05d0\u05d5\u05ea\u05d5",
+        "tip_corner_lost":"\u05d4-{value} \u05d9\u05e6\u05d0 \u05de\u05d4\u05e4\u05d9\u05e0\u05d4 \u2013 {dir} \u05d4\u05d9\u05d4 \u05e9\u05d5\u05de\u05e8 \u05d0\u05d5\u05ea\u05d5 \u05e9\u05dd",
+        "tip_corner_back":"\u05d4\u05d7\u05d6\u05e8 \u05d0\u05ea \u05d4-{value} \u05dc\u05e4\u05d9\u05e0\u05d4: {dir}",
+        "tip_better":"{dir} \u05d4\u05d9\u05d4 \u05de\u05d4\u05dc\u05da \u05d8\u05d5\u05d1 \u05d9\u05d5\u05ea\u05e8 \u05db\u05d0\u05df",
+        "tip_good_escape":"\u05d9\u05e4\u05d4! \u05d9\u05e6\u05d0\u05ea \u05de\u05d4\u05de\u05e6\u05d1 \u05d4\u05e7\u05e9\u05d4",
+        "tip_good_freed":"\u05d9\u05e4\u05d4 \u05de\u05d0\u05d5\u05d3! \u05e9\u05d7\u05e8\u05e8\u05ea \u05d0\u05ea \u05d4\u05d0\u05e8\u05d9\u05d7 \u05d4\u05ea\u05e7\u05d5\u05e2",
+        "tip_good_corner":"\u05d9\u05d5\u05e4\u05d9, \u05d4-{value} \u05d7\u05d6\u05e8 \u05dc\u05e4\u05d9\u05e0\u05d4",
+        "tip_good_record":"\u05de\u05e6\u05d5\u05d9\u05df! \u05d4\u05d2\u05e2\u05ea \u05dc-{value}",
+        "places":{
+            "corner_tl":"\u05d1\u05e4\u05d9\u05e0\u05d4 \u05d4\u05e9\u05de\u05d0\u05dc\u05d9\u05ea \u05d4\u05e2\u05dc\u05d9\u05d5\u05e0\u05d4", "corner_tr":"\u05d1\u05e4\u05d9\u05e0\u05d4 \u05d4\u05d9\u05de\u05e0\u05d9\u05ea \u05d4\u05e2\u05dc\u05d9\u05d5\u05e0\u05d4",
+            "corner_bl":"\u05d1\u05e4\u05d9\u05e0\u05d4 \u05d4\u05e9\u05de\u05d0\u05dc\u05d9\u05ea \u05d4\u05ea\u05d7\u05ea\u05d5\u05e0\u05d4", "corner_br":"\u05d1\u05e4\u05d9\u05e0\u05d4 \u05d4\u05d9\u05de\u05e0\u05d9\u05ea \u05d4\u05ea\u05d7\u05ea\u05d5\u05e0\u05d4",
+            "edge_top":"\u05d1\u05e9\u05d5\u05e8\u05d4 \u05d4\u05e2\u05dc\u05d9\u05d5\u05e0\u05d4", "edge_bottom":"\u05d1\u05e9\u05d5\u05e8\u05d4 \u05d4\u05ea\u05d7\u05ea\u05d5\u05e0\u05d4",
+            "edge_left":"\u05d1\u05e2\u05de\u05d5\u05d3\u05d4 \u05d4\u05e9\u05de\u05d0\u05dc\u05d9\u05ea", "edge_right":"\u05d1\u05e2\u05de\u05d5\u05d3\u05d4 \u05d4\u05d9\u05de\u05e0\u05d9\u05ea",
+            "middle":"\u05d1\u05d0\u05de\u05e6\u05e2 \u05d4\u05dc\u05d5\u05d7",
+        },
+        "keep_playing":"\u05d4\u05de\u05e9\u05da \u05dc\u05e9\u05d7\u05e7",
+        "offline":"\u05d0\u05d9\u05df \u05d7\u05d9\u05d1\u05d5\u05e8 \u2013 \u05dc\u05d0 \u05e0\u05d9\u05ea\u05df \u05dc\u05d1\u05d3\u05d5\u05e7 \u05e2\u05d3\u05db\u05d5\u05e0\u05d9\u05dd",
+        "infinite":"\u05d0\u05d9\u05e0\u05e1\u05d5\u05e4\u05d9", "target":"\u05e2\u05e6\u05d9\u05e8\u05d4 \u05d1-2048",
         "preferences":"\u05d4\u05e2\u05d3\u05e4\u05d5\u05ea",
         "prefs_hint":"\u05d4\u05d2\u05d3\u05e8\u05d5\u05ea \u05de\u05ea\u05e7\u05d3\u05de\u05d5\u05ea",
         "prefs_title":"\u05de\u05e7\u05dc\u05d8 \u05d4\u05e8\u05de\u05d0\u05d9\u05dd \u05d5\u05d4\u05e0\u05d5\u05db\u05dc\u05d9\u05dd",
@@ -207,13 +216,15 @@ STRINGS = {
             "spawn_corner":"\u05d0\u05e8\u05d9\u05d7 \u05d7\u05d3\u05e9 \u05d1\u05e9\u05d5\u05dc\u05d9\u05d9\u05dd",
             "clean_stuck":"\u05e0\u05e7\u05d4 \u05d0\u05e8\u05d9\u05d7 \u05ea\u05e7\u05d5\u05e2",
             "undo":"\u05d1\u05d8\u05dc \u05de\u05d4\u05dc\u05da",
+            "smart_spawn":"\u05d4\u05d0\u05e8\u05d9\u05d7 \u05d4\u05d1\u05d0 \u2013 \u05d1\u05d3\u05d9\u05d5\u05e7 \u05de\u05d4 \u05e9\u05e6\u05e8\u05d9\u05da",
         },
         "action_detail":{
             "force_2":"\u05d4\u05d7\u05d6\u05e7 \u05d1\u05de\u05d4\u05dc\u05da \u2013 \u05d4\u05d0\u05e8\u05d9\u05d7 \u05e9\u05d9\u05d5\u05e4\u05d9\u05e2 \u05d9\u05d4\u05d9\u05d4 2 \u05d5\u05dc\u05d0 4 (\u05e9\u05d5\u05de\u05e8 \u05e2\u05dc \u05dc\u05d5\u05d7 \u05e0\u05e7\u05d9)",
             "force_4":"\u05d4\u05d7\u05d6\u05e7 \u05d1\u05de\u05d4\u05dc\u05da \u2013 \u05d4\u05d0\u05e8\u05d9\u05d7 \u05e9\u05d9\u05d5\u05e4\u05d9\u05e2 \u05d9\u05d4\u05d9\u05d4 4 (\u05e6\u05d5\u05d1\u05e8 \u05e0\u05e7\u05d5\u05d3\u05d5\u05ea \u05de\u05d4\u05e8)",
             "spawn_corner":"\u05d4\u05d7\u05d6\u05e7 \u05d1\u05de\u05d4\u05dc\u05da \u2013 \u05d4\u05d0\u05e8\u05d9\u05d7 \u05d4\u05d7\u05d3\u05e9 \u05d9\u05d5\u05e4\u05d9\u05e2 \u05d1\u05e9\u05d5\u05dc\u05d9\u05d9\u05dd \u05d5\u05dc\u05d0 \u05d1\u05de\u05e8\u05db\u05d6",
-            "clean_stuck":"\u05dc\u05d7\u05d9\u05e6\u05d4 \u2013 \u05de\u05e2\u05dc\u05d9\u05dd \u05d0\u05e8\u05d9\u05d7 \u05e0\u05de\u05d5\u05da \u05e9\u05ea\u05e7\u05d5\u05e2 \u05d1\u05d9\u05df \u05d2\u05d1\u05d5\u05d4\u05d9\u05dd",
+            "clean_stuck":"\u05dc\u05d7\u05d9\u05e6\u05d4 \u2013 \u05d1\u05de\u05d4\u05dc\u05da \u05d4\u05d1\u05d0 \u05e0\u05e2\u05dc\u05dd \u05d4\u05d0\u05e8\u05d9\u05d7 \u05e9\u05d4\u05db\u05d9 \u05de\u05e4\u05e8\u05d9\u05e2 (\u05e0\u05e8\u05d0\u05d4 \u05db\u05de\u05d5 \u05de\u05d9\u05d6\u05d5\u05d2)",
             "undo":"\u05dc\u05d7\u05d9\u05e6\u05d4 \u2013 \u05de\u05d7\u05d6\u05d9\u05e8 \u05d0\u05ea \u05d4\u05dc\u05d5\u05d7 \u05dc\u05e4\u05e0\u05d9 \u05d4\u05de\u05d4\u05dc\u05da \u05d4\u05d0\u05d7\u05e8\u05d5\u05df",
+            "smart_spawn":"\u05d4\u05d7\u05d6\u05e7 \u05d1\u05de\u05d4\u05dc\u05da \u2013 \u05d4\u05de\u05e9\u05d7\u05e7 \u05d1\u05d5\u05d7\u05e8 \u05d0\u05d9\u05d6\u05d4 \u05d0\u05e8\u05d9\u05d7 \u05d5\u05d0\u05d9\u05e4\u05d4, \u05dc\u05d8\u05d5\u05d1\u05ea\u05da",
         },
     },
     "en": {
@@ -231,10 +242,10 @@ STRINGS = {
         "click_to_set":"Click a box, then press any key. Backspace to clear.",
         "hold":"hold", "tap":"tap", "none":"None",
         "hebrew":"\u05e2\u05d1\u05e8\u05d9\u05ea", "english":"English",
-        "mode_infinite":"Infinite mode", "mode_target":"Beat-best mode",
+        "mode_infinite":"Infinite mode", "mode_target":"Stop-at-2048 mode",
         "sound_on":"Sound on", "sound_off":"Sound off",
         "sound":"Sound", "on":"On", "off":"Off",
-        "win_mode":"Win mode", "infinite":"Infinite", "target":"Beat best",
+        "win_mode":"Win mode", "infinite":"Infinite", "target":"Stop at 2048",
         "show_tips":"Show tips",
         "reset_settings":"Reset settings",
         "reset_score":"Reset best",
@@ -243,23 +254,26 @@ STRINGS = {
         "yes":"Yes",
         "no":"No",
         "done_reset":"Reset done",
-        "no_stuck_now":"No genuinely stuck tile right now",
-        "no_undo":"No move to undo",
-        "tips_list":[
-            "Keep your highest tile in a corner and don't move it",
-            "Try to keep one full, ordered row",
-            "Build a descending chain along a row",
-            "Mostly swipe in just two fixed directions",
-            "Don't fill the board - leave room to maneuver",
-        ],
-        "tip_stuck":"A low tile is stuck - try to free it",
-        "tip_full":"Board is filling up! Merge tiles urgently",
-        "tip_corner":"Keep your highest tile in a corner",
-        "tip_lost_corner":"Your highest tile left the corner - bring it back!",
-        "tip_good_corner":"Nice! You got the highest back to a corner",
-        "tip_good_clear":"Great! You freed up the board",
-        "tip_good_merge":"Excellent! Big merge",
-        "tip_good_space":"Nice! You cleared lots of space",
+        "tip_open":"Tip: pick a corner for your biggest tile and keep it there",
+        "tip_danger":"Tight spot - safest move: {dir}",
+        "tip_trap":"Careful: {bad} may end the game · safe: {dir}",
+        "tip_stuck":"The {value} {place} is stuck - build a {value} next to it",
+        "tip_corner_lost":"Your {value} left the corner - {dir} would have kept it",
+        "tip_corner_back":"Bring your {value} back to the corner: {dir}",
+        "tip_better":"{dir} was a better move here",
+        "tip_good_escape":"Nice - you got out of that tight spot",
+        "tip_good_freed":"Great - you freed the stuck tile",
+        "tip_good_corner":"Good - your {value} is back in the corner",
+        "tip_good_record":"Excellent - you reached {value}!",
+        "places":{
+            "corner_tl":"in the top-left corner", "corner_tr":"in the top-right corner",
+            "corner_bl":"in the bottom-left corner", "corner_br":"in the bottom-right corner",
+            "edge_top":"in the top row", "edge_bottom":"in the bottom row",
+            "edge_left":"in the left column", "edge_right":"in the right column",
+            "middle":"in the middle",
+        },
+        "keep_playing":"Keep playing",
+        "offline":"Offline - couldn't check for updates",
         "preferences":"Preferences", "prefs_hint":"Advanced settings", "prefs_title":"Refuge of Cheats & Crooks",
         "prefs_sub":"Where everyone who isn't good enough on their own gathers",
         "persist_cheats":"Keep cheats between sessions",
@@ -293,13 +307,15 @@ STRINGS = {
             "spawn_corner":"New tile at the edge",
             "clean_stuck":"Clear a stuck tile",
             "undo":"Undo a move",
+            "smart_spawn":"Next tile: exactly what you need",
         },
         "action_detail":{
             "force_2":"Hold during a move - new tile spawns as 2, not 4 (keeps board tidy)",
             "force_4":"Hold during a move - new tile spawns as 4 (scores faster)",
             "spawn_corner":"Hold during a move - new tile appears at the edge, not the middle",
-            "clean_stuck":"Tap - removes a low tile trapped between higher ones",
+            "clean_stuck":"Tap - on your next move the tile that hurts most vanishes (looks like a merge)",
             "undo":"Tap - restores the board to before your last move",
+            "smart_spawn":"Hold during a move - the game picks the tile and the spot, in your favor",
         },
     },
 }
@@ -314,9 +330,11 @@ def shape_text(text):
             return text
     return text
 
-ACTION_KEYS = ["force_2","force_4","spawn_corner","clean_stuck","undo"]
-HOLD_ACTIONS = {"force_2","force_4","spawn_corner"}
+ACTION_KEYS = ["smart_spawn","force_2","force_4","spawn_corner","clean_stuck","undo"]
+HOLD_ACTIONS = {"smart_spawn","force_2","force_4","spawn_corner"}
 TAP_ACTIONS  = {"clean_stuck","undo"}
+
+DIR_ARROWS = {"left":"←", "right":"→", "up":"↑", "down":"↓"}
 
 # Keys we never allow binding to (reserved for gameplay/navigation).
 RESERVED_KEYS = {pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN,
@@ -359,7 +377,8 @@ def default_config():
             {"map":{"force_4":pygame.K_LSHIFT}},
             {"map":{"clean_stuck":pygame.K_LSHIFT,"undo":pygame.K_LCTRL}},
             {"map":{"force_4":pygame.K_LSHIFT,"clean_stuck":pygame.K_c,
-                    "undo":pygame.K_z,"spawn_corner":pygame.K_LALT}},
+                    "undo":pygame.K_z,"spawn_corner":pygame.K_LALT,
+                    "smart_spawn":pygame.K_x}},
         ],
     }
 
@@ -386,12 +405,53 @@ def _migrate_map(m):
             out[action] = val
     return out
 
+def _read_json(path):
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError("not a JSON object")
+    return data
+
+def _sanitize_config(cfg):
+    """Coerce every field to a sane value so a hand-edited or half-written
+    config can never crash the game (e.g. an unknown language)."""
+    d = default_config()
+    def pick(key, ok):
+        if not ok(cfg.get(key)):
+            cfg[key] = d[key]
+    pick("grid_size", lambda v: v in (4, 5, 6))
+    pick("language", lambda v: v in STRINGS)
+    pick("difficulty", lambda v: v in DIFFICULTY_EVIL_P)
+    for k in ("sound", "infinite", "show_tips", "persist_cheats",
+              "count_cheats_in_best"):
+        pick(k, lambda v: isinstance(v, bool))
+    pick("highscore", lambda v: isinstance(v, int) and not isinstance(v, bool)
+         and v >= 0)
+    profs = cfg.get("profiles")
+    if not (isinstance(profs, list) and profs
+            and all(isinstance(p, dict) and isinstance(p.get("map"), dict)
+                    for p in profs)):
+        cfg["profiles"] = d["profiles"]
+    for p in cfg["profiles"]:
+        p["map"] = {a: v for a, v in p["map"].items()
+                    if a in ACTION_KEYS and isinstance(v, int)
+                    and not isinstance(v, bool)}
+    pick("active_profile", lambda v: isinstance(v, int)
+         and not isinstance(v, bool) and 0 <= v < len(cfg["profiles"]))
+    return cfg
+
 def load_config():
     cfg = default_config()
-    if os.path.exists(CONFIG_PATH):
+    saved = None
+    for path in (CONFIG_PATH, CONFIG_PATH + ".bak"):
+        if os.path.exists(path):
+            try:
+                saved = _read_json(path)
+                break
+            except Exception:
+                continue        # corrupt -> fall back to the last good copy
+    if saved is not None:
         try:
-            with open(CONFIG_PATH,"r",encoding="utf-8") as f:
-                saved = json.load(f)
             old_version = saved.get("config_version", 1)
             cfg.update(saved)
             cfg["config_version"] = CONFIG_VERSION
@@ -410,7 +470,7 @@ def load_config():
                 cfg["active_profile"] = 0
         except Exception:
             pass
-    return cfg
+    return _sanitize_config(cfg)
 
 def finalize_config_for_quit(cfg):
     """On exit: unless the player opted to keep cheats, restore the four
@@ -420,12 +480,51 @@ def finalize_config_for_quit(cfg):
         cfg["active_profile"] = 0
     return cfg
 
+def _atomic_write_json(path, data, backup=False):
+    """Write to a temp file and swap it in, so a crash or power cut mid-write
+    can never leave a half-written file (which used to reset everything,
+    the high score included). Optionally keep the previous file as .bak."""
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+        f.flush()
+        try:
+            os.fsync(f.fileno())
+        except Exception:
+            pass
+    if backup and os.path.exists(path):
+        try:
+            _read_json(path)                 # only back up a good file
+            os.replace(path, path + ".bak")
+        except Exception:
+            pass
+    os.replace(tmp, path)
+
 def save_config(cfg):
     try:
-        with open(CONFIG_PATH,"w",encoding="utf-8") as f:
-            json.dump(cfg,f,indent=2,ensure_ascii=False)
+        _atomic_write_json(CONFIG_PATH, cfg, backup=True)
     except Exception:
         pass
+
+GAME_PATH = os.path.join(user_data_dir(), "2049_game.json")
+
+def save_game_state(state):
+    try:
+        if state is None:
+            if os.path.exists(GAME_PATH):
+                os.remove(GAME_PATH)
+        else:
+            _atomic_write_json(GAME_PATH, state)
+    except Exception:
+        pass
+
+def load_game_state():
+    try:
+        if os.path.exists(GAME_PATH):
+            return _read_json(GAME_PATH)
+    except Exception:
+        pass
+    return None
 
 # ============================================================================
 # Board
@@ -441,9 +540,23 @@ class Board:
     def empty_cells(self):
         return [(r,c) for r in range(self.size)
                 for c in range(self.size) if self.grid[r][c]==0]
-    def spawn(self, force_value=None, prefer_edge=False, evil=False):
+    def ranks(self):
+        """Flat rank tuple for the brain (0 = empty, k = 2**k)."""
+        return brain.to_ranks(self.grid)[0]
+
+    def edge_cells(self, cells):
+        n = self.size
+        return [(r,c) for (r,c) in cells if r in (0,n-1) or c in (0,n-1)]
+
+    def spawn(self, force_value=None, prefer_edge=False, evil=False, at=None):
         cells = self.empty_cells()
         if not cells: return None
+        if at is not None and at in cells:
+            # a spawn already chosen by the brain (the 'smart tile' assist)
+            r, c = at
+            val = force_value or 2
+            self.grid[r][c] = val
+            return (r, c, val)
         if prefer_edge:
             edge = [(r,c) for (r,c) in cells
                     if r in (0,self.size-1) or c in (0,self.size-1)]
@@ -563,224 +676,20 @@ class Board:
     def max_tile(self):
         return max(max(row) for row in self.grid)
 
-    def in_danger(self):
-        """Nearly full AND no single move buys real air (3+ empties) or fresh
-        merge chances (2+ pairs) -> the player is genuinely cornered."""
-        if len(self.empty_cells()) > 3:
-            return False
-        for d in ("left", "right", "up", "down"):
-            b = self.clone()
-            changed, _, _ = b.move(d)
-            if changed and (len(b.empty_cells()) >= 3 or b.adjacent_pairs() >= 2):
-                return False             # an escape move exists
-        return True
+    def clean_target(self, analysis=None):
+        """The tile the 'clear stuck tile' assist should remove: the low tile
+        whose disappearance helps the position most (the brain's harm
+        measure), or None when no low tile is really in the way."""
+        if analysis is None:
+            analysis = brain.Analysis.of_grid(self.grid)
+        p = analysis.problem
+        return None if p is None else divmod(p, self.size)
 
-    def edge_ordered(self):
-        """True if the max tile sits in a corner AND the full row or column
-        running away from that corner is completely filled and non-increasing
-        (the classic 'ordered edge' structure is already built)."""
-        n = self.size; mx = self.max_tile()
-        def ordered(line):
-            return all(line) and all(line[i] >= line[i+1] for i in range(n-1))
-        for cr in (0, n-1):
-            for cc in (0, n-1):
-                if self.grid[cr][cc] != mx:
-                    continue
-                row = self.grid[cr][:] if cc == 0 else self.grid[cr][::-1]
-                col = [self.grid[r][cc] for r in range(n)]
-                if cr != 0: col = col[::-1]
-                if ordered(row) or ordered(col):
-                    return True
-        return False
-
-    def _moves_tracking(self, pos):
-        """Try all 4 directions on clones of this board (no spawn). For each
-        move that changes the board, follow the specific tile that started at
-        `pos` and report where it ended and whether it merged.
-        Returns a list of (new_board, new_pos, merged)."""
-        out = []
-        for d in ("left", "right", "up", "down"):
-            b = self.clone()
-            changed, anims, _ = b.move(d)
-            if not changed:
-                continue
-            new_pos, merged = None, False
-            for a in anims:
-                if a["from"] == pos:
-                    new_pos = a["to"]
-                    merged = a["merged"]
-                    break
-            if new_pos is None:      # tile untouched by this move
-                new_pos = pos
-            out.append((b, new_pos, merged))
-        return out
-
-    def _tile_fate(self, r, c, depth=3):
-        """Explore ALL spawn-free move sequences up to `depth`, following the
-        one tile that starts at (r,c). Returns (can_merge, can_open):
-          can_merge - some sequence merges this tile with an equal one
-          can_open  - some sequence (within depth-1) gives it an empty
-                      orthogonal neighbor (so a lucky spawn could partner it)
-        This is the ground truth for "is this tile really trapped"."""
-        start = (tuple(tuple(row) for row in self.grid), (r, c))
-        seen = {start}
-        frontier = [(self, (r, c), 0)]
-        can_merge = False
-        can_open = False
-        while frontier:
-            board, pos, d = frontier.pop()
-            # does the tile have an empty orthogonal neighbor here?
-            if not can_open and d <= depth - 1:
-                n = board.size
-                for dr, dc in ((1,0),(-1,0),(0,1),(0,-1)):
-                    rr, cc = pos[0]+dr, pos[1]+dc
-                    if 0 <= rr < n and 0 <= cc < n and board.grid[rr][cc] == 0:
-                        can_open = True
-                        break
-            if d >= depth:
-                continue
-            for nb, npos, merged in board._moves_tracking(pos):
-                if merged:
-                    can_merge = True
-                    if can_open:
-                        return True, True
-                    continue
-                key = (tuple(tuple(row) for row in nb.grid), npos)
-                if key not in seen:
-                    seen.add(key)
-                    frontier.append((nb, npos, d + 1))
-            if can_merge and can_open:
-                return True, True
-        return can_merge, can_open
-
-    def blocked_pair_value(self, r, c):
-        """Merges this tile is directly preventing: the nearest non-empty
-        neighbors on both sides along the row (only empties between, by
-        construction) that are EQUAL to each other and != v would merge if
-        this tile vanished. Same for the column. Returns the sum of such
-        blocked pair values (0, one, or both)."""
-        n = self.size; v = self.grid[r][c]; total = 0
-        left = right = up = down = None
-        for cc in range(c-1, -1, -1):
-            if self.grid[r][cc]: left = self.grid[r][cc]; break
-        for cc in range(c+1, n):
-            if self.grid[r][cc]: right = self.grid[r][cc]; break
-        if left is not None and right is not None and left == right and left != v:
-            total += left
-        for rr in range(r-1, -1, -1):
-            if self.grid[rr][c]: up = self.grid[rr][c]; break
-        for rr in range(r+1, n):
-            if self.grid[rr][c]: down = self.grid[rr][c]; break
-        if up is not None and down is not None and up == down and up != v:
-            total += up
-        return total
-
-    def freedom(self):
-        """Number of directions whose move changes the board."""
-        cnt = 0
-        for d in ("left", "right", "up", "down"):
-            b = self.clone()
-            changed, _, _ = b.move(d)
-            if changed: cnt += 1
-        return cnt
-
-    def freedom_without(self, r, c, base=None):
-        """How many extra move directions open up if this tile vanished.
-        `base` lets callers hoist self.freedom() out of a whole-board scan."""
-        if base is None:
-            base = self.freedom()
-        b = self.clone(); b.grid[r][c] = 0
-        return max(0, b.freedom() - base)
-
-    def _stuck_score(self, r, c, base_freedom=None):
-        """How 'stuck' is the tile at (r,c)? Higher = more stuck; None if not.
-        v2: a tile is a problem when it's buried under strictly bigger tiles
-        with no simulated escape, OR it directly blocks a big equal pair from
-        merging (even with air around), OR the board is down to its last
-        direction and removing this tile would unlock another. Exact order
-        matters - the cheap structural tests gate the expensive sim, so the
-        per-move scan stays fast even on crowded 6x6 boards."""
-        n = self.size
-        v = self.grid[r][c]
-        if v == 0:
-            return None
-        mx = self.max_tile() or v
-        if v * 4 > mx:
-            return None                  # only low-relative tiles
-        neigh = []
-        for dr, dc in ((1,0),(-1,0),(0,1),(0,-1)):
-            rr, cc = r+dr, c+dc
-            if 0 <= rr < n and 0 <= cc < n:
-                neigh.append(self.grid[rr][cc])
-        if any(nv == v for nv in neigh):
-            return None                  # mergeable right now
-        boxed = all(nv != 0 for nv in neigh)
-        blocked_v = self.blocked_pair_value(r, c)
-        # cheap structural gates - only three archetypes justify the deep sim:
-        buried = boxed and all(nv > v for nv in neigh)  # walled in by bigger
-        if base_freedom is None:
-            base_freedom = self.freedom()
-        jam_possible = boxed and base_freedom <= 1      # board nearly locked
-        if not (buried or jam_possible or blocked_v >= 4 * v):
-            return None                  # cheap out - no simulation
-        # ground truth: follow the tile through every 3-move future
-        can_merge, can_open = self._tile_fate(r, c, depth=3)
-        if can_merge:
-            return None                  # proven escape exists
-        soft = boxed and min(neigh) < v * 4
-        rescuable = can_open and soft    # air + soft walls -> realistic rescue
-        fd = self.freedom_without(r, c, base_freedom)
-        problem = (buried and not rescuable) or (blocked_v >= 4 * v) \
-                  or (jam_possible and fd > 0)
-        if not problem:
-            return None
-        # score by how low + how blocking + how freeing + how central
-        lowness = mx / v
-        edge = (r in (0, n-1)) + (c in (0, n-1))
-        centrality = 1.0 + (0 if edge >= 2 else (0.5 if edge == 1 else 1.0))
-        score = lowness * centrality + 3.0 * blocked_v / v + 2.0 * fd
-        if boxed:
-            score += lowness * (min(neigh) / v)
-        partner = any(self.grid[rr][cc] == v
-                      for rr in range(n) for cc in range(n)
-                      if (rr, cc) != (r, c))
-        if not partner:
-            score *= 1.3                 # no partner anywhere = more stuck
-        return score
-
-    def remove_stuck_low(self):
-        n = self.size; best = None
-        base = self.freedom()            # hoisted: same for every candidate
-        for r in range(n):
-            for c in range(n):
-                s = self._stuck_score(r, c, base)
-                if s is not None and (best is None or s > best[0]):
-                    best = (s, r, c)
-        if best:
-            self.grid[best[1]][best[2]] = 0
-            return (best[1], best[2])
-        return None
-    def merge_one_pair(self):
-        n = self.size
-        for r in range(n):
-            for c in range(n):
-                v = self.grid[r][c]
-                if v==0: continue
-                for dr,dc in ((0,1),(1,0)):
-                    rr,cc = r+dr,c+dc
-                    if rr<n and cc<n and self.grid[rr][cc]==v:
-                        self.grid[r][c]=v*2; self.grid[rr][cc]=0
-                        self.score += v*2; return (r,c)
-        return None
-    def upgrade_lowest(self):
-        n = self.size; low = None
-        for r in range(n):
-            for c in range(n):
-                v = self.grid[r][c]
-                if v!=0 and (low is None or v<low[0]): low = (v,r,c)
-        if low:
-            self.grid[low[1]][low[2]] = low[0]*2; return (low[1],low[2])
-        return None
+    def remove_stuck_low(self, analysis=None):
+        pos = self.clean_target(analysis)
+        if pos is not None:
+            self.grid[pos[0]][pos[1]] = 0
+        return pos
 
 # ============================================================================
 class Button:
@@ -880,6 +789,213 @@ class ScaledScreen:
         pygame.draw.rect(self.surf, color, r, border_radius=radius*self.s)
 
 # ============================================================================
+#  Platform helpers: window sizing, single instance, accessibility hotkeys
+# ============================================================================
+def window_scale(w, h):
+    """Scale for the window: the display's own scaling (so 125%/150% screens
+    get a properly sized window), shrunk when needed so the whole window
+    fits the work area above the taskbar."""
+    s = 1.0
+    if sys.platform != "win32":
+        return s
+    try:
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+        try:
+            dpi = user32.GetDpiForSystem()
+        except Exception:
+            hdc = user32.GetDC(0)
+            dpi = ctypes.windll.gdi32.GetDeviceCaps(hdc, 88)   # LOGPIXELSY
+            user32.ReleaseDC(0, hdc)
+        dpi_scale = max(1.0, dpi / 96.0)
+        s = dpi_scale
+        rect = wintypes.RECT()
+        if user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rect), 0):
+            aw = rect.right - rect.left
+            ah = rect.bottom - rect.top
+            frame = 48 * dpi_scale          # title bar + borders
+            s = min(s, (ah - frame) / h, (aw - 24 * dpi_scale) / w)
+    except Exception:
+        return 1.0
+    return max(0.55, s)
+
+
+SINGLE_INSTANCE_NAME = "BeniaBot.2049.SingleInstance"
+_instance_handle = None
+
+
+def acquire_single_instance():
+    """True if this is the only running copy. Otherwise bring the running
+    window to the front and return False (the caller then just exits).
+    The installer checks the same mutex name (AppMutex)."""
+    global _instance_handle
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            kernel32.CreateMutexW.restype = ctypes.c_void_p
+            h = kernel32.CreateMutexW(None, False, SINGLE_INSTANCE_NAME)
+            if kernel32.GetLastError() == 183:          # ALREADY_EXISTS
+                if h:
+                    kernel32.CloseHandle(ctypes.c_void_p(h))
+                _activate_running_window()
+                return False
+            _instance_handle = h                        # keep it for life
+        except Exception:
+            pass
+        return True
+    try:                                                # macOS / Linux
+        import fcntl
+        f = open(os.path.join(user_data_dir(), ".2049.lock"), "w")
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _instance_handle = f
+    except BlockingIOError:
+        return False
+    except Exception:
+        pass
+    return True
+
+
+def _activate_running_window():
+    """Find the running 2049 window (SDL class + our title) and raise it."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+        found = []
+        proto = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        def cb(hwnd, _):
+            cls = ctypes.create_unicode_buffer(64)
+            user32.GetClassNameW(hwnd, cls, 64)
+            title = ctypes.create_unicode_buffer(64)
+            user32.GetWindowTextW(hwnd, title, 64)
+            if cls.value == "SDL_app" and title.value == APP_NAME:
+                found.append(hwnd)
+                return False
+            return True
+        user32.EnumWindows(proto(cb), 0)
+        if found:
+            hwnd = found[0]
+            if user32.IsIconic(hwnd):
+                user32.ShowWindow(hwnd, 9)                  # SW_RESTORE
+            user32.SetForegroundWindow(hwnd)
+    except Exception:
+        pass
+
+
+class AccessibilityHotkeys:
+    """Pressing Shift five times (or holding it) pops up Windows' Sticky /
+    Filter Keys dialogs - right on top of the game, mid-cheat. Microsoft's
+    guidance for games: switch off only those *shortcut hotkeys* while the
+    game has focus (never if the feature itself is on) and restore them
+    when focus leaves or the game exits. Nothing is written to the
+    registry, so even a crash leaves the user's settings intact."""
+
+    def __init__(self):
+        self.saved = None
+        if sys.platform != "win32":
+            return
+        try:
+            import ctypes
+
+            class STICKYKEYS(ctypes.Structure):
+                _fields_ = [("cbSize", ctypes.c_uint), ("dwFlags", ctypes.c_uint)]
+
+            class TOGGLEKEYS(ctypes.Structure):
+                _fields_ = [("cbSize", ctypes.c_uint), ("dwFlags", ctypes.c_uint)]
+
+            class FILTERKEYS(ctypes.Structure):
+                _fields_ = [("cbSize", ctypes.c_uint), ("dwFlags", ctypes.c_uint),
+                            ("iWaitMSec", ctypes.c_uint), ("iDelayMSec", ctypes.c_uint),
+                            ("iRepeatMSec", ctypes.c_uint), ("iBounceMSec", ctypes.c_uint)]
+
+            self._spi = ctypes.windll.user32.SystemParametersInfoW
+            self._ctypes = ctypes
+            # (get, set, struct, "feature on" flag)
+            self._kinds = [(0x003A, 0x003B, STICKYKEYS, 0x1),
+                           (0x0034, 0x0035, TOGGLEKEYS, 0x1),
+                           (0x0032, 0x0033, FILTERKEYS, 0x1)]
+            self.saved = []
+            for get, _set, st, _on in self._kinds:
+                s = st()
+                s.cbSize = ctypes.sizeof(st)
+                self._spi(get, s.cbSize, ctypes.byref(s), 0)
+                self.saved.append(s)
+        except Exception:
+            self.saved = None
+        self.active = False
+
+    def suppress(self):
+        if not self.saved or self.active:
+            return
+        try:
+            ct = self._ctypes
+            for (get, set_, st, on), orig in zip(self._kinds, self.saved):
+                if orig.dwFlags & on:
+                    continue                 # the user uses the feature: hands off
+                s = st()
+                ct.memmove(ct.addressof(s), ct.addressof(orig), ct.sizeof(st))
+                s.dwFlags &= ~(0x4 | 0x8)    # HOTKEYACTIVE | CONFIRMHOTKEY
+                self._spi(set_, s.cbSize, ct.byref(s), 0)
+            self.active = True
+        except Exception:
+            pass
+
+    def restore(self):
+        if not self.saved or not self.active:
+            return
+        try:
+            ct = self._ctypes
+            for (get, set_, st, on), orig in zip(self._kinds, self.saved):
+                self._spi(set_, orig.cbSize, ct.byref(orig), 0)
+        except Exception:
+            pass
+        self.active = False
+
+
+class Analyst:
+    """Runs brain analyses on one worker thread, strictly in order, so the
+    game never stutters while the brain thinks."""
+
+    def __init__(self):
+        self._jobs = deque()
+        self._done = deque()
+        self._cv = threading.Condition()
+        t = threading.Thread(target=self._run, name="2049-brain", daemon=True)
+        t.start()
+
+    def submit(self, tag, grid):
+        snap = [row[:] for row in grid]
+        with self._cv:
+            self._jobs.append((tag, snap))
+            self._cv.notify()
+
+    def _run(self):
+        while True:
+            with self._cv:
+                while not self._jobs:
+                    self._cv.wait()
+                tag, grid = self._jobs.popleft()
+            try:
+                a = brain.Analysis.of_grid(grid)
+            except Exception:
+                a = None
+            with self._cv:
+                self._done.append((tag, a))
+
+    def results(self):
+        with self._cv:
+            out = list(self._done)
+            self._done.clear()
+        return out
+
+    def idle(self):
+        with self._cv:
+            return not self._jobs
+
+
+# ============================================================================
 class Game:
     def __init__(self):
         make_dpi_aware()
@@ -907,7 +1023,15 @@ class Game:
                     break
         except Exception:
             pass
-        self.window = pygame.display.set_mode((self.W, self.H))
+        # Window size follows the display's scaling (125%/150% screens used
+        # to get a small window) and always fits the work area (a 768-px
+        # laptop used to cut the bottom off).
+        self.view_scale = window_scale(self.W, self.H)
+        self.win_w = round(self.W * self.view_scale)
+        self.win_h = round(self.H * self.view_scale)
+        self.window = pygame.display.set_mode((self.win_w, self.win_h))
+        self.hotkeys = AccessibilityHotkeys()
+        self.hotkeys.suppress()          # the new window has the focus
         # Load a high-res icon surface for the About screen.
         self.about_icon = None
         try:
@@ -950,22 +1074,25 @@ class Game:
         self.toast = None              # (text, timer) transient message
         self.update_available = None   # newer version string if found online
         self.update_download_url = None  # direct .exe download link if available
-        self._tip_now = None           # (text, timer) current on-screen tip
-        self._tip_cooldown = 0.0       # seconds until next ambient tip
-        self._tip_index = 0
-        self._prev_corner_ok = None    # was max tile in a corner last move
-        self._prev_stuck = None        # was there a stuck tile last move
-        self._prev_max = 0             # max tile last move (for merge praise)
-        self._prev_empties = None      # empty count last move (for space praise)
-        self._move_no = 0              # moves made this game (for cooldowns)
-        self._tip_last = {}            # tip key -> move number it last fired
-        self._danger_shown = False     # "board almost full" fired this episode
-        self._stuck_cache = []         # cached stuck cells, refreshed per move
-        self._last_general_tip = None  # avoid repeating the same ambient tip
         self._confirm = None           # (question, action) pending confirmation
+        # --- the brain -------------------------------------------------
+        self.analyst = Analyst()       # analyses on a worker thread
+        self.coach = brain.Coach()     # turns analyses into tips
+        self._board_tag = 0            # bumps on every board change
+        self._pending_coach = {}       # tag -> what happened (for the coach)
+        self._pending_move = None
+        self._analysis = None          # analysis of the CURRENT board
+        self._tip = None               # tip on screen (brain.Tip)
+        self._tip_since = 0.0
+        self._armed_clean = None       # (tag, cell) - removed on next move
+        self._move_no = 0
+        self._game_dirty = False
+        self._game_saved_at = 0.0
+        self.overlay_buttons = {}
         self.update_status = "checking"
         self._start_update_check()
-        self.new_game()
+        if not self._restore_game():
+            self.new_game()
 
     def _find_font_files(self):
         reg = None; bold = None
@@ -1078,7 +1205,9 @@ class Game:
         key=(int(cell),digits)
         if key not in self._tile_fonts:
             base = cell*0.42
-            if digits>=4: base = cell*0.30
+            if digits>=6: base = cell*0.20
+            elif digits==5: base = cell*0.245   # 16384+ used to overflow
+            elif digits==4: base = cell*0.30
             elif digits==3: base = cell*0.36
             # render at SS resolution; blit position is in logical space
             self._tile_fonts[key]=self._mk(int(base*self.SS),True)
@@ -1101,21 +1230,71 @@ class Game:
         return [a for a,code in self.profile()["map"].items()
                 if a in TAP_ACTIONS and code==kc and kc is not None]
 
+    # ------------------------------------------------------------------
+    #  Game flow
+    # ------------------------------------------------------------------
     def new_game(self):
+        self._finish_now()
         self.board = Board(self.cfg["grid_size"])
         s1 = self.board.spawn(); s2 = self.board.spawn()
         self.history = []; self.won = False; self.keep_going = False
         self.anim_tiles = []; self.animating = False; self.pending_spawn = None
         self.pop_tiles = {}
         self.cheat_used_this_game = False   # fresh game, clean slate
-        self._prev_corner_ok = None; self._prev_stuck = None
-        self._prev_max = 0; self._prev_empties = None
-        self._move_no = 0; self._tip_last = {}
-        self._danger_shown = False; self._stuck_cache = []
-        self._tip_now = None; self._last_general_tip = None
+        self._armed_clean = None
+        self._move_no = 0
         if s1: self.pop_tiles[(s1[0],s1[1])] = 1.0
         if s2: self.pop_tiles[(s2[0],s2[1])] = 1.0
-        self._refresh_board_facts()
+        self._board_changed("new")
+        self._save_game(force=True)
+
+    def _restore_game(self):
+        """Pick up the game that was on screen when the app last closed."""
+        st = load_game_state()
+        try:
+            n = st["size"]
+            grid = st["grid"]
+            ok = (n == self.cfg["grid_size"] and len(grid) == n
+                  and all(len(row) == n for row in grid)
+                  and all(isinstance(v, int) and v >= 0 and (v & (v - 1)) == 0
+                          for row in grid for v in row))
+            if not ok:
+                return False
+            b = Board(n)
+            b.grid = [list(row) for row in grid]
+            b.score = int(st.get("score", 0))
+            if not b.can_move() or b.max_tile() == 0:
+                return False
+        except Exception:
+            return False
+        self.board = b
+        self.history = []
+        self.won = bool(st.get("won", False))
+        self.keep_going = bool(st.get("keep_going", False))
+        self.cheat_used_this_game = bool(st.get("cheat_used", False))
+        self._move_no = int(st.get("moves", 0))
+        self._armed_clean = None
+        self._board_changed("new")
+        return True
+
+    def _game_state(self):
+        if self.board is None or not self.board.can_move():
+            return None                       # a finished game is not resumed
+        return {"version": 1, "size": self.board.size,
+                "grid": [row[:] for row in self.board.grid],
+                "score": self.board.score, "won": self.won,
+                "keep_going": self.keep_going,
+                "cheat_used": self.cheat_used_this_game,
+                "moves": self._move_no}
+
+    def _save_game(self, force=False):
+        self._game_dirty = True
+        now = time.monotonic()
+        if force or now - self._game_saved_at > 2.0:
+            save_game_state(self._game_state())
+            self._game_dirty = False
+            self._game_saved_at = now
+
     def update_highscore(self):
         # A game "counts" for the saved best if it was cheat-free, OR the player
         # explicitly enabled "count cheats in best". Otherwise the best still
@@ -1127,35 +1306,100 @@ class Game:
             self.cfg["highscore"] = self.board.score; save_config(self.cfg)
 
     def held_spawn_params(self):
+        """Hold-assists read at the moment of the move. Returns
+        (force_value, prefer_edge, smart)."""
         pressed = pygame.key.get_pressed()
-        fv, pe = None, False
-        k2 = self.key_for_action("force_2")
-        if k2 and pressed[k2]: fv = 2
-        k4 = self.key_for_action("force_4")
-        if k4 and pressed[k4]: fv = 4
-        ke = self.key_for_action("spawn_corner")
-        if ke and pressed[ke]: pe = True
-        if fv is not None or pe:
+        def held(action):
+            k = self.key_for_action(action)
+            try:
+                return bool(k) and bool(pressed[k])
+            except (IndexError, TypeError):
+                return False
+        fv = None
+        if held("force_2"): fv = 2
+        if held("force_4"): fv = 4
+        pe = held("spawn_corner")
+        smart = held("smart_spawn")
+        if fv is not None or pe or smart:
             self.cheat_used_this_game = True   # taint the score
-        return fv, pe
+        return fv, pe, smart
 
     def roll_evil(self):
         """Rolled once per spawn: does the difficulty make THIS spawn evil?"""
         p = DIFFICULTY_EVIL_P.get(self.cfg.get("difficulty", "normal"), 0)
         return p > 0 and random.random() < p
 
+    def _finish_now(self):
+        """Settle a sliding move immediately. Called when the next key comes
+        in mid-slide, so fast players never lose a move (they used to)."""
+        if getattr(self, "animating", False):
+            self.anim_time = self.anim_dur
+            self.finish_move()
+
     def handle_move(self, direction):
-        if self.state!="game" or self.animating: return
+        if self.state != "game":
+            return
+        self._finish_now()
         if self.won and not self.keep_going: return
-        prev = self.board.clone()
-        changed, anims, merges = self.board.move(direction)
+        probe = self.board.clone()
+        changed, orig_anims, _ = probe.move(direction)
         if not changed: return
+        prev = self.board.clone()
+        cheated = False
+        ghost = None
+        # an armed 'clear stuck tile' happens INSIDE this move: the tile
+        # slides with everyone else and disappears as if it merged
+        target = self._armed_target()
+        self._armed_clean = None
+        if target is not None:
+            r, c = target
+            dest = next((a["to"] for a in orig_anims if a["from"] == (r, c)),
+                        (r, c))
+            ghost = {"from": (r, c), "to": dest, "value": self.board.grid[r][c],
+                     "merged": False, "new_value": 0, "ghost": True}
+            self.board.grid[r][c] = 0
+            self.cheat_used_this_game = True
+            cheated = True
+        changed, anims, merges = self.board.move(direction)
+        if ghost is not None:
+            anims.insert(0, ghost)
         self.history.append(prev)
         if len(self.history)>40: self.history.pop(0)
         self.anim_tiles = anims; self.anim_time = 0.0; self.animating = True
         self.pending_merges = merges
-        fv, pe = self.held_spawn_params()
-        self.pending_spawn = (fv, pe)
+        fv, pe, smart = self.held_spawn_params()
+        cheated = cheated or fv is not None or pe or smart
+        at = None
+        if smart:
+            at, fv = self._smart_spawn_choice(fv, pe)
+        self.pending_spawn = (fv, pe, at)
+        n = self.board.size
+        moved = {}
+        for a in anims:
+            if a.get("ghost"):
+                continue
+            fr, to = a["from"], a["to"]
+            moved[fr[0] * n + fr[1]] = (to[0] * n + to[1], a["merged"])
+        self._pending_move = (brain.NAME_TO_DIR[direction], moved, cheated)
+
+    def _smart_spawn_choice(self, fv, prefer_edge):
+        """Where and what the 'exactly what you need' tile should be."""
+        n = self.board.size
+        cells = self.board.empty_cells()
+        if prefer_edge:
+            cells = self.board.edge_cells(cells) or cells
+        if not cells:
+            return None, fv
+        ranks = (fv.bit_length() - 1,) if fv else (1, 2)
+        try:
+            pick = brain.best_spawn(self.board.ranks(), n, ranks,
+                                    cells=[r * n + c for r, c in cells])
+        except Exception:
+            pick = None
+        if pick is None:
+            return None, fv
+        i, rank = pick
+        return divmod(i, n), 1 << rank
 
     def finish_move(self):
         self.animating = False; self.anim_tiles = []
@@ -1169,9 +1413,9 @@ class Game:
                 highest_merge = max(highest_merge, entry[2])
         self.pending_merges = []
         if self.pending_spawn is not None:
-            fv, pe = self.pending_spawn
-            s = self.board.spawn(force_value=fv, prefer_edge=pe,
-                                 evil=self.roll_evil())
+            fv, pe, at = self.pending_spawn
+            s = self.board.spawn(force_value=fv, prefer_edge=pe, at=at,
+                                 evil=(at is None and self.roll_evil()))
             if s: self.pop_tiles[(s[0],s[1])] = 1.0
             self.pending_spawn = None
         self.update_highscore()
@@ -1185,233 +1429,128 @@ class Game:
             self.play_sound("win")
             if self.cfg.get("infinite", True):
                 self.keep_going = True  # auto-continue in infinite mode
-        # fire responsive tips based on what just changed on the board
         self._move_no += 1
-        self._refresh_board_facts()
-        self._check_tip_events()
+        pm = getattr(self, "_pending_move", None)
+        self._pending_move = None
+        self._board_changed(("move",) + pm if pm else "resync")
+        self._save_game()
 
     # ------------------------------------------------------------------
-    #  Tip engine.
-    #  Facts about the board are computed ONCE per settled move and cached.
-    #  Event tips fire immediately on real transitions, each with its own
-    #  cooldown (measured in MOVES, not seconds) so nothing nags twice.
-    #  Ambient strategy tips only fill quiet gaps, never repeat back-to-back,
-    #  and never contradict the current board.
+    #  The brain: analyses run on a worker thread, in order; the coach
+    #  consumes them in order (it tracks tiles from move to move); the tip
+    #  on screen always belongs to the CURRENT board, never a stale one.
     # ------------------------------------------------------------------
-    TIP_COOLDOWNS = {          # min moves between two showings of the same tip
-        "tip_full": 8,
-        "tip_stuck": 6,
-        "tip_lost_corner": 5,
-        "tip_good_corner": 5,
-        "tip_good_clear": 6,
-        "tip_good_merge": 4,
-        "tip_good_space": 10,
-        "tip_corner": 10,      # ambient corner reminder
-    }
+    def _board_changed(self, how):
+        """Every board change gets a new tag and an analysis job.
+        how: "new" | "resync" | ("move", dir, moved, cheated)."""
+        self._board_tag += 1
+        self._pending_coach[self._board_tag] = how
+        self._analysis = None
+        if how == "new":
+            self._tip = None
+        self.analyst.submit(self._board_tag, self.board.grid)
 
-    def _refresh_board_facts(self):
-        """Recompute the expensive board facts once, after the board settled
-        (move finished / cheat applied / new game). Everything else reads the
-        cache - the deep stuck simulation never runs per-frame."""
-        b = self.board; n = b.size
-        cache = []
-        base = b.freedom()               # hoisted: same for every candidate
-        for r in range(n):
-            for c in range(n):
-                s = b._stuck_score(r, c, base)
-                if s is not None:
-                    cache.append((r, c, s))
-        self._stuck_cache = cache
-        # cheaper facts, still handy to cache together
-        self._facts_empties = len(b.empty_cells())
-        self._facts_max = b.max_tile()
-        self._facts_corner = self._max_in_corner()
-        self._facts_merges = self._count_adjacent_pairs()
-        # danger only simulates when empties <= 3, so it's cheap to cache too
-        self._facts_danger = b.in_danger()
-        self._facts_ordered = b.edge_ordered()
+    def _poll_brain(self):
+        for tag, a in self.analyst.results():
+            how = self._pending_coach.pop(tag, None)
+            if a is None or how is None:
+                continue
+            if how == "new":
+                self.coach.new_game(a)
+            elif how == "resync":
+                self.coach.resync(a)
+            else:
+                _, d, moved, cheated = how
+                self.coach.on_move(d, moved, a, cheated)
+            if tag == self._board_tag:
+                self._analysis = a
+                tip = self.coach.current
+                if tip is not self._tip:
+                    self._tip = tip
+                    self._tip_since = time.monotonic()
 
-    # thin delegates - the logic lives on Board so cheats/tips/evil spawns
-    # all share one implementation
-    def _count_adjacent_pairs(self):
-        return self.board.adjacent_pairs()
+    def _analysis_now(self):
+        """The current board's analysis - computed right here if the worker
+        has not delivered it yet (assists must act on the board as it is)."""
+        a = self._analysis
+        if a is None or a.b != self.board.ranks():
+            a = brain.Analysis.of_grid(self.board.grid)
+        return a
 
-    def _any_merge_available(self):
-        return self._count_adjacent_pairs() > 0
+    def _armed_target(self):
+        """The cell an armed 'clear stuck tile' will remove on this move."""
+        armed = self._armed_clean
+        if armed is None:
+            return None
+        tag, cell = armed
+        if tag == self._board_tag:
+            return cell
+        p = self._analysis_now().problem          # board changed: re-pick
+        return None if p is None else divmod(p, self.board.size)
 
-    def _max_in_corner(self):
-        return self.board.max_in_corner()
+    def _tick_tip(self):
+        if self._tip is not None:
+            if time.monotonic() - self._tip_since > self._tip.max_secs:
+                self.coach.dismiss()
+                self._tip = None
 
-    def _has_stuck(self):
-        return bool(self._stuck_cache)
-
-    def _tip_ready(self, key):
-        """True if this tip's per-key cooldown (in moves) has elapsed."""
-        last = self._tip_last.get(key)
-        cd = self.TIP_COOLDOWNS.get(key, 6)
-        return last is None or (self._move_no - last) >= cd
-
-    def _fire_tip(self, key, secs=4.0):
-        if not self.cfg.get("show_tips", False):
-            return False
-        self._tip_last[key] = self._move_no
-        self._tip_now = [self.L(key), secs]
-        return True
-
-    def _show_tip(self, text, secs=4.0):
-        if self.cfg.get("show_tips", False):
-            self._tip_now = [text, secs]
-
-    def _check_tip_events(self):
-        """Runs right after every settled move. Detects real TRANSITIONS on
-        the board and fires exactly one tip - the most important one - with
-        per-tip cooldowns. Priority: danger > new stuck > corner lost >
-        praise (corner back / stuck cleared / new record tile / big cleanup).
-        """
-        b = self.board
-        corner_ok = self._facts_corner
-        stuck = self._has_stuck()
-        mx = self._facts_max
-        empties = self._facts_empties
-        total = b.size * b.size
-        show = self.cfg.get("show_tips", False)
-
-        fired = False
-        if show:
-            # 1) DANGER: board nearly full AND no move buys real air.
-            #    Fires once per "danger episode" (resets when board breathes).
-            if self._facts_danger:
-                if not self._danger_shown and self._tip_ready("tip_full"):
-                    fired = self._fire_tip("tip_full", 5.0)
-                    self._danger_shown = True
-            elif empties >= 5:
-                self._danger_shown = False
-
-            # 2) a tile JUST became stuck -> warn immediately
-            if not fired and self._prev_stuck is False and stuck \
-                    and self._tip_ready("tip_stuck"):
-                fired = self._fire_tip("tip_stuck", 5.0)
-
-            # 3) the highest tile JUST left the corner -> warn immediately
-            if not fired and self._prev_corner_ok is True and not corner_ok \
-                    and mx >= 64 and self._tip_ready("tip_lost_corner"):
-                fired = self._fire_tip("tip_lost_corner", 4.5)
-
-            # 4) PRAISE: highest tile brought back to a corner
-            if not fired and self._prev_corner_ok is False and corner_ok \
-                    and mx >= 64 and self._tip_ready("tip_good_corner"):
-                fired = self._fire_tip("tip_good_corner")
-
-            # 5) PRAISE: a stuck tile got resolved by real play
-            #    (cheat-cleans resync state, so they never reach here)
-            if not fired and self._prev_stuck is True and not stuck \
-                    and self._tip_ready("tip_good_clear"):
-                fired = self._fire_tip("tip_good_clear")
-
-            # 6) PRAISE: built a new highest tile (128 and up feels earned)
-            if not fired and self._prev_max and mx > self._prev_max \
-                    and mx >= 128 and self._tip_ready("tip_good_merge"):
-                fired = self._fire_tip("tip_good_merge")
-
-            # 7) PRAISE: big cleanup - but only when the board WAS crowded
-            if not fired and self._prev_empties is not None \
-                    and empties - self._prev_empties >= 3 \
-                    and self._prev_empties <= total * 0.4 \
-                    and self._tip_ready("tip_good_space"):
-                fired = self._fire_tip("tip_good_space")
-
-        self._save_tip_state(corner_ok, stuck, mx, empties)
-
-    def _save_tip_state(self, corner_ok, stuck, mx, empties):
-        self._prev_corner_ok = corner_ok
-        self._prev_stuck = stuck
-        self._prev_max = mx
-        self._prev_empties = empties
-
-    def _resync_tip_state(self):
-        """Refresh facts + snapshot WITHOUT firing tips. Used after cheats so
-        the game never praises the player for what the cheat just did."""
-        self._refresh_board_facts()
-        self._save_tip_state(self._facts_corner, self._has_stuck(),
-                             self._facts_max, self._facts_empties)
-
-    def _update_tips(self, dt):
-        """Per-frame housekeeping only: tick the visible tip's timer, and in
-        long quiet stretches show an ambient strategy tip. All the heavy
-        detection lives in _check_tip_events (per move, cached facts)."""
-        if not self.cfg.get("show_tips", False):
-            self._tip_now = None
-            return
-        if self._tip_now:
-            self._tip_now[1] -= dt
-            if self._tip_now[1] <= 0:
-                self._tip_now = None
-                self._tip_cooldown = 12.0
-        else:
-            self._tip_cooldown -= dt
-            if self._tip_cooldown <= 0:
-                tip = self._pick_ambient_tip()
-                if tip:
-                    self._tip_now = [tip, 4.5]
-                self._tip_cooldown = 12.0
-
-    def _pick_ambient_tip(self):
-        """A gentle strategy tip for quiet moments. Persistent problems get a
-        reminder (with the same per-key cooldowns); otherwise a general tip
-        that matches the phase of the board and never repeats itself."""
+    def tip_text(self, tip):
         L = self.L
-        b = self.board
-        n = b.size
-        empties = self._facts_empties
-        total = n * n
-        mx = self._facts_max
+        p = tip.params
+        fmt = {}
+        if "dir" in p:
+            fmt["dir"] = DIR_ARROWS[brain.DIR_NAMES[p["dir"]]]
+        if "bad" in p:
+            fmt["bad"] = " ".join(DIR_ARROWS[brain.DIR_NAMES[d]] for d in p["bad"])
+        if "value" in p:
+            fmt["value"] = str(p["value"])
+        if "place" in p:
+            fmt["place"] = L("places").get(p["place"], "")
+        try:
+            return L(tip.key).format(**fmt)
+        except Exception:
+            return ""
 
-        # persistent situations - remind, respecting move cooldowns
-        if self._has_stuck() and self._tip_ready("tip_stuck"):
-            self._tip_last["tip_stuck"] = self._move_no
-            return L("tip_stuck")
-        if mx >= 64 and not self._facts_corner and self._tip_ready("tip_corner"):
-            self._tip_last["tip_corner"] = self._move_no
-            return L("tip_corner")
-
-        # general tips matched to the ACTUAL situation; when nothing clearly
-        # applies, stay silent - silence beats a wrong tip
-        idx = None
-        if empties <= total * 0.3:
-            idx = 4                      # don't fill the board
-        elif self._facts_corner and mx >= 128 and not self._facts_ordered:
-            idx = 1                      # keep a full ordered row
-        elif self._facts_corner and mx >= 128 and self._facts_ordered:
-            idx = 2                      # build a descending chain
-        elif self._move_no < 30 and empties >= total * 0.5:
-            idx = 3                      # two fixed directions (early game)
-        if idx is None:
-            return None
-        tip = L("tips_list")[idx]
-        if tip == self._last_general_tip:
-            return None
-        self._last_general_tip = tip
-        return tip
+    # ------------------------------------------------------------------
+    #  Tap assists. No toast ever: a message on screen would give the
+    #  cheat away. A tiny dot in the corner tells the player it took.
+    # ------------------------------------------------------------------
+    def _signal(self, ok):
+        self.flash = (14, (143, 122, 102) if ok else (214, 148, 120))
 
     def do_tap_action(self, action):
-        if self.animating: return
-        prev = self.board.clone(); pos = None
-        if action=="undo":
+        self._finish_now()
+        if action == "undo":
             if self.history:
-                self.board = self.history.pop(); self.pop_tiles = {}; self.flash = 12
+                self.board = self.history.pop(); self.pop_tiles = {}
                 self.cheat_used_this_game = True   # undo used -> taint
-                self._resync_tip_state()   # never praise/warn for cheat effects
+                self._armed_clean = None
+                self._move_no = max(0, self._move_no - 1)
+                self._board_changed("resync")      # never praise/warn for it
+                self._save_game()
+                self._signal(True)
             else:
-                self.toast = [self.L("no_undo"), 150]
+                self._signal(False)
             return
-        elif action=="clean_stuck": pos = self.board.remove_stuck_low()
-        if pos:
-            self.cheat_used_this_game = True       # only taint if it did something
-            self.history.append(prev); self.pop_tiles[pos] = 1.0
-            self.update_highscore(); self.flash = 12
-            self._resync_tip_state()       # never praise the cheat's cleanup
-        else:
-            self.toast = [self.L("no_stuck_now"), 150]
+        if action == "clean_stuck":
+            a = self._analysis_now()
+            p = a.problem
+            if p is None:
+                self._armed_clean = None
+                self._signal(False)
+                return
+            cell = divmod(p, self.board.size)
+            if not self.board.can_move():
+                # no move left to hide it in: rescue the board right away
+                self.history.append(self.board.clone())
+                self.board.grid[cell[0]][cell[1]] = 0
+                self.cheat_used_this_game = True
+                self.update_highscore()
+                self._board_changed("resync")
+                self._save_game()
+            else:
+                self._armed_clean = (self._board_tag, cell)
+            self._signal(True)
 
     def board_geometry(self):
         n = self.board.size
@@ -1501,36 +1640,82 @@ class Game:
             self._draw_static(cell)
         self._update_pops()
 
-        if self.won and not self.keep_going and not self.cfg["infinite"]:
-            self._overlay(L("you_win"), L("keep_going"))
-        elif not self.board.can_move() and not self.animating:
-            self._overlay(L("game_over"), L("press_new"))
+        self.overlay_buttons = {}
+        overlay = self._overlay_kind()
+        if overlay == "won":
+            self._overlay(L("you_win"), [("keep", L("keep_playing")),
+                                         ("new", L("new_game"))])
+        elif overlay == "over":
+            self._overlay(L("game_over"), [("new", L("new_game"))])
 
         # --- Bottom row: functional icons (left) + tip (right) ---
         self._draw_bottom_bar()
 
-        # --- situational tip banner (below the board) when enabled ---
-        if self._tip_now:
-            bx0, by0, board_px, gap, cell = self.board_geometry()
-            txt = self._tip_now[0]
-            tw = self.f_tiny.size(txt)[0]/self.SS
-            bw = min(self.W-48, tw+44)
-            bx = self.W/2 - bw/2
-            by = by0 + board_px + 8
-            self.screen.card((250, 232, 205), pygame.Rect(bx, by, bw, 30),
-                             radius=10, shadow=True)
-            dotx = (bx+bw-16) if self.is_rtl() else (bx+16)
-            self.screen.circle(ACCENT, (dotx, by+15), 5)
-            tt = self.f_tiny.render(self.shape(txt), True, TEXT_DARK)
-            self.screen.blit(tt, (self.W/2-tt.get_width()/2/self.SS, by+7))
+        # --- the coach's tip (below the board) when tips are on ---
+        tip = self._tip
+        if tip is not None and self.cfg.get("show_tips", False) and overlay is None:
+            self._draw_tip(tip)
 
-        # in-game feedback toast (e.g. "nothing to clean" / "nothing to undo")
+        # in-game toast (settings confirmations etc. - never for assists)
         self._draw_toast()
 
+        # the assists' only feedback: a 3-px dot in the window corner.
+        # It stays lit while a 'clear stuck tile' waits for the next move.
         if self.flash:
-            self.flash -= 1
-            self.screen.circle((143,122,102), (self.W-6,6), 3)
-            if self.flash<=0: self.flash = None
+            frames, col = self.flash
+            self.screen.circle(col, (self.W-6, 6), 3)
+            frames -= 1
+            self.flash = (frames, col) if frames > 0 else None
+        elif self._armed_clean is not None:
+            self.screen.circle((143, 122, 102), (self.W-6, 6), 2)
+
+    def _overlay_kind(self):
+        if self.animating:
+            return None
+        if self.won and not self.keep_going and not self.cfg["infinite"]:
+            return "won"
+        if not self.board.can_move():
+            return "over"
+        return None
+
+    def _wrap(self, text, font, max_w):
+        """Greedy word wrap in logical pixels (works for Hebrew too: the
+        words keep their logical order, each line is shaped separately)."""
+        words = text.split(" ")
+        lines, cur = [], ""
+        for w in words:
+            cand = w if not cur else cur + " " + w
+            if font.size(cand)[0] / self.SS <= max_w or not cur:
+                cur = cand
+            else:
+                lines.append(cur)
+                cur = w
+        if cur:
+            lines.append(cur)
+        return lines
+
+    def _draw_tip(self, tip):
+        txt = self.tip_text(tip)
+        if not txt:
+            return
+        bx0, by0, board_px, gap, cell = self.board_geometry()
+        max_text = self.W - 48 - 52
+        lines = self._wrap(txt, self.f_tiny, max_text)[:2]
+        tw = max(self.f_tiny.size(ln)[0] for ln in lines) / self.SS
+        bw = min(self.W - 48, tw + 52)
+        bh = 12 + 21 * len(lines)
+        bx = self.W/2 - bw/2
+        by = by0 + board_px + 8
+        bg = {"praise": (222, 240, 226), "info": (240, 234, 224)}.get(
+            tip.kind, (250, 232, 205))
+        dot = {"praise": (60, 170, 110), "info": BTN_BG}.get(tip.kind, ACCENT)
+        self.screen.card(bg, pygame.Rect(bx, by, bw, bh), radius=10, shadow=True)
+        dotx = (bx+bw-16) if self.is_rtl() else (bx+16)
+        self.screen.circle(dot, (dotx, by + bh/2), 5)
+        for i, ln in enumerate(lines):
+            tt = self.f_tiny.render(self.shape(ln), True, TEXT_DARK)
+            self.screen.blit(tt, (self.W/2 - tt.get_width()/2/self.SS + (-6 if self.is_rtl() else 6),
+                                  by + 6 + 21*i))
 
     def _tri(self, rect, direction):
         self.screen.rect(EMPTY_CELL, rect, border_radius=3)
@@ -1614,12 +1799,16 @@ class Game:
 
     def _draw_animating(self, cell):
         t = ease_out(min(self.anim_time/self.anim_dur, 1.0))
-        for a in self.anim_tiles:
+        # ghosts (a tile the 'clear stuck tile' assist takes away) slide with
+        # everyone else, drawn underneath, shrinking - so the eye reads it
+        # as one more merge in the move
+        for a in sorted(self.anim_tiles, key=lambda a: not a.get("ghost")):
             fr, fc = a["from"]; tr, tc = a["to"]
             fx, fy, _ = self.cell_rect(fr, fc)
             tx, ty, _ = self.cell_rect(tr, tc)
             x = round(fx + (tx-fx)*t); y = round(fy + (ty-fy)*t)
-            self.draw_tile(a["value"], x, y, cell, 1.0)
+            scale = (1.0 - 0.5*t) if a.get("ghost") else 1.0
+            self.draw_tile(a["value"], x, y, cell, scale)
 
     def _update_pops(self):
         dt = self.clock.get_time()/1000.0; done = []
@@ -1636,16 +1825,33 @@ class Game:
         val = self.f_med.render(str(value), True, TEXT_LIGHT)
         self.screen.blit(val, (x+w/2-val.get_width()/2/self.SS, y+26))
 
-    def _overlay(self, big, small):
+    def _overlay(self, big, buttons):
+        """Board overlay (win / game over) with real buttons. The first
+        button is also what Enter does."""
         bx0, by0, board_px, _, _ = self.board_geometry()
         s = pygame.Surface((board_px*self.SS, board_px*self.SS), pygame.SRCALPHA)
-        s.fill((250,248,239,205))
+        s.fill((250,248,239,228))
         self._render_surf.blit(s, (bx0*self.SS, by0*self.SS))
         t1 = self.f_big.render(self.shape(big), True, TEXT_DARK)
-        t2 = self.f_small.render(self.shape(small), True, TEXT_DARK)
         cx = bx0+board_px/2; cy = by0+board_px/2
-        self.screen.blit(t1, t1.get_rect(center=(cx, cy-20)))
-        self.screen.blit(t2, t2.get_rect(center=(cx, cy+24)))
+        self.screen.blit(t1, t1.get_rect(center=(cx, cy-36)))
+        widths = [self.f_small.size(lbl)[0]/self.SS + 44 for _, lbl in buttons]
+        gap = 14
+        total = sum(widths) + gap*(len(buttons)-1)
+        x = cx - total/2
+        order = list(zip(buttons, widths))
+        if self.is_rtl():
+            order = order[::-1]              # first button on the right in RTL
+        for (key, lbl), w in order:
+            primary = key == buttons[0][0]
+            b = Button((x, cy+6, w, 46), lbl, self.f_small,
+                       base=ACCENT if primary else BTN_BG, text_col=TEXT_LIGHT)
+            b.draw(self.screen)
+            self.overlay_buttons[key] = b
+            x += w + gap
+        if buttons[0][0] == "new":
+            hint = self.f_tiny.render(self.shape(self.L("press_new")), True, BOARD_BG)
+            self.screen.blit(hint, (cx - hint.get_width()/2/self.SS, cy+62))
 
     def _draw_toast(self):
         """Transient top-center message card (supports multi-line via \\n).
@@ -1687,10 +1893,11 @@ class Game:
         lw = lab.get_width()/self.SS
         result = []
         if rtl:
-            # label on the right, buttons filling from left
+            # label on the right; options read right-to-left like the text,
+            # so the first option sits next to the label
             self.screen.blit(lab, (card.right-pad-lw, y+card_h/2-9))
             bx = card.x + pad
-            for (val, text), bw in zip(options, widths):
+            for (val, text), bw in reversed(list(zip(options, widths))):
                 sel = (selected_val == val)
                 b = Button((bx, by, bw, bh), text, self.f_small,
                            base=ACCENT if sel else EMPTY_CELL,
@@ -1787,6 +1994,10 @@ class Game:
             msg, badge, bcol = L("up_to_date"), "\u2713", (60, 170, 110)
         elif st == "update":
             msg, badge, bcol = L("update_ready"), "\u2191", ACCENT
+        elif st == "error":
+            # offline (or GitHub unreachable): say so, instead of an endless
+            # "checking..."
+            msg, badge, bcol = L("offline"), "!", (190, 150, 120)
         else:
             msg, badge, bcol = L("checking"), None, None
         mt = self.f_tiny.render(self.shape(msg), True, TEXT_DARK)
@@ -1917,12 +2128,24 @@ class Game:
 
         y = 104
         # Game mode (profile) selector — bigger, card-like
+        # label and selector share the row without ever overlapping (the
+        # label used to hide under the selector in Hebrew)
         lab = self.f_small.render(self.shape(L("game_mode")), True, TEXT_DARK)
-        self.screen.blit(lab, (lx(lab.get_width()), y+8))
-        self.p_prev = Button((150,y,42,40), "<", self.f_small)
-        self.p_next = Button((self.W-66,y,42,40), ">", self.f_small)
+        lw = lab.get_width()/self.SS
+        self.screen.blit(lab, (lx(lab.get_width()), y+9))
+        if rtl:
+            sx0, sx1 = M, self.W - M - lw - 16
+        else:
+            sx0, sx1 = M + lw + 16, self.W - M
+        self.p_prev = Button((sx0,y,42,40), "", self.f_small)
+        self.p_next = Button((sx1-42,y,42,40), "", self.f_small)
         self.p_prev.draw(self.screen); self.p_next.draw(self.screen)
-        namebox = pygame.Rect(198,y,self.W-266,40)
+        # drawn chevrons: text '<' '>' get mirrored by Hebrew shaping
+        for btn, d in ((self.p_prev, -1), (self.p_next, 1)):
+            cx, cy = btn.rect.center
+            self.screen.polygon(TEXT_LIGHT, [(cx - 4*d, cy - 8), (cx + 5*d, cy),
+                                             (cx - 4*d, cy + 8)])
+        namebox = pygame.Rect(sx0+48,y,sx1-sx0-96,40)
         self.screen.card(EMPTY_CELL, namebox, radius=10, shadow=False)
         nt = self.f_small.render(self.shape(self.mode_name()), True, TEXT_DARK)
         self.screen.blit(nt, nt.get_rect(center=namebox.center))
@@ -2087,11 +2310,26 @@ class Game:
 
     def handle_event(self, e):
         if e.type==pygame.QUIT: self.running = False; return
+        if e.type == getattr(pygame, "WINDOWFOCUSGAINED", -1):
+            self.hotkeys.suppress(); return
+        if e.type == getattr(pygame, "WINDOWFOCUSLOST", -1):
+            self.hotkeys.restore(); return
+        if e.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP,
+                      pygame.MOUSEMOTION) and self.view_scale != 1.0:
+            # the UI is laid out in logical units; the window is scaled
+            d = dict(e.dict)
+            d["pos"] = (e.pos[0] / self.view_scale, e.pos[1] / self.view_scale)
+            e = pygame.event.Event(e.type, d)
         if self.state=="game": self._game_ev(e)
         elif self.state=="settings": self._settings_ev(e)
         elif self.state=="preferences": self._preferences_ev(e)
     def _game_ev(self, e):
         if e.type==pygame.MOUSEBUTTONDOWN and e.button==1:
+            ob = self.overlay_buttons
+            if "keep" in ob and ob["keep"].hit(e.pos):
+                self.keep_going = True; self._save_game(force=True); return
+            if "new" in ob and ob["new"].hit(e.pos):
+                self.new_game(); return
             if self.game_buttons["settings"].hit(e.pos): self.state="settings"; return
             if getattr(self,"update_badge",None) and self.update_badge.collidepoint(e.pos):
                 self.state="settings"; return
@@ -2118,8 +2356,8 @@ class Game:
             if not self.board.can_move() and e.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                 self.new_game(); return
             # Win screen (non-infinite) -> Enter keeps going
-            if self.won and not self.keep_going and e.key in (pygame.K_RETURN, pygame.K_SPACE):
-                self.keep_going = True
+            if self.won and not self.keep_going and e.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
+                self.keep_going = True; self._save_game(force=True); return
             if e.key in (pygame.K_LEFT,pygame.K_a): self.handle_move("left")
             elif e.key in (pygame.K_RIGHT,pygame.K_d): self.handle_move("right")
             elif e.key in (pygame.K_UP,pygame.K_w): self.handle_move("up")
@@ -2201,7 +2439,6 @@ class Game:
             for val,b in self.s_tips:
                 if b.hit(e.pos):
                     self.cfg["show_tips"]=val; save_config(self.cfg)
-                    self._tip_now = None  # reset current tip
                     return
             if hasattr(self,"s_reset_settings") and self.s_reset_settings.hit(e.pos):
                 self._confirm = (self.L("reset_settings_q"), "reset_settings"); return
@@ -2464,26 +2701,58 @@ class Game:
             return out
         return parts(a) > parts(b)
 
+    def _busy(self):
+        """Is anything on screen moving or counting down?"""
+        return bool(self.animating or self.pop_tiles or self.toast
+                    or self.flash or self._tip is not None
+                    or self.capturing_action is not None
+                    or not self.analyst.idle())
+
+    def frame(self, dt):
+        """One frame: input already handled; advance, think, draw."""
+        if self.animating:
+            self.anim_time += dt
+            if self.anim_time >= self.anim_dur: self.finish_move()
+        if self.toast:
+            self.toast[1] -= 1
+            if self.toast[1] <= 0: self.toast = None
+        self._poll_brain()
+        self._tick_tip()
+        if self._game_dirty and time.monotonic() - self._game_saved_at > 2.0:
+            self._save_game()
+        if self.state=="game": self.draw_game()
+        elif self.state=="settings": self.draw_settings()
+        elif self.state=="preferences": self.draw_preferences()
+        # smooth-downscale the hi-res render surface onto the window
+        pygame.transform.smoothscale(self._render_surf, (self.win_w, self.win_h),
+                                     self.window)
+        pygame.display.flip()
+
     def run(self):
         self.running = True
-        while self.running:
-            dt = self.clock.tick(60)/1000.0
-            for e in pygame.event.get(): self.handle_event(e)
-            if self.animating:
-                self.anim_time += dt
-                if self.anim_time >= self.anim_dur: self.finish_move()
-            if self.toast:
-                self.toast[1] -= 1
-                if self.toast[1] <= 0: self.toast = None
-            if self.state == "game" and not self.animating:
-                self._update_tips(dt)
-            if self.state=="game": self.draw_game()
-            elif self.state=="settings": self.draw_settings()
-            elif self.state=="preferences": self.draw_preferences()
-            # smooth-downscale the hi-res render surface onto the window
-            pygame.transform.smoothscale(self._render_surf, (self.W, self.H),
-                                         self.window)
-            pygame.display.flip()
+        try:
+            while self.running:
+                if self._busy():
+                    dt = self.clock.tick(60)/1000.0
+                    events = pygame.event.get()
+                else:
+                    # nothing moves: sleep until input arrives (instantly)
+                    # or 50 ms pass - it used to redraw 60 fps doing nothing
+                    first = pygame.event.wait(50)
+                    events = ([first] if first.type != pygame.NOEVENT else []) \
+                        + pygame.event.get()
+                    dt = self.clock.tick()/1000.0
+                for e in events: self.handle_event(e)
+                if not self.running:
+                    break
+                self.frame(min(dt, 0.1))
+        finally:
+            self.shutdown()
+
+    def shutdown(self):
+        self.hotkeys.restore()
+        self._finish_now()
+        save_game_state(self._game_state())
         # On quit: don't persist unconfessed cheat changes.
         if self.cheat_dirty and self._profiles_snapshot is not None:
             self.cfg["profiles"] = self._profiles_snapshot
@@ -2492,5 +2761,11 @@ class Game:
         save_config(self.cfg); pygame.quit()
 
 
-if __name__ == "__main__":
+def main():
+    if not acquire_single_instance():
+        return          # another copy is running: it was brought to the front
     Game().run()
+
+
+if __name__ == "__main__":
+    main()

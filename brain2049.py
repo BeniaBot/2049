@@ -555,9 +555,12 @@ class Analysis:
             self.harms = [(h / self.unit, i) for h, i in tile_harms(b, n, 1)]
         self.harm_at = {i: h for h, i in self.harms}
         self.problems = {i for h, i in self.harms if h >= CHEAT_T}
+        # "stuck" (what a tip may call stuck) is for clearly LOW tiles - at
+        # most 1/8 of the top tile; the assist may still take up to 1/4
+        low = self.max_rank - 3
         self.stuck = {i for h, i in self.harms
-                      if h >= STUCK_T
-                      or (h >= CHAIN_T and chain_breaker(b, n, i))}
+                      if b[i] <= low and (h >= STUCK_T or
+                                          (h >= CHAIN_T and chain_breaker(b, n, i)))}
 
     @classmethod
     def of_grid(cls, grid, harms=True):
