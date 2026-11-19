@@ -800,6 +800,7 @@ class Coach:
         self.off_corner = 0          # moves the biggest tile spent off a corner
         self.scattered = 0           # moves the big tiles stayed spread out
         self.recent_dirs = []        # directions of the last DIRS_WINDOW moves
+        self.off_seen = None         # last move the top tile was seen out of a corner
         self.corner_moves = 0        # moves (top tile 32+) with it in a corner
         self.counted_moves = 0       # moves (top tile 32+) counted at all
         self.current = None
@@ -925,6 +926,8 @@ class Coach:
             new_track[cell]["kind"] = a.stuck_info[cell][0]
         self.track = new_track
         self.off_corner = 0 if a.corner else self.off_corner + steps
+        if not a.corner:
+            self.off_seen = m
         self.scattered = self.scattered + steps if big_tiles_scattered(a.b, a.n) else 0
 
         # -- danger ------------------------------------------------------------
@@ -1010,8 +1013,12 @@ class Coach:
         # ...and the beginner's habit behind most lost corners: every one of
         # the four directions in turn (each at least twice in the last 12
         # moves). Pick one and leave it alone, and the corner holds.
+        # Only when the corner really did not hold in that time: with the top
+        # tile in its corner all along, the tip would promise what already is
+        # (round 6: 3 of 21 were like that).
         elif len(self.recent_dirs) >= DIRS_WINDOW and a.max_rank >= 4 \
                 and min(self.recent_dirs.count(x) for x in DIRS) >= DIRS_EACH \
+                and self.off_seen is not None and m - self.off_seen <= DIRS_WINDOW \
                 and not self.danger and not a.deadly and self._ready("tip_hint_dirs"):
             cands.append(Tip("tip_hint_dirs", PRIO_HINT, m, max_moves=4,
                              kind="info", max_secs=6.0))

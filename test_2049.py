@@ -415,6 +415,12 @@ class TestCoach(unittest.TestCase):
         c = self.fresh(rows)
         tips = [c.on_move(d, ident(rows), ana(rows)) for d in [B.LEFT, B.DOWN, B.RIGHT] * 4]
         self.assertTrue(all(t is None or t.key != "tip_hint_dirs" for t in tips))
+        # nor one whose top tile held its corner all along (the tip would
+        # promise what already is)
+        held = [[16, 4, 0, 0], [4, 2, 2, 0], [8, 2, 0, 0], [2, 0, 0, 0]]
+        c = self.fresh(held)
+        tips = [c.on_move(d, ident(held), ana(held)) for d in [B.LEFT, B.UP, B.RIGHT, B.DOWN] * 3]
+        self.assertTrue(all(t is None or t.key != "tip_hint_dirs" for t in tips))
 
     def test_a_burst_of_moves_is_followed_tile_by_tile(self):
         # three moves too fast to analyse one by one: the coach gets them as

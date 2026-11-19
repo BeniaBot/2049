@@ -578,6 +578,7 @@
     this.times = {}; this.lastAny = null;
     this.danger = false; this.cornerTold = null; this.offCorner = 0; this.current = null;
     this.scattered = 0; this.recentDirs = []; this.cornerMoves = 0; this.countedMoves = 0;
+    this.offSeen = null;
   };
   Coach.prototype.newGame = function (a) {
     if (this.countedMoves >= 20) this.habit = this.cornerMoves / this.countedMoves;
@@ -663,6 +664,7 @@
     });
     this.track = newTrack;
     this.offCorner = a.corner ? 0 : this.offCorner + steps;
+    if (!a.corner) this.offSeen = m;
     this.scattered = bigTilesScattered(a.b, a.n) ? this.scattered + steps : 0;
 
     // danger / trap
@@ -728,7 +730,8 @@
         this.ready("tip_hint_order")) {
       cands.push(new Tip("tip_hint_order", PRIO_HINT, m, {}, { maxMoves: 4, kind: "info", maxSecs: 6.0 }));
     } else if (this.recentDirs.length >= DIRS_WINDOW && a.maxRank >= 4 && !this.danger &&
-               !a.deadly.length && this.ready("tip_hint_dirs")) {
+               !a.deadly.length && this.offSeen !== null && m - this.offSeen <= DIRS_WINDOW &&
+               this.ready("tip_hint_dirs")) {
       var least = Infinity;
       for (var di = 0; di < 4; di++) {
         var cnt = 0;
