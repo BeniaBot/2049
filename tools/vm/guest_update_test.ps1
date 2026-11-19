@@ -87,10 +87,12 @@ try {
   Check 'portable A opens' ($h -ne [IntPtr]::Zero)
   Start-Sleep -Seconds 2
   # play a little first: the game in progress must survive the update
-  foreach ($k in @(0x25,0x28,0x25,0x28,0x27,0x28)) {
-    [W]::PostMessageW($h, 0x100, [IntPtr]$k, [IntPtr](1 -bor (0x4B -shl 16) -bor (1 -shl 24))) | Out-Null
+  # (virtual key, scan code): SDL decides the key by the scan code
+  foreach ($k in @(@(0x25,0x4B), @(0x28,0x50), @(0x25,0x4B), @(0x28,0x50), @(0x27,0x4D), @(0x28,0x50))) {
+    $lp = 1 -bor ($k[1] -shl 16) -bor (1 -shl 24)
+    [W]::PostMessageW($h, 0x100, [IntPtr]$k[0], [IntPtr]$lp) | Out-Null
     Start-Sleep -Milliseconds 40
-    [W]::PostMessageW($h, 0x101, [IntPtr]$k, [IntPtr](1 -bor (0x4B -shl 16) -bor (1 -shl 24) -bor (1 -shl 30) -bor ([int]0x80000000))) | Out-Null
+    [W]::PostMessageW($h, 0x101, [IntPtr]$k[0], [IntPtr]($lp -bor (1 -shl 30) -bor ([int]0x80000000))) | Out-Null
     Start-Sleep -Milliseconds 180
   }
   Start-Sleep -Seconds 2
