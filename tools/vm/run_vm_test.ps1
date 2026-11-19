@@ -1,4 +1,4 @@
-# Host side: run guest_test.ps1 on a clean Hyper-V machine and bring the
+﻿# Host side: run guest_test.ps1 on a clean Hyper-V machine and bring the
 # results back. Leaves the machine exactly as it was found.
 #   powershell -File run_vm_test.ps1 -VMName winapps-w11 -Clean clean-hebrew-user -Exe ...\2049.exe -Out ...
 param(
@@ -39,7 +39,7 @@ try {
   foreach ($f in ($Folders | ForEach-Object { $_ -split ',' } | Where-Object { $_ })) {
     $name = Split-Path $f -Leaf
     Invoke-Command -Session $s { param($n) New-Item -ItemType Directory -Force ("C:\bench\" + $n) | Out-Null } -ArgumentList $name
-    Get-ChildItem $f -File -Filter *.exe | ForEach-Object {
+    Get-ChildItem $f -File | Where-Object { $_.Extension -in '.exe', '.txt' } | ForEach-Object {
       Copy-Item $_.FullName -Destination ("C:\bench\" + $name + "\" + $_.Name) -ToSession $s }
   }
   Say "running $GuestScript on the user desktop"

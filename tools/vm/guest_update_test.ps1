@@ -30,6 +30,9 @@ public static class W {
   [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr dc, uint f);
   [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+  [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr h, ref POINT p);
+  [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
   public static IntPtr Find() { IntPtr f = IntPtr.Zero;
     EnumWindows((h, l) => { var c = new StringBuilder(64); GetClassNameW(h, c, 64); var t = new StringBuilder(64); GetWindowTextW(h, t, 64);
@@ -42,6 +45,10 @@ public static class W {
   public static double Scale(IntPtr h) { RECT r; GetClientRect(h, out r); return r.R / 560.0; }
   public static void Click(IntPtr h, int lx, int ly) {
     double s = Scale(h); int x = (int)Math.Round(lx * s), y = (int)Math.Round(ly * s);
+    // the REAL cursor goes there first, like a hand on the mouse: with the cursor
+    // elsewhere SDL may decide the mouse is not in the window and drop the click
+    POINT p; p.X = x; p.Y = y; ClientToScreen(h, ref p); SetCursorPos(p.X, p.Y);
+    System.Threading.Thread.Sleep(80);
     IntPtr lp = (IntPtr)((y << 16) | (x & 0xFFFF));
     PostMessageW(h, 0x200, IntPtr.Zero, lp);            // WM_MOUSEMOVE: SDL takes the position from here
     System.Threading.Thread.Sleep(60);
