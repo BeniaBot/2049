@@ -870,7 +870,7 @@ def _activate_running_window():
             user32.GetClassNameW(hwnd, cls, 64)
             title = ctypes.create_unicode_buffer(64)
             user32.GetWindowTextW(hwnd, title, 64)
-            if cls.value == "SDL_app" and title.value == APP_NAME:
+            if cls.value in ("pygame", "SDL_app") and title.value == APP_NAME:
                 found.append(hwnd)
                 return False
             return True
