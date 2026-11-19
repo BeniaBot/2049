@@ -2181,10 +2181,13 @@ class Game:
         tw = max(lws)
         th = 30*len(lines) + 12
         bx = self.W/2 - (tw+40)/2
-        self.screen.rect(BTN_BG, (bx, 72, tw+40, th), border_radius=10)
+        # on the game screen: over the top of the board, clear of the scores;
+        # on the other screens: right under their header bar
+        ty = self.board_geometry()[1] + 18 if self.state == "game" else 72
+        self.screen.card(BTN_BG, pygame.Rect(bx, ty, tw+40, th), radius=10, shadow=True)
         for i, ln in enumerate(lines):
             tt = self.f_small.render(self.shape(ln), True, TEXT_LIGHT)
-            self.screen.blit(tt, (self.W/2-tt.get_width()/2/self.SS, 80+i*28))
+            self.screen.blit(tt, (self.W/2-tt.get_width()/2/self.SS, ty+8+i*28))
 
     def _settings_row(self, y, label, options, selected_val, rtl):
         """One settings card: the label on one side and a segmented control
