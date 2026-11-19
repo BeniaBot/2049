@@ -39,6 +39,20 @@ PROB_FOUR = 0.1          # chance a spawn is a 4
 CPROB = 1e-4             # ignore branches less likely than this
 NODE_BUDGET = 6000       # rough cap on leaf evaluations per search
 
+# A pause between small chunks of thinking. The game's worker thread sets
+# it while tiles move: Python runs one thread at a time, and a search that
+# never lets go makes frames late (measured 20.11: ~100 visible hitches a
+# minute in fast play). Pausing between chunks hands the interpreter to the
+# UI thread; the answer comes some ms later, the frames stay smooth.
+# None = no pause. It never changes a result (the JS port has none).
+PAUSE = None
+
+
+def _pause():
+    if PAUSE is not None:
+        PAUSE()
+
+
 _SLIDE = {}              # line -> (slid line, score gained)
 _HEUR = {}               # line -> heuristic value
 _CACHE_LIMIT = 400000
@@ -235,7 +249,10 @@ class _Search:
         p_cell = prob / k
         total = 0.0
         lst = list(b)
+        top = prob == 1.0
         for i in cells:
+            if top:
+                _pause()
             lst[i] = 1
             total += (1 - PROB_FOUR) * self.best(tuple(lst), depth,
                                                  p_cell * (1 - PROB_FOUR))
@@ -284,6 +301,7 @@ def move_values(b, n, depth=None):
         nb, _ = move(b, n, d)
         if nb is b:
             continue
+        _pause()
         out[d] = s.chance(nb, depth, 1.0)
     return out
 
@@ -372,6 +390,7 @@ def tile_harms(b, n, depth=1, min_ratio=4):
         if r == 0 or (1 << r) * min_ratio > (1 << mx):
             continue
         lst[i] = 0
+        _pause()
         v = position_value(tuple(lst), n, depth)
         lst[i] = r
         out.append((v - base, i))
@@ -394,6 +413,7 @@ def move_survival(b, n, horizon):
         lst = list(nb)
         total = 0.0
         for i in cells:
+            _pause()
             lst[i] = 1
             total += (1 - PROB_FOUR) * survival(tuple(lst), n, horizon - 1)
             lst[i] = 2

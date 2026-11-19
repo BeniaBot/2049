@@ -1164,6 +1164,7 @@ class Analyst:
         self._working = False
         self._cv = threading.Condition()
         t = threading.Thread(target=self._run, name="2049-brain", daemon=True)
+        self._thread = t
         t.start()
 
     def submit(self, tag, grid):
@@ -1196,12 +1197,24 @@ class Analyst:
                 self._since = None
                 self._working = True
             try:
+                self._ran_since = time.perf_counter()
+                brain.PAUSE = self._pause
                 a = brain.Analysis.of_grid(grid)
             except Exception:
                 a = None
             with self._cv:
                 self._done.append((tag, a))
                 self._working = False
+
+    def _pause(self):
+        # while tiles move, let the UI thread run between chunks of thinking:
+        # after every ~4 ms of work, 1 ms off (only this worker pauses - an
+        # assist thinking on the UI thread must not)
+        if self._busy_ui and threading.current_thread() is self._thread:
+            now = time.perf_counter()
+            if now - self._ran_since >= 0.004:
+                time.sleep(0.001)
+                self._ran_since = time.perf_counter()
 
     def results(self):
         with self._cv:
@@ -1794,6 +1807,13 @@ class Game:
                 if tip is not self._tip:
                     self._tip = tip
                     self._tip_since = time.monotonic()
+            elif self.coach.current is not None and self.coach.current.kind == "info" \
+                    and self.coach.current is not self._tip:
+                # the board already moved on (fast play): a general tip is about
+                # the player's habits, not this exact board - it may show; a
+                # warning or a tile-by-tile tip waits for a board that holds still
+                self._tip = self.coach.current
+                self._tip_since = time.monotonic()
 
     def _analysis_now(self):
         """The current board's analysis - computed right here if the worker
