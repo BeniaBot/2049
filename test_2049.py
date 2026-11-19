@@ -32,6 +32,7 @@ import brain2049 as B  # noqa: E402
 _TMP = tempfile.mkdtemp(prefix="2049_tests_")
 g.CONFIG_PATH = os.path.join(_TMP, "2049_config.json")
 g.GAME_PATH = os.path.join(_TMP, "2049_game.json")
+_REAL_UPDATE_CHECK = g.Game._start_update_check      # TestUpdates uses it
 g.Game._start_update_check = lambda self: setattr(self, "update_status", "error")
 
 import pygame  # noqa: E402
@@ -484,6 +485,102 @@ class TestGameFlow(unittest.TestCase):
         self.assertEqual(st["grid"][0], [2, 4, 8, 16])
         self.assertEqual(st["score"], 1234)
         self.assertTrue(st["cheat_used"])           # no best-score laundering
+
+
+# ===========================================================================
+#  Updates (against local file:// "releases" - never GitHub)
+# ===========================================================================
+class TestUpdates(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.mkdtemp(prefix="2049_upd_")
+        self.game = g.Game.__new__(g.Game)          # no window needed
+        self.game.cfg = g.default_config()
+
+    def tearDown(self):
+        os.environ.pop("TWENTY49_UPDATE_API", None)
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+    def url(self, name):
+        return "file:///" + os.path.join(self.dir, name).replace("\\", "/")
+
+    def release(self, tag, exe_bytes=None, setup_bytes=None):
+        assets = []
+        for name, data in (("2049.exe", exe_bytes), ("2049_Setup.exe", setup_bytes)):
+            if data is not None:
+                with open(os.path.join(self.dir, name), "wb") as f:
+                    f.write(data)
+                assets.append({"name": name, "size": len(data),
+                               "browser_download_url": self.url(name)})
+        with open(os.path.join(self.dir, "api.json"), "w", encoding="utf-8") as f:
+            json.dump({"tag_name": tag, "assets": assets}, f)
+        os.environ["TWENTY49_UPDATE_API"] = self.url("api.json")
+
+    def check(self, installed=False):
+        self.game._is_installed = lambda: installed
+        _REAL_UPDATE_CHECK(self.game)
+        end = time.time() + 10
+        while self.game.update_status == "checking" and time.time() < end:
+            time.sleep(0.02)
+        return self.game.update_status
+
+    def test_newer_release_portable_gets_the_exe(self):
+        exe = b"MZ" + os.urandom(200000)
+        self.release("v9.9.0", exe, b"MZ" + os.urandom(150000))
+        self.assertEqual(self.check(installed=False), "update")
+        self.assertEqual(self.game.update_available, "9.9.0")
+        self.assertTrue(self.game.update_download_url.endswith("/2049.exe"))
+        self.assertEqual(self.game.update_kind, "exe")
+        self.assertEqual(self.game.update_size, len(exe))
+
+    def test_newer_release_installed_gets_the_installer(self):
+        self.release("v9.9.0", b"MZ" + os.urandom(200000), b"MZ" + os.urandom(150000))
+        self.assertEqual(self.check(installed=True), "update")
+        self.assertTrue(self.game.update_download_url.endswith("/2049_Setup.exe"))
+        self.assertEqual(self.game.update_kind, "installer")
+
+    def test_same_version_is_latest(self):
+        self.release("v" + g.APP_VERSION, b"MZ" + os.urandom(200000))
+        self.assertEqual(self.check(), "latest")
+        self.release(g.APP_VERSION + ".0", b"MZ" + os.urandom(200000))
+        self.assertEqual(self.check(), "latest")          # 0.18.0.0 == 0.18.0
+
+    def test_offline(self):
+        os.environ["TWENTY49_UPDATE_API"] = self.url("missing.json")
+        self.assertEqual(self.check(), "error")
+
+    def download(self):
+        self.game.start_update()
+        end = time.time() + 15
+        while self.game.update_status == "downloading" and time.time() < end:
+            time.sleep(0.02)
+        return self.game.update_status
+
+    def test_download_is_verified(self):
+        good = b"MZ" + os.urandom(300000)
+        self.release("v9.9.0", good)
+        self.check()
+        self.assertEqual(self.download(), "apply")           # ready to apply
+        with open(self.game._update_file, "rb") as f:
+            self.assertEqual(f.read(), good)
+        self.assertAlmostEqual(self.game.update_progress, 1.0)
+
+    def test_corrupt_download_is_refused(self):
+        self.release("v9.9.0", b"<html>not a program</html>" + b"x" * 200000)
+        self.check()
+        self.assertEqual(self.download(), "failed")
+
+    def test_truncated_download_is_refused(self):
+        self.release("v9.9.0", b"MZ" + os.urandom(300000))
+        self.check()
+        self.game.update_size += 1000                         # less than promised
+        self.assertEqual(self.download(), "failed")
+
+    def test_version_compare(self):
+        gt = g.Game._version_gt
+        self.assertTrue(gt("0.18.1", "0.18.0"))
+        self.assertTrue(gt("1.0", "0.99.9"))
+        self.assertFalse(gt("1.0", "1.0.0"))
+        self.assertFalse(gt("1.0.0", "1.0"))
 
 
 # ===========================================================================

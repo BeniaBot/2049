@@ -5,7 +5,10 @@ param(
   [Parameter(Mandatory)] [string]$VMName,
   [Parameter(Mandatory)] [string]$Clean,
   [Parameter(Mandatory)] [string]$Exe,
-  [Parameter(Mandatory)] [string]$Out
+  [Parameter(Mandatory)] [string]$Out,
+  [string]$ExeName = '2049.exe',
+  [string]$GuestScript = 'guest_test.ps1',
+  [string[]]$Folders = @()          # extra folders copied into C:\bench\<name>
 )
 $ErrorActionPreference = 'Stop'
 . D:\Claude\vm\vmtools.ps1
@@ -30,10 +33,16 @@ try {
   # let the desktop settle (auto-logon, first-run shell work)
   Start-Sleep -Seconds 20
   Invoke-Command -Session $s { Remove-Item C:\bench -Recurse -Force -ErrorAction SilentlyContinue; New-Item -ItemType Directory C:\bench | Out-Null }
-  Copy-Item $Exe -Destination C:\bench\2049.exe -ToSession $s
-  Copy-Item (Join-Path $PSScriptRoot 'guest_test.ps1') -Destination C:\bench\guest_test.ps1 -ToSession $s
-  Say 'running the test on the user desktop'
-  $r = Invoke-BenchDesktop -VMName $VMName -Exe 'powershell.exe' -Arguments '-NoProfile -ExecutionPolicy Bypass -File C:\bench\guest_test.ps1' -WaitSeconds 600
+  Copy-Item $Exe -Destination ("C:\bench\" + $ExeName) -ToSession $s
+  Copy-Item (Join-Path $PSScriptRoot $GuestScript) -Destination C:\bench\guest.ps1 -ToSession $s
+  foreach ($f in $Folders) {
+    $name = Split-Path $f -Leaf
+    Invoke-Command -Session $s { param($n) New-Item -ItemType Directory -Force ("C:\bench\" + $n) | Out-Null } -ArgumentList $name
+    Get-ChildItem $f -File -Filter *.exe | ForEach-Object {
+      Copy-Item $_.FullName -Destination ("C:\bench\" + $name + "\" + $_.Name) -ToSession $s }
+  }
+  Say "running $GuestScript on the user desktop"
+  $r = Invoke-BenchDesktop -VMName $VMName -Exe 'powershell.exe' -Arguments '-NoProfile -ExecutionPolicy Bypass -File C:\bench\guest.ps1' -WaitSeconds 600
   Say "task result $($r.LastResult) state $($r.State)"
   Save-BenchScreen -VMName $VMName -Path (Join-Path $Out 'vm_screen.png') | Out-Null
   Copy-Item -FromSession $s -Path 'C:\bench\out\*' -Destination $Out -Recurse -Force

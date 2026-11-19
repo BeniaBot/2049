@@ -191,6 +191,10 @@ STRINGS = {
         "keep_playing":"\u05d4\u05de\u05e9\u05da \u05dc\u05e9\u05d7\u05e7",
         "hint_keys":"\u05de\u05e9\u05d7\u05e7\u05d9\u05dd \u05d1\u05d7\u05e6\u05d9\u05dd \u05d0\u05d5 \u05d1\u05de\u05e7\u05e9\u05d9 WASD",
         "offline":"\u05d0\u05d9\u05df \u05d7\u05d9\u05d1\u05d5\u05e8 \u2013 \u05dc\u05d0 \u05e0\u05d9\u05ea\u05df \u05dc\u05d1\u05d3\u05d5\u05e7 \u05e2\u05d3\u05db\u05d5\u05e0\u05d9\u05dd",
+        "update_now":"עדכן עכשיו", "updating":"מעדכן...",
+        "downloading":"מוריד את העדכון...",
+        "update_failed":"העדכון לא הושלם – אפשר להוריד ידנית",
+        "updated_to":"עודכן לגרסה {v}",
         "infinite":"\u05d0\u05d9\u05e0\u05e1\u05d5\u05e4\u05d9", "target":"\u05e2\u05e6\u05d9\u05e8\u05d4 \u05d1-2048",
         "preferences":"\u05d4\u05e2\u05d3\u05e4\u05d5\u05ea",
         "prefs_hint":"\u05d4\u05d2\u05d3\u05e8\u05d5\u05ea \u05de\u05ea\u05e7\u05d3\u05de\u05d5\u05ea",
@@ -289,6 +293,10 @@ STRINGS = {
         "keep_playing":"Keep playing",
         "hint_keys":"Play with the arrow keys or WASD",
         "offline":"Offline - couldn't check for updates",
+        "update_now":"Update now", "updating":"Updating...",
+        "downloading":"Downloading the update...",
+        "update_failed":"The update didn't finish - download it manually",
+        "updated_to":"Updated to version {v}",
         "preferences":"Preferences", "prefs_hint":"Advanced settings", "prefs_title":"Refuge of Cheats & Crooks",
         "prefs_sub":"Where everyone who isn't good enough on their own gathers",
         "persist_cheats":"Keep cheats between sessions",
@@ -909,23 +917,30 @@ SINGLE_INSTANCE_NAME = "BeniaBot.2049.SingleInstance"
 _instance_handle = None
 
 
-def acquire_single_instance():
+def acquire_single_instance(wait=0.0):
     """True if this is the only running copy. Otherwise bring the running
     window to the front and return False (the caller then just exits).
-    The installer checks the same mutex name (AppMutex)."""
+    The installer checks the same mutex name (AppMutex). `wait`: keep
+    trying this long (a freshly updated copy starts while the old one is
+    still closing)."""
     global _instance_handle
     if sys.platform == "win32":
         try:
             import ctypes
             kernel32 = ctypes.windll.kernel32
             kernel32.CreateMutexW.restype = ctypes.c_void_p
-            h = kernel32.CreateMutexW(None, False, SINGLE_INSTANCE_NAME)
-            if kernel32.GetLastError() == 183:          # ALREADY_EXISTS
+            end = time.monotonic() + wait
+            while True:
+                h = kernel32.CreateMutexW(None, False, SINGLE_INSTANCE_NAME)
+                if kernel32.GetLastError() != 183:      # not ALREADY_EXISTS
+                    _instance_handle = h                # keep it for life
+                    return True
                 if h:
                     kernel32.CloseHandle(ctypes.c_void_p(h))
-                _activate_running_window()
-                return False
-            _instance_handle = h                        # keep it for life
+                if time.monotonic() >= end:
+                    _activate_running_window()
+                    return False
+                time.sleep(0.2)
         except Exception:
             pass
         return True
@@ -939,6 +954,43 @@ def acquire_single_instance():
     except Exception:
         pass
     return True
+
+
+def release_single_instance():
+    """Let go of the single-instance mutex before handing over to a new
+    version (its installer, or the swapped exe)."""
+    global _instance_handle
+    h, _instance_handle = _instance_handle, None
+    if h is None:
+        return
+    try:
+        if sys.platform == "win32":
+            import ctypes
+            ctypes.windll.kernel32.CloseHandle(ctypes.c_void_p(h))
+        else:
+            h.close()
+    except Exception:
+        pass
+
+
+def _cleanup_after_update():
+    """A portable update leaves the previous exe as '<exe>.old' (a running
+    exe can be renamed, not deleted). Remove it once that copy has exited."""
+    if not getattr(sys, "frozen", False):
+        return
+    old = sys.executable + ".old"
+    if not os.path.exists(old):
+        return
+    def worker():
+        for _ in range(60):
+            try:
+                os.remove(old)
+                return
+            except FileNotFoundError:
+                return
+            except Exception:
+                time.sleep(1.0)
+    threading.Thread(target=worker, name="2049-cleanup", daemon=True).start()
 
 
 def _activate_running_window():
@@ -1260,9 +1312,24 @@ class Game:
         self._merge_tones = {}
         self.sound_ok = False          # becomes True once audio is open
 
+        def has_audio_device():
+            # pygame holds Python's lock while SDL waits for a missing audio
+            # device (~8 s), freezing even the main thread - so ask Windows
+            # first, instantly, whether there is any output device at all
+            if sys.platform != "win32":
+                return True
+            try:
+                import ctypes
+                return ctypes.windll.winmm.waveOutGetNumDevs() > 0
+            except Exception:
+                return True
+
         def open_audio():
             # one try, off the main thread: if there is no audio device the
             # game simply stays silent instead of waiting for it
+            if not has_audio_device():
+                _trace("audio unavailable (no output device)")
+                return
             try:
                 pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
                 info = pygame.mixer.get_init()
@@ -2215,12 +2282,27 @@ class Game:
         st = getattr(self, "update_status", "checking")
         pill = pygame.Rect(40, iy, self.W-80, 36)
         pill_col = (216, 236, 222) if st == "latest" else (
-                   (247, 224, 208) if st == "update" else (236, 230, 220))
+                   (247, 224, 208) if st in ("update", "downloading", "apply")
+                   else (236, 230, 220))
         self.screen.rect(pill_col, pill, border_radius=10)
+        if st in ("downloading", "apply"):
+            # download progress fills the pill from the reading side
+            p = max(0.02, min(1.0, getattr(self, "update_progress", 0.0)))
+            fw = (pill.w - 8) * p
+            fx = pill.right - 4 - fw if rtl else pill.x + 4
+            self.screen.rect((240, 200, 170), (fx, pill.y + 4, fw, pill.h - 8),
+                             border_radius=7)
         if st == "latest":
             msg, badge, bcol = L("up_to_date"), "\u2713", (60, 170, 110)
         elif st == "update":
-            msg, badge, bcol = L("update_ready"), "\u2191", ACCENT
+            msg, badge, bcol = (L("update_ready") + " (v%s)" % self.update_available,
+                                "\u2191", ACCENT)
+        elif st in ("downloading", "apply"):
+            msg, badge, bcol = (L("downloading") + " %d%%"
+                                % round(100 * getattr(self, "update_progress", 0)),
+                                "\u2193", ACCENT)
+        elif st == "failed":
+            msg, badge, bcol = L("update_failed"), "!", (200, 110, 90)
         elif st == "error":
             # offline (or GitHub unreachable): say so, instead of an endless
             # "checking..."
@@ -2255,6 +2337,14 @@ class Game:
         # it becomes a "Download new version" button that opens the releases page.
         gbtn = pygame.Rect(40, iy, self.W-80, 38)
         if st == "update":
+            self.s_github = Button(gbtn, L("update_now"), self.f_small,
+                                   base=ACCENT, text_col=TEXT_LIGHT)
+            self._github_target = "update"
+        elif st in ("downloading", "apply"):
+            self.s_github = Button(gbtn, L("updating"), self.f_small,
+                                   base=(222, 190, 160), text_col=TEXT_LIGHT)
+            self._github_target = None
+        elif st == "failed":
             self.s_github = Button(gbtn, L("download_update"), self.f_small,
                                    base=ACCENT, text_col=TEXT_LIGHT)
             self._github_target = "release"
@@ -2687,9 +2777,12 @@ class Game:
             if hasattr(self,"a_recheck") and self.a_recheck.collidepoint(e.pos):
                 self._start_update_check(); return
             if hasattr(self,"s_github") and self.s_github.hit(e.pos):
-                if getattr(self, "_github_target", "repo") == "release":
+                target = getattr(self, "_github_target", "repo")
+                if target == "update":
+                    self.start_update()
+                elif target == "release":
                     self.open_releases()
-                else:
+                elif target == "repo":
                     self.open_github()
                 return
             if hasattr(self,"s_profile") and self.s_profile.collidepoint(e.pos):
@@ -2827,20 +2920,21 @@ class Game:
                 self.cheat_dirty = True
 
     def _is_installed(self):
-        """Heuristic: is this copy running from an installed location (via the
-        installer) rather than as a portable exe? Used to pick the right update
-        asset. Installed copies live under Program Files or the per-user
-        Programs folder; portable copies usually sit in Downloads/Desktop."""
+        """Is this copy running from where the installer puts it (Program
+        Files, or the per-user Programs folder) - as opposed to a portable
+        exe sitting in Downloads/Desktop? Decides how an update is applied."""
         try:
             if not getattr(sys, "frozen", False):
                 return False  # running from source -> treat as portable
             exe_dir = os.path.dirname(sys.executable).lower()
+            # the installer drops its uninstaller next to the game
+            if os.path.exists(os.path.join(exe_dir, "unins000.exe")):
+                return True
             markers = []
             for env in ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"):
                 v = os.environ.get(env)
                 if v:
                     markers.append(v.lower())
-            # LOCALAPPDATA installs go under \Programs\
             if any(exe_dir.startswith(m) for m in markers if m):
                 if "programs" in exe_dir or "program files" in exe_dir:
                     return True
@@ -2848,59 +2942,133 @@ class Game:
         except Exception:
             return False
 
-    def _is_installed_safe(self):
-        return self._is_installed()
+    # ------------------------------------------------------------------
+    #  Updates: check GitHub, then - one click - download the right file
+    #  inside the game, verify it, and put it in place:
+    #    installed copy -> run the new installer silently; it relaunches us
+    #    portable copy  -> swap the exe next to itself and relaunch
+    #  Anything unexpected -> fall back to opening the download page.
+    #  TWENTY49_UPDATE_API (tests only) points the check at another URL.
+    # ------------------------------------------------------------------
+    def _update_api(self):
+        return os.environ.get("TWENTY49_UPDATE_API") or \
+            f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
     def _start_update_check(self):
-        """Check GitHub Releases for a newer version, in a background thread so
-        it never blocks the game or breaks offline use."""
-        self.update_status = "checking"   # checking | latest | update | error
+        """Ask GitHub for the latest release in a background thread, so it
+        never blocks the game or breaks offline use."""
+        self.update_status = "checking"   # checking|latest|update|error|downloading|failed
+        self.update_progress = 0.0
         def worker():
             try:
                 import urllib.request, json as _json
-                url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
-                req = urllib.request.Request(url, headers={"User-Agent": APP_NAME})
-                with urllib.request.urlopen(req, timeout=5) as r:
+                req = urllib.request.Request(self._update_api(),
+                                             headers={"User-Agent": APP_NAME})
+                with urllib.request.urlopen(req, timeout=6) as r:
                     data = _json.loads(r.read().decode("utf-8"))
-                tag = (data.get("tag_name") or "").lstrip("vV")
                 raw_tag = data.get("tag_name") or ""
-                if tag and self._version_gt(tag, APP_VERSION):
-                    self.update_available = tag
-                    self.update_status = "update"
-                    # Pick the best download asset. Prefer the installer
-                    # Pick based on HOW this copy is running:
-                    # installed copy -> prefer the installer; portable -> the exe.
-                    assets = data.get("assets") or []
-                    installer = None
-                    standalone = None
-                    for a in assets:
-                        name = (a.get("name") or "").lower()
-                        url = a.get("browser_download_url")
-                        if not name.endswith(".exe"):
-                            continue
-                        if "setup" in name or "install" in name:
-                            installer = installer or url
-                        else:
-                            standalone = standalone or url
-                    if self._is_installed():
-                        dl = installer or standalone
-                        fallback_name = "2049_Setup.exe"
-                    else:
-                        dl = standalone or installer
-                        fallback_name = "2049.exe"
-                    if not dl and raw_tag:
-                        dl = (f"https://github.com/{GITHUB_REPO}/releases/"
-                              f"download/{raw_tag}/{fallback_name}")
-                    self.update_download_url = dl
-                else:
+                tag = raw_tag.lstrip("vV")
+                if not (tag and self._version_gt(tag, APP_VERSION)):
                     self.update_status = "latest"
+                    return
+                installer = standalone = None
+                for a in data.get("assets") or []:
+                    name = (a.get("name") or "").lower()
+                    if not name.endswith(".exe") or not a.get("browser_download_url"):
+                        continue
+                    info = (a["browser_download_url"], int(a.get("size") or 0))
+                    if "setup" in name or "install" in name:
+                        installer = installer or info
+                    else:
+                        standalone = standalone or info
+                installed = self._is_installed()
+                pick = (installer or standalone) if installed else (standalone or installer)
+                if pick is None and raw_tag:
+                    fallback = "2049_Setup.exe" if installed else "2049.exe"
+                    pick = (f"https://github.com/{GITHUB_REPO}/releases/"
+                            f"download/{raw_tag}/{fallback}", 0)
+                self.update_download_url, self.update_size = pick
+                self.update_kind = ("installer" if pick is installer or
+                                    (installed and pick is not standalone) else "exe")
+                self.update_available = tag
+                self.update_status = "update"
             except Exception:
-                self.update_status = "error"  # offline or no release yet
+                self.update_status = "error"  # offline, rate-limited, no release
+        threading.Thread(target=worker, name="2049-update", daemon=True).start()
+
+    def start_update(self):
+        """'Update now': download in the background; apply when complete."""
+        if getattr(self, "update_status", "") not in ("update", "failed"):
+            return
+        url = getattr(self, "update_download_url", None)
+        if not url:
+            self.open_releases(); return
+        self.update_status = "downloading"
+        self.update_progress = 0.0
+        def worker():
+            try:
+                import urllib.request, tempfile
+                folder = os.path.join(tempfile.gettempdir(), "2049-update")
+                os.makedirs(folder, exist_ok=True)
+                target = os.path.join(folder, "2049_Setup.exe" if self.update_kind
+                                      == "installer" else "2049.exe")
+                req = urllib.request.Request(url, headers={"User-Agent": APP_NAME})
+                with urllib.request.urlopen(req, timeout=20) as r, \
+                        open(target + ".part", "wb") as f:
+                    total = int(r.headers.get("Content-Length") or self.update_size or 0)
+                    got = 0
+                    while True:
+                        chunk = r.read(256 * 1024)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        got += len(chunk)
+                        if total:
+                            self.update_progress = min(1.0, got / total)
+                expect = self.update_size or total
+                with open(target + ".part", "rb") as f:
+                    head = f.read(2)
+                if head != b"MZ" or (expect and got != expect) or got < 100000:
+                    raise ValueError("download is not the expected program")
+                os.replace(target + ".part", target)
+                self._update_file = target
+                self.update_status = "apply"          # the main loop applies it
+            except Exception:
+                self.update_status = "failed"
+        threading.Thread(target=worker, name="2049-download", daemon=True).start()
+
+    def _apply_update(self):
+        """Put the downloaded version in place and hand over to it. Runs on
+        the main thread; on success the game exits."""
+        import subprocess
+        path = self._update_file
         try:
-            import threading
-            threading.Thread(target=worker, daemon=True).start()
+            if self.update_kind == "installer":
+                release_single_instance()      # the installer checks our mutex
+                subprocess.Popen([path, "/SILENT", "/SUPPRESSMSGBOXES",
+                                  "/NORESTART", "/CLOSEAPPLICATIONS",
+                                  "/UPDATE=1", "/FROM=" + APP_VERSION],
+                                 close_fds=True)
+            else:
+                exe = sys.executable if getattr(sys, "frozen", False) else None
+                if not exe:
+                    raise RuntimeError("not a packaged exe")
+                old = exe + ".old"
+                if os.path.exists(old):
+                    os.remove(old)
+                os.replace(exe, old)           # a running exe may be renamed
+                try:
+                    import shutil
+                    shutil.copy2(path, exe)
+                except Exception:
+                    os.replace(old, exe)       # put ourselves back
+                    raise
+                release_single_instance()
+                subprocess.Popen([exe, "--updated-from=" + APP_VERSION],
+                                 cwd=os.path.dirname(exe), close_fds=True)
+            self.running = False               # leave: the new version takes over
         except Exception:
-            self.update_status = "error"
+            self.update_status = "failed"
 
     def open_github(self):
         try:
@@ -2930,12 +3098,14 @@ class Game:
 
     @staticmethod
     def _version_gt(a, b):
-        """Return True if version string a > b (e.g. '1.2.0' > '1.1.9')."""
+        """True if version a > b ('1.2.0' > '1.1.9'; '1.0' == '1.0.0')."""
         def parts(v):
             out = []
             for p in v.split("."):
                 try: out.append(int(p))
                 except Exception: out.append(0)
+            while out and out[-1] == 0:
+                out.pop()
             return out
         return parts(a) > parts(b)
 
@@ -2958,6 +3128,8 @@ class Game:
             if self.toast[1] <= 0: self.toast = None
         self._poll_brain()
         self._tick_tip()
+        if getattr(self, "update_status", "") == "apply":
+            self._apply_update()
         self._flush_saves()
         if self.state=="game": self.draw_game()
         elif self.state=="settings": self.draw_settings()
@@ -3009,9 +3181,16 @@ class Game:
 
 
 def main():
-    if not acquire_single_instance():
+    updated_from = next((a.split("=", 1)[1] for a in sys.argv[1:]
+                         if a.startswith("--updated-from=")), None)
+    # right after an update the previous copy may still be closing: wait
+    if not acquire_single_instance(wait=8.0 if updated_from is not None else 0.0):
         return          # another copy is running: it was brought to the front
-    Game().run()
+    _cleanup_after_update()
+    game = Game()
+    if updated_from is not None:
+        game.toast = [game.L("updated_to").format(v=APP_VERSION), 240]
+    game.run()
 
 
 if __name__ == "__main__":

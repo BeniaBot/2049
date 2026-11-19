@@ -63,6 +63,15 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilen
 [Run]
 ; Offer to launch the game right after install
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
+; An update started from inside the game (silent, /UPDATE=1): bring the
+; game straight back, now on the new version
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--updated-from={param:FROM|unknown}"; Flags: nowait skipifnotsilent; Check: IsInAppUpdate
+
+[Code]
+function IsInAppUpdate: Boolean;
+begin
+  Result := ExpandConstant('{param:UPDATE|0}') = '1';
+end;
 
 [UninstallDelete]
 ; Clean up the icon we copied (config lives in %APPDATA%\2049 and is kept)
