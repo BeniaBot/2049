@@ -299,6 +299,26 @@ class TestCoach(unittest.TestCase):
         self.assertEqual(tip.key, "tip_corner_made")
         self.assertEqual(tip.params, {"value": 256})
 
+    def test_general_order_tip_when_big_tiles_spread_out(self):
+        spread = [[0, 0, 0, 64], [0, 0, 2, 4], [0, 2, 4, 8], [256, 4, 8, 2]]
+        tidy = [[0, 0, 0, 2], [0, 0, 2, 4], [64, 2, 4, 8], [256, 128, 8, 2]]
+        self.assertTrue(B.big_tiles_scattered(*B.to_ranks(spread)))
+        self.assertFalse(B.big_tiles_scattered(*B.to_ranks(tidy)))
+        c = self.fresh(spread)
+        tips = [c.on_move(B.LEFT, ident(spread), ana(spread)) for _ in range(B.SCATTER_MOVES)]
+        self.assertEqual([t.key if t else None for t in tips][-1], "tip_hint_order")
+        self.assertTrue(all(t is None for t in tips[:-1]))      # not a passing moment
+        self.assertIsNone(c.on_move(B.LEFT, ident(tidy), ana(tidy)))   # gone once tidy
+
+    def test_way_back_is_the_same_tile_not_a_new_one(self):
+        # only two 32s merging could put "a 64" into a corner - the 64 itself
+        # cannot get there, so no "you can get your 64 back" (review game)
+        rows = [[0, 0, 2, 0], [2, 2, 4, 0], [2, 4, 8, 32], [4, 32, 64, 32]]
+        a = ana(rows)
+        self.assertTrue(a.keeps_corner(B.UP))
+        self.assertFalse(a.brings_max_to_corner(B.UP))
+        self.assertEqual(B.Coach._ways_back(a), [])
+
     def test_no_tip_once_the_game_is_over(self):
         start = [[2, 4, 2, 4], [4, 2, 4, 2], [2, 4, 2, 4], [4, 2, 4, 0]]
         dead = [[2, 4, 2, 4], [4, 2, 4, 2], [2, 4, 2, 4], [4, 2, 4, 2]]

@@ -510,6 +510,19 @@ def stuck_kind(b, n, i):
 STUCK_ORDER = {"block": 0, "chain": 1, "corner": 2}
 
 
+def big_tiles_scattered(b, n):
+    """The biggest tile (128+) sits in a corner, but another big tile - at
+    least a quarter of it - stands alone, next to no other big tile: the
+    big numbers are spread out instead of side by side."""
+    mx = max(b)
+    if mx < 7 or not max_in_corner(b, n):
+        return False
+    big = {i for i, v in enumerate(b) if v >= mx - 2}
+    if len(big) < 2:
+        return False
+    return any(not any(j in big for j in neighbours(i, n)) for i in big)
+
+
 def place_of(i, n):
     """Where a cell is, in words the UI can localize."""
     r, c = divmod(i, n)
@@ -658,6 +671,15 @@ class Analysis:
         nb, _ = move(self.b, self.n, d)
         return nb is not self.b and max_in_corner(nb, self.n)
 
+    def brings_max_to_corner(self, d):
+        """d moves an EXISTING top tile into a corner - not a merge that
+        makes a new one there (a review game showed 'you can get your 64
+        back' where only two 32s could make another 64 in the corner)."""
+        nb, _ = move(self.b, self.n, d)
+        mx = self.max_rank
+        return (nb is not self.b and max(nb) == mx
+                and nb.count(mx) == self.b.count(mx) and max_in_corner(nb, self.n))
+
 
 # ===========================================================================
 #  Coach: turns analyses into a few well-timed, true, concrete tips
@@ -691,6 +713,7 @@ COOLDOWN = {             # moves between two tips of the same key
     "stuck": 8, "tip_corner_lost": 6, "tip_corner_made": 6,
     "tip_corner_goal": 20, "tip_good_escape": 10, "tip_good_freed": 6,
     "tip_good_corner": 20, "tip_good_record": 0, "tip_danger": 0,
+    "tip_hint_order": 40,
 }
 RECORD_RANK = 8          # praise new records from 256 up
 OFF_CORNER_MOVES = 4     # biggest tile out of a corner this long -> corner tip
@@ -708,6 +731,7 @@ GOAL_REGRET = 0.15       # "you can get it back now": some move does it, is
 # Returns offered at <= 0.15: never clearly worse than the best move; the
 # clearly worse ones started at 0.19.
 STUCK_KEYS = ("tip_stuck_block", "tip_stuck_chain", "tip_stuck_corner")
+SCATTER_MOVES = 3        # big tiles spread out this long -> the general tip
 
 
 class Coach:
@@ -723,6 +747,7 @@ class Coach:
         self.danger = False
         self.corner_told = None      # move number of the last corner tip
         self.off_corner = 0          # moves the biggest tile spent off a corner
+        self.scattered = 0           # moves the big tiles stayed spread out
         self.current = None
 
     # ---- lifecycle ------------------------------------------------------
@@ -763,6 +788,8 @@ class Coach:
             return self.move_no == tip.born and tip.params["dir"] in a.values
         if k in STUCK_KEYS:
             return tip.track is not None and tip.track in a.problems
+        if k == "tip_hint_order":
+            return big_tiles_scattered(a.b, a.n)
         if k in ("tip_corner_lost", "tip_corner_made"):
             return not a.corner
         if k == "tip_corner_goal":
@@ -772,7 +799,7 @@ class Coach:
     @staticmethod
     def _ways_back(a):
         """Moves that put the biggest tile into a corner at a fair price."""
-        return [x for x in a.values if a.keeps_corner(x)
+        return [x for x in a.values if a.brings_max_to_corner(x)
                 and x not in a.deadly and a.regret(x) <= GOAL_REGRET]
 
     # ---- the per-move step ---------------------------------------------
@@ -804,6 +831,7 @@ class Coach:
             new_track[cell]["kind"] = a.stuck_info[cell][0]
         self.track = new_track
         self.off_corner = 0 if a.corner else self.off_corner + 1
+        self.scattered = self.scattered + 1 if big_tiles_scattered(a.b, a.n) else 0
 
         # -- danger ------------------------------------------------------------
         was_danger = self.danger
@@ -871,6 +899,14 @@ class Coach:
             cands.append(Tip("tip_good_corner", PRIO_PRAISE, m,
                              {"value": 1 << a.max_rank}, max_moves=2,
                              kind="praise", max_secs=3.5))
+
+        # -- a general tip, when the board shows exactly what it is about:
+        #    big tiles spread out (not a passing moment of a merge), and the
+        #    player is not in trouble right now
+        if self.scattered >= SCATTER_MOVES and not self.danger and not a.deadly \
+                and self._ready("tip_hint_order"):
+            cands.append(Tip("tip_hint_order", PRIO_HINT, m, max_moves=4,
+                             kind="info", max_secs=6.0))
 
         # -- earned praise --------------------------------------------------------
         # freed: only for a blocker / chain breaker, and only if the board

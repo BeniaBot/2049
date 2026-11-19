@@ -348,6 +348,16 @@
     return false;
   }
   /* = brain2049.stuck_kind: ["block"|"chain"|"corner", bigRank] or null */
+  function bigTilesScattered(b, n) {      // = Python big_tiles_scattered
+    var mx = maxOf(b);
+    if (mx < 7 || !maxInCorner(b, n)) return false;
+    var big = [];
+    for (var i = 0; i < b.length; i++) if (b[i] >= mx - 2) big.push(i);
+    if (big.length < 2) return false;
+    return big.some(function (c) {
+      return !neighbours(c, n).some(function (j) { return big.indexOf(j) >= 0; });
+    });
+  }
   function stuckKind(b, n, i) {
     var v = b[i];
     if (v === 0) return null;
@@ -520,6 +530,13 @@
     return nb !== this.b && maxInCorner(nb, this.n);
   };
   Analysis.prototype.hasValue = function (d) { return this.values[d] !== undefined; };
+  Analysis.prototype.bringsMaxToCorner = function (d) {   // = Python brings_max_to_corner
+    var nb = move(this.b, this.n, d)[0], mx = this.maxRank;
+    if (nb === this.b || maxOf(nb) !== mx) return false;
+    var cb = 0, cn = 0;
+    for (var i = 0; i < nb.length; i++) { if (this.b[i] === mx) cb++; if (nb[i] === mx) cn++; }
+    return cb === cn && maxInCorner(nb, this.n);
+  };
 
   // ---- coach ------------------------------------------------------------------------
   var PRIO_OPEN = 0, PRIO_PRAISE = 1, PRIO_HINT = 2, PRIO_CORNER = 3,
@@ -527,8 +544,9 @@
   var COOLDOWN = {
     stuck: 8, tip_corner_lost: 6, tip_corner_made: 6, tip_corner_goal: 20,
     tip_good_escape: 10, tip_good_freed: 6, tip_good_corner: 20,
-    tip_good_record: 0, tip_danger: 0
+    tip_good_record: 0, tip_danger: 0, tip_hint_order: 40
   };
+  var SCATTER_MOVES = 3;
   var RECORD_RANK = 8, OFF_CORNER_MOVES = 4;
   var LOST_MARGIN = 0.25, GOAL_REGRET = 0.15;   // measured - see brain2049.py
   var STUCK_KEYS = ["tip_stuck_block", "tip_stuck_chain", "tip_stuck_corner"];
@@ -548,6 +566,7 @@
   Coach.prototype.reset = function () {
     this.moveNo = 0; this.last = {}; this.prev = null; this.track = new Map();
     this.danger = false; this.cornerTold = null; this.offCorner = 0; this.current = null;
+    this.scattered = 0;
   };
   Coach.prototype.newGame = function (a) {
     this.reset();
@@ -576,13 +595,14 @@
     if (k === "tip_danger") return a.survival < DANGER_EXIT && a.hasValue(tip.params.dir);
     if (k === "tip_trap") return this.moveNo === tip.born && a.hasValue(tip.params.dir);
     if (isStuckKey(k)) return tip.track !== null && a.problems.has(tip.track);
+    if (k === "tip_hint_order") return bigTilesScattered(a.b, a.n);
     if (k === "tip_corner_lost" || k === "tip_corner_made") return !a.corner;
     if (k === "tip_corner_goal") return !a.corner && waysBack(a).length > 0;
     return true;
   };
   function waysBack(a) {     // = Python Coach._ways_back
     return a.legal.filter(function (x) {
-      return a.keepsCorner(x) && a.deadly.indexOf(x) < 0 && a.regret(x) <= GOAL_REGRET;
+      return a.bringsMaxToCorner(x) && a.deadly.indexOf(x) < 0 && a.regret(x) <= GOAL_REGRET;
     });
   }
   /* moved: Map from_cell -> [to_cell, merged] */
@@ -608,6 +628,7 @@
     });
     this.track = newTrack;
     this.offCorner = a.corner ? 0 : this.offCorner + 1;
+    this.scattered = bigTilesScattered(a.b, a.n) ? this.scattered + 1 : 0;
 
     // danger / trap
     var wasDanger = this.danger;
@@ -664,6 +685,12 @@
     } else if (p && !p.corner && a.corner && this.cornerTold !== null &&
                m - this.cornerTold <= 6 && !cheated && this.ready("tip_good_corner")) {
       cands.push(new Tip("tip_good_corner", PRIO_PRAISE, m, { value: Math.pow(2, a.maxRank) }, { maxMoves: 2, kind: "praise", maxSecs: 3.5 }));
+    }
+
+    // a general tip, when the board shows exactly what it is about
+    if (this.scattered >= SCATTER_MOVES && !this.danger && !a.deadly.length &&
+        this.ready("tip_hint_order")) {
+      cands.push(new Tip("tip_hint_order", PRIO_HINT, m, {}, { maxMoves: 4, kind: "info", maxSecs: 6.0 }));
     }
 
     // earned praise
