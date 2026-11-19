@@ -1,4 +1,4 @@
-# Runs INSIDE a clean test VM on the user's desktop: real play in the real
+﻿# Runs INSIDE a clean test VM on the user's desktop: real play in the real
 # exe with key messages - a long run of moves, the coach on screen, Mode 4
 # assists (undo, clean, smart tile), fast key bursts - checked through the
 # game's own saved state and screenshots.
@@ -86,11 +86,14 @@ try {
   # 2) fast bursts: 12 keys 30 ms apart - none may be lost
   Start-Process 'C:\bench\2049.exe' | Out-Null; $h = Wait-Window 60; Start-Sleep -Seconds 2
   $before = (Saved).moves
-  foreach ($k in 'left','down','right','down','left','down','right','down','left','down','right','down') { Tap $h $k 30 }
+  # left/right in turn: on a board in mid-game both are open almost always (a key on a
+  # blocked direction is ignored by the rules - with left/down/right/down that made 12 -> 9
+  # on a fair board; checked headless: every key reached the game, every open one moved)
+  foreach ($k in 'left','right','left','right','left','right','left','right','left','right','left','right') { Tap $h $k 30 }
   Start-Sleep -Seconds 1
   Close-Game $h
   $s2 = Saved
-  Check 'fast key bursts are not swallowed' (($s2.moves - $before) -ge 10) ("12 fast keys -> " + ($s2.moves - $before) + " moves (a key whose direction cannot move is ignored by the rules)")
+  Check 'fast key bursts are not swallowed' (($s2.moves - $before) -ge 11) ("12 fast keys -> " + ($s2.moves - $before) + " moves")
 
   # 3) assists: undo (Z), smart tile (hold X), clean (C)
   Start-Process 'C:\bench\2049.exe' | Out-Null; $h = Wait-Window 60; Start-Sleep -Seconds 2
