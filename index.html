@@ -42,7 +42,6 @@
   .top{display:flex;justify-content:space-between;align-items:center;gap:12px;}
   .brand{display:flex;flex-direction:column;line-height:1;}
   .title{font-size:clamp(46px,13vw,64px);font-weight:800;letter-spacing:-1px;color:var(--ink);}
-  .subtitle{font-size:13px;font-weight:500;color:var(--muted);margin-top:6px;}
   .scores{display:flex;gap:8px;}
   .scorebox{position:relative;background:var(--board);border-radius:var(--r-sm);
     padding:7px 14px 8px;text-align:center;color:var(--light);min-width:78px;
@@ -221,7 +220,7 @@ const B = window.Brain2049;
 const STRINGS = {
 he: {
   score:"ניקוד", best:"שיא", new_game:"משחק חדש", settings:"הגדרות", back:"חזרה",
-  subtitle:"המהדורה המשוכללת", you_win:"הגעת ל-2048!", keep_playing:"המשך לשחק",
+  you_win:"הגעת ל-2048!", keep_playing:"המשך לשחק",
   game_over:"המשחק נגמר", press_new:"Enter – משחק חדש",
   hint_keys:"משחקים בחצים או במקשי <span dir=\"ltr\">WASD</span>", hint_touch:"מחליקים על הלוח כדי לשחק",
   grid_size:"גודל לוח", language:"שפה", difficulty:"רמת קושי",
@@ -274,7 +273,7 @@ he: {
 },
 en: {
   score:"SCORE", best:"BEST", new_game:"New game", settings:"Settings", back:"Back",
-  subtitle:"enhanced edition", you_win:"You reached 2048!", keep_playing:"Keep playing",
+  you_win:"You reached 2048!", keep_playing:"Keep playing",
   game_over:"Game over", press_new:"Enter – new game",
   hint_keys:"Play with the arrow keys or WASD", hint_touch:"Swipe on the board to play",
   grid_size:"Grid size", language:"Language", difficulty:"Difficulty",
@@ -794,7 +793,7 @@ class Game{
   renderGame(){
     const L=k=>this.L(k), b=this.board, n=b.size, ov=this.overlayKind();
     let h=`<div class="screen game">
-      <div class="top"><div class="brand"><div class="title">2049</div><div class="subtitle">${L("subtitle")}</div></div>
+      <div class="top"><div class="brand"><div class="title">2049</div></div>
         <div class="scores"><div class="scorebox" id="scorebox"><div class="lbl">${L("score")}</div><div class="val" id="sval">${b.score}</div></div>
         <div class="scorebox"><div class="lbl">${L("best")}</div><div class="val" id="bval">${Math.max(this.cfg.highscore,b.score)}</div></div></div></div>
       <div class="toolbar"><button class="btn" id="toSettings">${L("settings")}</button>

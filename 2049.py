@@ -140,7 +140,6 @@ STRINGS = {
         "new_game":"\u05de\u05e9\u05d7\u05e7 \u05d7\u05d3\u05e9",
         "settings":"\u05d4\u05d2\u05d3\u05e8\u05d5\u05ea", "menu":"\u05ea\u05e4\u05e8\u05d9\u05d8",
         "play":"\u05e9\u05d7\u05e7", "quit":"\u05d9\u05e6\u05d9\u05d0\u05d4", "back":"\u05d7\u05d6\u05e8\u05d4",
-        "subtitle":"\u05d4\u05de\u05d4\u05d3\u05d5\u05e8\u05d4 \u05d4\u05de\u05e9\u05d5\u05db\u05dc\u05dc\u05ea",
         "you_win":"\u05d4\u05d2\u05e2\u05ea \u05dc-2048!",
         "keep_going":"\u05d4\u05de\u05e9\u05da  \u2022  \u05de\u05e9\u05d7\u05e7 \u05d7\u05d3\u05e9",
         "game_over":"\u05d4\u05de\u05e9\u05d7\u05e7 \u05e0\u05d2\u05de\u05e8",
@@ -252,7 +251,7 @@ STRINGS = {
     "en": {
         "score":"SCORE", "best":"BEST", "new_game":"New Game",
         "settings":"Settings", "menu":"Menu", "play":"Play", "quit":"Quit",
-        "back":"Back", "subtitle":"enhanced edition",
+        "back":"Back",
         "you_win":"You reached 2048!", "keep_going":"Keep going  \u2022  New game",
         "game_over":"Game over", "press_new":"Press Enter for new game",
         "tips":"Tips: use \u2190 \u2191 \u2192 \u2193 to play!",
@@ -1911,11 +1910,9 @@ class Game:
         self._sync_lang(); self.screen.fill(BG); L = self.L
         M = 24  # margin
 
-        # --- Title + subtitle (left) ---
+        # --- Title (left) ---
         title = self.f_title.render("2049", True, TEXT_DARK)
         self.screen.blit(title, (M, 20))
-        sub = self.f_tiny.render(self.shape(L("subtitle")), True, (163, 149, 135))
-        self.screen.blit(sub, (M + 2, 76))
 
         # --- Score + Best boxes (right side, right-aligned to margin) ---
         box_w, box_h, box_gap = 118, 56, 10
