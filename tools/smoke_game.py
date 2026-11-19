@@ -70,6 +70,8 @@ check("starts with a board", game.board.max_tile() > 0)
 
 # --- fast moves: four keys inside one slide must make four moves --------
 set_board(game, [[2, 0, 0, 2], [0, 4, 0, 4], [0, 0, 8, 0], [2, 0, 0, 0]])
+import random
+random.seed(4)          # spawns decide whether all four moves CAN move
 mv0 = game._move_no
 for k in (pygame.K_LEFT, pygame.K_DOWN, pygame.K_RIGHT, pygame.K_UP):
     key(game, k)          # no frame in between: each arrives mid-slide

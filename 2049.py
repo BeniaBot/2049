@@ -189,6 +189,7 @@ STRINGS = {
             "middle":"\u05d1\u05d0\u05de\u05e6\u05e2 \u05d4\u05dc\u05d5\u05d7",
         },
         "keep_playing":"\u05d4\u05de\u05e9\u05da \u05dc\u05e9\u05d7\u05e7",
+        "hint_keys":"\u05de\u05e9\u05d7\u05e7\u05d9\u05dd \u05d1\u05d7\u05e6\u05d9\u05dd \u05d0\u05d5 \u05d1\u05de\u05e7\u05e9\u05d9 WASD",
         "offline":"\u05d0\u05d9\u05df \u05d7\u05d9\u05d1\u05d5\u05e8 \u2013 \u05dc\u05d0 \u05e0\u05d9\u05ea\u05df \u05dc\u05d1\u05d3\u05d5\u05e7 \u05e2\u05d3\u05db\u05d5\u05e0\u05d9\u05dd",
         "infinite":"\u05d0\u05d9\u05e0\u05e1\u05d5\u05e4\u05d9", "target":"\u05e2\u05e6\u05d9\u05e8\u05d4 \u05d1-2048",
         "preferences":"\u05d4\u05e2\u05d3\u05e4\u05d5\u05ea",
@@ -286,6 +287,7 @@ STRINGS = {
             "middle":"in the middle",
         },
         "keep_playing":"Keep playing",
+        "hint_keys":"Play with the arrow keys or WASD",
         "offline":"Offline - couldn't check for updates",
         "preferences":"Preferences", "prefs_hint":"Advanced settings", "prefs_title":"Refuge of Cheats & Crooks",
         "prefs_sub":"Where everyone who isn't good enough on their own gathers",
@@ -705,6 +707,61 @@ class Board:
         return pos
 
 # ============================================================================
+FALLBACK_GLYPHS = set("←↑→↓✓")   # not in Rubik
+
+class MixedFont:
+    """A font that draws with `main` and switches to `fallback` for the few
+    characters main has no glyph for, all on one shared baseline. Same
+    surface as pygame.font.Font for what the game uses."""
+
+    def __init__(self, main, fallback):
+        self.main, self.fb = main, fallback
+        self._asc = max(main.get_ascent(), fallback.get_ascent())
+        self._h = self._asc + max(-main.get_descent(), -fallback.get_descent())
+
+    def _runs(self, text):
+        runs, cur, cur_fb = [], "", None
+        for ch in text:
+            fb = ch in FALLBACK_GLYPHS
+            if cur and fb != cur_fb:
+                runs.append((cur, cur_fb)); cur = ""
+            cur += ch; cur_fb = fb
+        if cur:
+            runs.append((cur, cur_fb))
+        return runs
+
+    def size(self, text):
+        w = 0
+        for run, fb in self._runs(text):
+            w += (self.fb if fb else self.main).size(run)[0]
+        return (w, self._h)
+
+    def render(self, text, aa, color, background=None):
+        runs = self._runs(text)
+        if len(runs) <= 1 and not (runs and runs[0][1]):
+            return self.main.render(text, aa, color, background)
+        surf = pygame.Surface((max(1, self.size(text)[0]), self._h), pygame.SRCALPHA)
+        if background is not None:
+            surf.fill(background)
+        x = 0
+        for run, fb in runs:
+            f = self.fb if fb else self.main
+            img = f.render(run, aa, color)
+            surf.blit(img, (x, self._asc - f.get_ascent()))
+            x += img.get_width()
+        return surf
+
+    def get_height(self):
+        return self._h
+
+    def get_linesize(self):
+        return self.main.get_linesize()
+
+    def get_ascent(self):
+        return self._asc
+
+
+# ============================================================================
 class Button:
     def __init__(self, rect, label, font, base=BTN_BG, text_col=BTN_TEXT):
         self.rect = pygame.Rect(rect); self.label = label; self.font = font
@@ -1058,15 +1115,12 @@ class Game:
     def __init__(self):
         make_dpi_aware()
         os.environ["SDL_VIDEO_CENTERED"] = "1"  # must be set before init
-        try:
-            pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=512)
-        except Exception:
-            pass
-        pygame.init()
-        try:
-            pygame.mixer.init()
-        except Exception:
-            pass
+        # Only what the game needs, and NOT audio here: on a machine with no
+        # working audio device (VMs, remote sessions, a stuck audio service)
+        # opening it waits ~8 s per try - a clean Windows 10 took 24 s of
+        # such waits before the first frame. Audio opens in the background.
+        pygame.display.init()
+        pygame.font.init()
         _trace("pygame.init")
         self.cfg = load_config()
         self.SS = 2                        # supersampling factor
@@ -1161,6 +1215,7 @@ class Game:
         self._game_saved_at = 0.0
         self._cfg_dirty = False
         self._cfg_saved_at = 0.0
+        self._score_pops = []          # (gain, start time) for the "+N" float
         self.overlay_buttons = {}
         self.update_status = "checking"
         self._start_update_check()
@@ -1169,25 +1224,28 @@ class Game:
         _trace("game ready")
 
     def _find_font_files(self):
-        reg = None; bold = None
-        for cand in ("DejaVuSans.ttf", "assets/DejaVuSans.ttf"):
-            p = resource_path(cand)
-            if os.path.exists(p):
-                reg = p; break
-        for cand in ("DejaVuSans-Bold.ttf", "assets/DejaVuSans-Bold.ttf"):
-            p = resource_path(cand)
-            if os.path.exists(p):
-                bold = p; break
-        return reg, bold
+        """Rubik (the browser version's face too) for text; DejaVu stays as
+        the fallback for the few glyphs Rubik lacks (arrows, check mark)."""
+        def first(*names):
+            for cand in names:
+                p = resource_path(cand)
+                if os.path.exists(p):
+                    return p
+            return None
+        return {"bold": first("Rubik-Bold.ttf"), "medium": first("Rubik-Medium.ttf"),
+                "fb_bold": first("DejaVuSans-Bold.ttf"), "fb": first("DejaVuSans.ttf")}
 
     def _mk(self, sz, bold=False):
-        reg, boldf = getattr(self, "_font_files", (None, None))
-        path = boldf if (bold and boldf) else reg
-        if path:
-            try:
-                return pygame.font.Font(path, sz)
-            except Exception:
-                pass
+        ff = getattr(self, "_font_files", {}) or {}
+        main = ff.get("bold") if bold else ff.get("medium")
+        fb = ff.get("fb_bold") if bold else ff.get("fb")
+        try:
+            if main and fb:
+                return MixedFont(pygame.font.Font(main, sz), pygame.font.Font(fb, sz))
+            if fb:
+                return pygame.font.Font(fb, sz)
+        except Exception:
+            pass
         for name in ("arialhebrew","arial","segoeui","dejavusans"):
             try:
                 return pygame.font.SysFont(name, sz, bold=bold)
@@ -1200,18 +1258,24 @@ class Game:
         unpacks (and Defender scans) all of it on every launch."""
         self.sounds = {}
         self._merge_tones = {}
-        self.sound_ok = False
-        try:
-            info = pygame.mixer.get_init()
-            if not info or info[1] != -16:
-                pygame.mixer.quit()
+        self.sound_ok = False          # becomes True once audio is open
+
+        def open_audio():
+            # one try, off the main thread: if there is no audio device the
+            # game simply stays silent instead of waiting for it
+            try:
                 pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
                 info = pygame.mixer.get_init()
-            if info and info[1] == -16:
-                self._sr, self._channels = info[0], info[2]
-                self.sound_ok = True
-        except Exception:
-            self.sound_ok = False
+                if info and info[1] == -16:
+                    self._sr, self._channels = info[0], info[2]
+                    self.sound_ok = True
+            except Exception:
+                self.sound_ok = False
+            _trace("audio %s" % ("ready" if self.sound_ok else "unavailable"))
+
+        self._audio_thread = threading.Thread(target=open_audio, name="2049-audio",
+                                              daemon=True)
+        self._audio_thread.start()
 
     def _tone(self, freqs, ms, vol=0.35):
         """A soft sine chord: short attack, smooth decay (no clicks)."""
@@ -1537,6 +1601,9 @@ class Game:
             if s: self.pop_tiles[(s[0],s[1])] = 1.0
             self.pending_spawn = None
         self.update_highscore()
+        gain = sum(e[2] for e in merges if len(e) > 2)
+        if gain:
+            self._score_pops.append((gain, time.monotonic()))
         if merged_any:
             # pitch rises with the value created -> chained merges = rising scale
             self.play_merge(highest_merge)
@@ -1691,6 +1758,32 @@ class Game:
         bx, by, _, gap, cell = self.board_geometry()
         return int(bx+gap+c*(cell+gap)), int(by+gap+r*(cell+gap)), cell
 
+    _GLOW = {128: 0.24, 256: 0.32, 512: 0.40, 1024: 0.48, 2048: 0.56}
+
+    def _tile_glow(self, value, ic):
+        """The soft golden halo the classic game gives 128..2048 (cached per
+        value and size: blurred once, then just blitted)."""
+        k = self._GLOW.get(value)
+        if k is None or ic < 8:
+            return None
+        cache = self.__dict__.setdefault("_glow_cache", {})
+        key = (value, ic)
+        if key not in cache:
+            m = max(4, int(ic * 0.16))
+            S = self.SS
+            size = (ic + 2 * m) * S
+            surf = pygame.Surface((size, size), pygame.SRCALPHA)
+            # transparent pixels carry the glow's own colour: blurring then
+            # never drags in black (that made a muddy brown frame)
+            surf.fill((243, 215, 116, 0))
+            pygame.draw.rect(surf, (243, 215, 116, int(255 * k * 0.55)),
+                             (m * S // 2, m * S // 2, size - m * S, size - m * S),
+                             border_radius=int(12 * S))
+            small = pygame.transform.smoothscale(surf, (max(1, size // 6), max(1, size // 6)))
+            surf = pygame.transform.smoothscale(small, (size, size))
+            cache[key] = (surf, m)
+        return cache[key]
+
     def draw_tile(self, value, x, y, cell, scale=1.0):
         base_cell = cell
         if scale != 1.0:
@@ -1698,8 +1791,12 @@ class Game:
             x, y, cell = x+off, y+off, new
         # integer coords = crisp edges (no sub-pixel shimmer)
         ix, iy, ic = round(x), round(y), round(cell)
+        glow = self._tile_glow(value, ic)
+        if glow is not None:
+            g, m = glow
+            self.screen.surf.blit(g, ((ix - m) * self.SS, (iy - m) * self.SS))
         self.screen.rect(tile_color(value),
-                         (ix, iy, ic, ic), border_radius=6)
+                         (ix, iy, ic, ic), border_radius=8)
         if value:
             f = self.tile_font(base_cell, len(str(value)))
             t = f.render(str(value), True, tile_text_color(value))
@@ -1709,15 +1806,17 @@ class Game:
         self._sync_lang(); self.screen.fill(BG); L = self.L
         M = 24  # margin
 
-        # --- Title "! 2048 !" (left) ---
+        # --- Title + subtitle (left) ---
         title = self.f_title.render("2049", True, TEXT_DARK)
-        self.screen.blit(title, (M, 28))
+        self.screen.blit(title, (M, 20))
+        sub = self.f_tiny.render(self.shape(L("subtitle")), True, (163, 149, 135))
+        self.screen.blit(sub, (M + 2, 76))
 
         # --- Score + Best boxes (right side, right-aligned to margin) ---
         box_w, box_h, box_gap = 118, 56, 10
         best_x = self.W - M - box_w
         score_x = best_x - box_gap - box_w
-        self._score_box(L("score"), self.board.score, score_x, 26)
+        self._score_box(L("score"), self.board.score, score_x, 26, pops=True)
         # The BEST box shows the higher of the saved best and the current score,
         # so it rises during play like normal - but the saved value only
         # actually updates for clean (cheat-free) games (see update_highscore).
@@ -1876,8 +1975,8 @@ class Game:
             self.update_badge = pygame.Rect(100, y, uw+16, 26)
             self.screen.rect(ACCENT, self.update_badge, border_radius=6)
             self.screen.blit(ut, (108, y+5))
-        # tip text
-        tip_txt = L("tips")
+        # how to play
+        tip_txt = L("hint_keys")
         tip = self.f_tiny.render(self.shape(tip_txt), True, BOARD_BG)
         self.screen.blit(tip, (self.W-24-tip.get_width()/self.SS, y+4))
 
@@ -1941,13 +2040,26 @@ class Game:
             if self.pop_tiles[pos] <= 0: done.append(pos)
         for p in done: del self.pop_tiles[p]
 
-    def _score_box(self, label, value, x, y):
+    def _score_box(self, label, value, x, y, pops=False):
         w, h = 118, 56
-        self.screen.rect(SCORE_BG, (x,y,w,h), border_radius=8)
+        self.screen.rect(SCORE_BG, (x,y,w,h), border_radius=10)
         lab = self.f_tiny.render(self.shape(label), True, (238,228,218))
-        self.screen.blit(lab, (x+w/2-lab.get_width()/2/self.SS, y+8))
+        self.screen.blit(lab, (x+w/2-lab.get_width()/2/self.SS, y+7))
         val = self.f_med.render(str(value), True, TEXT_LIGHT)
-        self.screen.blit(val, (x+w/2-val.get_width()/2/self.SS, y+26))
+        self.screen.blit(val, (x+w/2-val.get_width()/2/self.SS, y+24))
+        if pops:
+            # "+N" floats up and fades, like the classic game
+            now = time.monotonic()
+            live = []
+            for gain, t0 in self._score_pops:
+                p = (now - t0) / 0.65
+                if p >= 1:
+                    continue
+                live.append((gain, t0))
+                t = self.f_small.render("+%d" % gain, True, TEXT_DARK)
+                t.set_alpha(int(230 * (1 - p)))
+                self.screen.blit(t, (x+w/2-t.get_width()/2/self.SS, y+24-38*p))
+            self._score_pops = live
 
     def _overlay(self, big, buttons):
         """Board overlay (win / game over) with real buttons. The first
@@ -1994,49 +2106,40 @@ class Game:
             self.screen.blit(tt, (self.W/2-tt.get_width()/2/self.SS, 80+i*28))
 
     def _settings_row(self, y, label, options, selected_val, rtl):
-        """Draw one settings card: label on one side, option buttons on other.
-        Buttons size to their text (with a minimum) so nothing overflows.
+        """One settings card: the label on one side and a segmented control
+        (a soft track, the chosen option as an accent pill) on the other.
         options = list of (value, text). Returns list of (value, Button)."""
         M = 24
         card_h = 56
         card = pygame.Rect(M, y, self.W-2*M, card_h)
         self.screen.card(CARD_BG, card, radius=14, shadow=True)
-        pad = 20
-        bh = 38; bgap = 10
+        pad = 16
+        bh = 34; bgap = 2; tpad = 3
         by = y + (card_h-bh)//2
-
-        # measure each button width from its text (logical units)
-        widths = []
-        for val, text in options:
-            tw = self.f_small.size(text)[0]/self.SS
-            widths.append(max(70, int(tw + 28)))   # min 70px, +padding
+        widths = [max(62, int(self.f_small.size(text)[0]/self.SS + 26))
+                  for _, text in options]
         total = sum(widths) + bgap*(len(options)-1)
-
-        # label goes on the far side; buttons on the near side
         lab = self.f_small.render(self.shape(label), True, TEXT_DARK)
         lw = lab.get_width()/self.SS
-        result = []
         if rtl:
-            # label on the right; options read right-to-left like the text,
-            # so the first option sits next to the label
-            self.screen.blit(lab, (card.right-pad-lw, y+card_h/2-9))
-            bx = card.x + pad
-            for (val, text), bw in reversed(list(zip(options, widths))):
-                sel = (selected_val == val)
-                b = Button((bx, by, bw, bh), text, self.f_small,
-                           base=ACCENT if sel else EMPTY_CELL,
-                           text_col=TEXT_LIGHT if sel else TEXT_DARK)
-                b.draw(self.screen); result.append((val, b)); bx += bw+bgap
+            self.screen.blit(lab, (card.right-pad-lw, y+card_h/2-11))
+            x0 = card.x + pad + tpad
+            seq = list(reversed(list(zip(options, widths))))   # read right-to-left
         else:
-            # label on the left, buttons filling from right
-            self.screen.blit(lab, (card.x+pad, y+card_h/2-9))
-            bx = card.right - pad - total
-            for (val, text), bw in zip(options, widths):
-                sel = (selected_val == val)
-                b = Button((bx, by, bw, bh), text, self.f_small,
-                           base=ACCENT if sel else EMPTY_CELL,
-                           text_col=TEXT_LIGHT if sel else TEXT_DARK)
-                b.draw(self.screen); result.append((val, b)); bx += bw+bgap
+            self.screen.blit(lab, (card.x+pad, y+card_h/2-11))
+            x0 = card.right - pad - tpad - total
+            seq = list(zip(options, widths))
+        TRACK = (224, 212, 198)
+        self.screen.rect(TRACK, (x0-tpad, by-tpad, total+2*tpad, bh+2*tpad),
+                         border_radius=11)
+        result = []
+        bx = x0
+        for (val, text), bw in seq:
+            sel = (selected_val == val)
+            b = Button((bx, by, bw, bh), text, self.f_small,
+                       base=ACCENT if sel else TRACK,
+                       text_col=TEXT_LIGHT if sel else TEXT_DARK)
+            b.draw(self.screen); result.append((val, b)); bx += bw+bgap
         return result
 
     def draw_settings(self):
@@ -2828,7 +2931,8 @@ class Game:
     def _busy(self):
         """Is anything on screen moving or counting down?"""
         return bool(self.animating or self.pop_tiles or self.toast
-                    or self.flash or self.capturing_action is not None)
+                    or self.flash or self._score_pops
+                    or self.capturing_action is not None)
 
     def frame(self, dt):
         """One frame: input already handled; advance, think, draw."""
@@ -2885,7 +2989,12 @@ class Game:
             self.cfg["profiles"] = self._profiles_snapshot
         # Restore built-in modes (never wipe them!) unless cheats are kept.
         self.cfg = finalize_config_for_quit(self.cfg)
-        save_config(self.cfg); pygame.quit()
+        save_config(self.cfg)
+        # if audio is still trying to open (no device: it can take seconds),
+        # don't tear SDL down under it - the process is ending anyway
+        t = getattr(self, "_audio_thread", None)
+        if t is None or not t.is_alive():
+            pygame.quit()
 
 
 def main():

@@ -424,6 +424,7 @@ class TestGameFlow(unittest.TestCase):
 
     def test_fast_keys_are_never_swallowed(self):
         self.set_board([[2, 0, 0, 2], [0, 4, 0, 4], [0, 0, 8, 0], [2, 0, 0, 0]])
+        random.seed(4)      # spawns decide whether all four moves CAN move
         before = self.game._move_no
         for k in (pygame.K_LEFT, pygame.K_DOWN, pygame.K_RIGHT, pygame.K_UP):
             self.key(k)                     # all inside one slide
