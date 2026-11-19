@@ -1,4 +1,4 @@
-# Runs INSIDE a clean test VM on the user's desktop. The in-game update,
+﻿# Runs INSIDE a clean test VM on the user's desktop. The in-game update,
 # end to end, with real clicks on the real buttons:
 #   portable: A (current) finds B (newer) -> "Update now" -> the exe swaps
 #             itself and comes back as B
@@ -66,11 +66,14 @@ function Close-All {
   Get-Process 2049 -ErrorAction SilentlyContinue | Stop-Process -Force
 }
 function Hash($p) { (Get-FileHash $p -Algorithm SHA256).Hash }
+# B's version: C:\bench\B\VERSION.txt when the build folder has one
+$NEW = '0.18.1'
+if (Test-Path 'C:\bench\B\VERSION.txt') { $NEW = (Get-Content 'C:\bench\B\VERSION.txt' -Raw).Trim() }
 
 try {
   $hashB = Hash 'C:\bench\B\2049.exe'
   # one release JSON with both assets - the game picks by how it is installed
-  $api = @{ tag_name = 'v0.18.1'; assets = @(
+  $api = @{ tag_name = ('v' + $NEW); assets = @(
     @{ name = '2049.exe'; size = (Get-Item 'C:\bench\B\2049.exe').Length; browser_download_url = 'file:///C:/bench/B/2049.exe' },
     @{ name = '2049_Setup.exe'; size = (Get-Item 'C:\bench\B\2049_Setup.exe').Length; browser_download_url = 'file:///C:/bench/B/2049_Setup.exe' }) }
   $api | ConvertTo-Json -Depth 4 | Set-Content 'C:\bench\api.json' -Encoding ASCII
@@ -108,7 +111,7 @@ try {
   $h2 = Wait-Window 90 $h
   Check 'new version came back by itself' ($h2 -ne [IntPtr]::Zero) ("{0:N1}s after the click" -f $sw.Elapsed.TotalSeconds)
   Check 'the exe on disk is now B' ((Hash 'C:\bench\portable\2049.exe') -eq $hashB)
-  Check 'the running game is really the new code (0.18.1)' (Runs-Version '0.18.1')
+  Check "the running game is really the new code ($NEW)" (Runs-Version $NEW)
   if ($h2 -ne [IntPtr]::Zero) { Start-Sleep -Milliseconds 1500; [W]::Shot($h2, (Join-Path $out 'p4_updated.png')) }
   Start-Sleep -Seconds 8
   Check 'leftover old exe cleaned up' (-not (Test-Path 'C:\bench\portable\2049.exe.old'))
@@ -135,13 +138,13 @@ try {
   $h2 = Wait-Window 150 $h
   Check 'installer relaunched the game' ($h2 -ne [IntPtr]::Zero) ("{0:N1}s after the click" -f $sw.Elapsed.TotalSeconds)
   Check 'installed exe is now B' ((Hash $app) -eq $hashB)
-  Check 'the relaunched game is really the new code (0.18.1)' (Runs-Version '0.18.1')
+  Check "the relaunched game is really the new code ($NEW)" (Runs-Version $NEW)
   if ($h2 -ne [IntPtr]::Zero) { Start-Sleep -Milliseconds 1500; [W]::Shot($h2, (Join-Path $out 'i2_updated.png')) }
   $slog = Join-Path $env:TEMP '2049-update\setup.log'
   if (Test-Path $slog) { Copy-Item $slog (Join-Path $out 'update_setup.log') }
   $ver = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
           Where-Object { $_.DisplayName -like '2049*' }).DisplayVersion
-  Check 'Windows lists version 0.18.1' ($ver -eq '0.18.1') ("" + $ver)
+  Check "Windows lists version $NEW" ($ver -eq $NEW) ("" + $ver)
   Close-All
   $p = Start-Process (Join-Path $env:LOCALAPPDATA 'Programs\2049\unins000.exe') -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES' -PassThru -Wait
   Check 'uninstall' ($p.ExitCode -eq 0)

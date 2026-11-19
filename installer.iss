@@ -11,7 +11,7 @@
 ; ============================================================
 
 #define MyAppName "2049"
-#define MyAppVersion "0.18.1"
+#define MyAppVersion "0.19.0"
 ; must match SINGLE_INSTANCE_NAME in 2049.py
 #define MyAppMutex "BeniaBot.2049.SingleInstance"
 #define MyAppPublisher "BeniaBot"
