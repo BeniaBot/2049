@@ -747,7 +747,7 @@ COOLDOWN = {             # moves between two tips of the same key
     "stuck": 8, "tip_corner_lost": 6, "tip_corner_made": 6,
     "tip_corner_goal": 20, "tip_good_escape": 10, "tip_good_freed": 6,
     "tip_good_corner": 20, "tip_good_record": 0, "tip_danger": 0,
-    "tip_hint_order": 40, "tip_hint_dirs": 40, "tip_early": 12,
+    "tip_hint_order": 20, "tip_hint_dirs": 20,
 }
 RECORD_RANK = 8          # praise new records from 256 up
 OFF_CORNER_MOVES = 4     # biggest tile out of a corner this long -> corner tip
@@ -777,18 +777,19 @@ OPEN_KEEP = 0.7          # the corner habit the opening tip asks for: kept for
 OPEN_TIPS = ("tip_open", "tip_open_order", "tip_open_dirs", "tip_open_row",
              "tip_open_small")
 INFO_KEYS = OPEN_TIPS + ("tip_hint_order", "tip_hint_dirs")
-# Early in a game the general tips come often: one every EARLY_EVERY moves
-# (tip_early) for the first EARLY_MOVES moves, each a different one of
-# OPEN_TIPS - the start is where habits are made. Anything about the board
-# itself always comes first.
+# General tips all game long, often early: one every EARLY_EVERY moves for
+# the first EARLY_MOVES moves (the start is where habits are made), then
+# every LATE_EVERY; each a different one of OPEN_TIPS until all were said,
+# then round again. Anything about the board itself always comes first.
 EARLY_MOVES = 60
-# Pacing. Review games (19.11) gave a careful player a tip every 12 moves
-# and the same "left the corner" every 6 moves to someone who keeps doing
-# it: right each time, but a good coach does not repeat himself. So each
-# repeat of a key in a game doubles its cooldown (x2, x4, at most x8), and
-# two non-urgent tips are at least GAP moves apart. Danger, traps and a new
-# record are never held back.
-GAP = 5
+EARLY_EVERY = 8
+LATE_EVERY = 16
+# Pacing. A repeat of a key in a game waits twice its cooldown (a good
+# coach does not say the same thing every few moves), and two non-urgent
+# tips are at least GAP moves apart. Danger, traps and a new record are
+# never held back. (20.11: the player asked for MORE tips - the old x8 and
+# GAP 5 were too quiet.)
+GAP = 3
 URGENT = ("tip_danger", "tip_trap", "tip_good_record")
 URGENT_BOARD = ("tip_danger", "tip_trap")    # about the board on screen only
 
@@ -872,7 +873,7 @@ class Coach:
     def _ready(self, key):
         key = "stuck" if key in STUCK_KEYS else key
         last = self.last.get(key)
-        cd = COOLDOWN.get(key, 5) << min(3, max(0, self.times.get(key, 0) - 1))
+        cd = COOLDOWN.get(key, 5) << min(1, max(0, self.times.get(key, 0) - 1))
         if last is not None and self.move_no - last < cd:
             return False
         return key in URGENT or self.last_any is None \
@@ -897,16 +898,24 @@ class Coach:
             return not a.corner and bool(self._ways_back(a))
         return True
 
+    def _general_due(self, m):
+        every = EARLY_EVERY if m <= EARLY_MOVES else LATE_EVERY
+        last = self.last.get("tip_early")
+        return (last is None or m - last >= every) and \
+            (self.last_any is None or m - self.last_any >= GAP)
+
     def _next_general(self):
-        """The next general tip this game has not shown yet (the corner one
-        not for a player who keeps the corner), or None."""
+        """The next general tip not said yet in this round (the corner one
+        not for a player who keeps the corner); all said: a new round."""
         keep = self.habit is not None and self.habit >= OPEN_KEEP
-        start = self.games % len(OPEN_TIPS)
-        for i in range(len(OPEN_TIPS)):
-            k = OPEN_TIPS[(start + i) % len(OPEN_TIPS)]
-            if k in self.open_shown or (k == "tip_open" and keep):
-                continue
-            return k
+        for _ in range(2):
+            start = self.games % len(OPEN_TIPS)
+            for i in range(len(OPEN_TIPS)):
+                k = OPEN_TIPS[(start + i) % len(OPEN_TIPS)]
+                if k in self.open_shown or (k == "tip_open" and keep):
+                    continue
+                return k
+            self.open_shown = set()
         return None
 
     def still_true(self, tip, a):
@@ -1072,8 +1081,7 @@ class Coach:
                              kind="info", max_secs=6.0))
 
         # -- early in the game: the next general tip, if nothing else speaks --
-        if m <= EARLY_MOVES and not self.danger and not a.deadly \
-                and self._ready("tip_early"):
+        if not self.danger and not a.deadly and self._general_due(m):
             nxt = self._next_general()
             if nxt is not None:
                 cands.append(Tip(nxt, PRIO_OPEN, m, max_moves=6, kind="info",

@@ -63,6 +63,7 @@ total_moves = 0
 seen = collections.Counter()
 durations = []          # seconds each tip stayed on screen
 by_key = collections.defaultdict(list)
+t_play = time.monotonic()
 for gi in range(GAMES):
     pname, pol = policies[gi % len(policies)]
     rng = random.Random(SEED * 1000 + gi)
@@ -107,8 +108,11 @@ for gi in range(GAMES):
         log.write("   move %4d  %-18s %s\n" % (m, k, t))
 log.write("\nTOTAL moves %d, tips %d (one per %.0f moves)\n%s\n"
           % (total_moves, sum(seen.values()), total_moves / max(1, sum(seen.values())), dict(seen)))
+share = sum(durations) / max(1e-9, time.monotonic() - t_play)
 durations.sort()
 if durations:
+    print("a tip on screen %.0f%% of the playing time" % (100 * share))
+    log.write("a tip on screen %.0f%% of the playing time\n" % (100 * share))
     short = sum(1 for d in durations if d < 1.5)
     log.write("on screen: median %.1f s, %d of %d under 1.5 s\n" % (durations[len(durations) // 2], short, len(durations)))
     print("on screen: median %.1f s, %d of %d under 1.5 s" % (durations[len(durations) // 2], short, len(durations)))

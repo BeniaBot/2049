@@ -553,12 +553,12 @@
   var COOLDOWN = {
     stuck: 8, tip_corner_lost: 6, tip_corner_made: 6, tip_corner_goal: 20,
     tip_good_escape: 10, tip_good_freed: 6, tip_good_corner: 20,
-    tip_good_record: 0, tip_danger: 0, tip_hint_order: 40, tip_hint_dirs: 40, tip_early: 12
+    tip_good_record: 0, tip_danger: 0, tip_hint_order: 20, tip_hint_dirs: 20
   };
   var SCATTER_MOVES = 3, DIRS_WINDOW = 12, DIRS_EACH = 2, GOAL_RANK = 5, OPEN_KEEP = 0.7;   // see brain2049.py
   var OPEN_TIPS = ["tip_open", "tip_open_order", "tip_open_dirs", "tip_open_row", "tip_open_small"];
-  var EARLY_MOVES = 60;   // see brain2049.py
-  var GAP = 5, URGENT = ["tip_danger", "tip_trap", "tip_good_record"];   // pacing: see brain2049.py
+  var EARLY_MOVES = 60, EARLY_EVERY = 8, LATE_EVERY = 16;   // see brain2049.py
+  var GAP = 3, URGENT = ["tip_danger", "tip_trap", "tip_good_record"];   // pacing: see brain2049.py
   var RECORD_RANK = 8, OFF_CORNER_MOVES = 4;
   var LOST_MARGIN = 0.25, GOAL_REGRET = 0.15;   // measured - see brain2049.py
   var STUCK_KEYS = ["tip_stuck_block", "tip_stuck_chain", "tip_stuck_corner"];
@@ -618,7 +618,7 @@
     if (isStuckKey(key)) key = "stuck";
     var last = this.last[key];
     var cd = (COOLDOWN[key] === undefined ? 5 : COOLDOWN[key]) <<
-             Math.min(3, Math.max(0, (this.times[key] || 0) - 1));
+             Math.min(1, Math.max(0, (this.times[key] || 0) - 1));
     if (last !== undefined && this.moveNo - last < cd) return false;
     return URGENT.indexOf(key) >= 0 || this.lastAny === null || this.moveNo - this.lastAny >= GAP;
   };
@@ -633,13 +633,22 @@
     return true;          // general tips, praise, 'it left the corner': about what happened
   };
   /* = Python Coach._next_general */
+  Coach.prototype.generalDue = function (m) {     // = Python _general_due
+    var every = m <= EARLY_MOVES ? EARLY_EVERY : LATE_EVERY;
+    var last = this.last.tip_early;
+    return (last === undefined || m - last >= every) &&
+           (this.lastAny === null || m - this.lastAny >= GAP);
+  };
   Coach.prototype.nextGeneral = function () {
     var keep = this.habit !== null && this.habit >= OPEN_KEEP;
-    var start = this.games % OPEN_TIPS.length;
-    for (var i = 0; i < OPEN_TIPS.length; i++) {
-      var k = OPEN_TIPS[(start + i) % OPEN_TIPS.length];
-      if (this.openShown.has(k) || (k === "tip_open" && keep)) continue;
-      return k;
+    for (var round = 0; round < 2; round++) {
+      var start = this.games % OPEN_TIPS.length;
+      for (var i = 0; i < OPEN_TIPS.length; i++) {
+        var k = OPEN_TIPS[(start + i) % OPEN_TIPS.length];
+        if (this.openShown.has(k) || (k === "tip_open" && keep)) continue;
+        return k;
+      }
+      this.openShown = new Set();
     }
     return null;
   };
@@ -773,7 +782,7 @@
     }
 
     // early in the game: the next general tip, if nothing else speaks
-    if (m <= EARLY_MOVES && !this.danger && !a.deadly.length && this.ready("tip_early")) {
+    if (!this.danger && !a.deadly.length && this.generalDue(m)) {
       var nxt = this.nextGeneral();
       if (nxt !== null)
         cands.push(new Tip(nxt, PRIO_OPEN, m, {}, { maxMoves: 6, kind: "info", maxSecs: 6.0 }));
