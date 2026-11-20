@@ -56,13 +56,12 @@ def summary(a, tip):
 
 def main():
     games = []
-    for gi in range(GAMES):
+    coach = B.Coach()          # one coach for all games, as in a session: the
+    for gi in range(GAMES):    # course of general tips goes on from game to game
         n = (4, 4, 5, 4, 6, 4)[gi % 6]
         rng = random.Random(900 + gi)
         pol = policy_corner_human if gi % 2 == 0 else policy_lazy_corner
         b = spawn(spawn(tuple([0] * (n * n)), n, rng), n, rng)
-        coach = B.Coach()
-        coach.opened = True
         a = B.Analysis(b, n)
         coach.new_game(a)
         steps = [{"board": list(b), "expect": summary(a, coach.current)}]
@@ -89,8 +88,8 @@ let checked = 0, bad = [];
 const close = (x, y) => (x === null && y === undefined) || (x === undefined && y === null) ||
   (x === y) || (typeof x === 'number' && typeof y === 'number' && Math.abs(x - y) <= 1e-9 * Math.max(1, Math.abs(x)));
 const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+const coach = new B.Coach();
 for (const g of games) {
-  const coach = new B.Coach(); coach.opened = true;
   g.steps.forEach((s, k) => {
     const a = new B.Analysis(s.board, g.n);
     let tip;

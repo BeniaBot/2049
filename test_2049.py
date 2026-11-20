@@ -197,6 +197,14 @@ def ident(rows):
             if rows[r][c]}
 
 
+class FitsOnly:
+    """A board with just what general_fits looks at (no search: cheap)."""
+    def __init__(self, b, n=4):
+        self.b, self.n = tuple(b), n
+        self.max_rank, self.empties = max(b), b.count(0)
+        self.corner = B.max_in_corner(self.b, n)
+
+
 class TestCoach(unittest.TestCase):
     STUCK = [[256, 4, 64, 8], [16, 32, 8, 2], [2, 4, 2, 0], Z]
 
@@ -206,7 +214,8 @@ class TestCoach(unittest.TestCase):
         c.habit = 1.0              # a player who keeps the corner
         c.new_game(ana(rows))
         c.current = None           # mid-game: the opening tip is long gone
-        return c
+        c.open_shown = set(B.OPEN_TIPS)   # ...and the general ones said: these
+        return c                          # tests are about the board itself
 
     def test_stuck_waits_one_move_then_names_the_tile(self):
         calm = [[256, 64, 8, 4], [16, 32, 8, 2], [2, 4, 2, 0], Z]
@@ -416,11 +425,14 @@ class TestCoach(unittest.TestCase):
             a = ana(rows)
             tip = c.on_move(B.LEFT, ident(rows), a)
             if tip is not None and tip.key in B.OPEN_TIPS and tip.born == m:
+                for need in B.PREREQ.get(tip.key, ()):          # after what it builds on
+                    self.assertIn(need, keys)
                 at.append(m)
                 keys.append(tip.key)
                 self.assertTrue(B.general_fits(tip.key, a))      # fits the board it is said on
             c.dismiss()                            # as the screen does after a while
         self.assertEqual(len(keys), len(set(keys)))             # never twice in a game
+        self.assertEqual(keys[:4], ["tip_open", "tip_g_merge", "tip_open_dirs", "tip_g_look"])
         self.assertGreaterEqual(len([m for m in at if m <= B.EARLY_MOVES]), 4)
         self.assertIn("tip_g_fill", keys)          # said once the board filled up
         self.assertNotIn("tip_g_fill", keys[:4])   # ...and not while it was empty
@@ -450,6 +462,64 @@ class TestCoach(unittest.TestCase):
         self.assertIsNotNone(general)
         self.assertIsNone(c.last_any)              # it left GAP alone: the next move,
         self.assertTrue(c._ready("tip_corner_lost"))   # a tip about it may speak
+
+    def test_tips_come_after_the_ones_they_build_on(self):
+        # the player (20.11): the game opened with tips that made no sense
+        # before the basic ones were said. Over many games and all kinds of
+        # boards: the basics first, and a tip only after all it builds on
+        rng = random.Random(11)
+
+        def some_board(step):
+            top = min(11, 1 + step // 4 + rng.randint(0, 2))
+            b = [0] * 16
+            for i, cell in enumerate(rng.sample(range(16), rng.randint(2, 15))):
+                b[cell] = top if i == 0 else rng.randint(1, max(1, top - 1))
+            return FitsOnly(b)
+        c = B.Coach()
+        heard = set()
+        for game in range(12):
+            keeps = game % 4 == 3                        # some games the corner held
+            c.counted_moves, c.corner_moves = 40, (36 if keeps else 8)
+            c.new_game(some_board(0))
+            said = [c.current.key] if c.current is not None else []
+            for step in range(1, 60):
+                k = c._next_general(some_board(step))
+                if k is not None:
+                    c._said_general(k)
+                    said.append(k)
+            if game == 0:
+                self.assertEqual(said[:4], ["tip_open", "tip_g_merge", "tip_open_dirs", "tip_g_look"])
+            for k in said:
+                for need in B.PREREQ.get(k, ()):
+                    self.assertTrue(need in heard or (need == "tip_open" and c.habit >= B.OPEN_KEEP),
+                                    (game, k, need))
+                heard.add(k)
+        self.assertEqual(heard, set(B.OPEN_TIPS))       # and the whole course gets said
+
+    def test_same_words_as_a_habit_tip_count_once(self):
+        # "pick one direction and avoid it" is a general tip and also the
+        # tip for a player who uses all four: either one teaches it...
+        rows = [[2, 4, 0, 0], [4, 16, 2, 0], [8, 2, 0, 0], [2, 0, 0, 0]]
+        c = self.fresh(rows)
+        c.taught = set()
+        tip = None
+        for d in [B.LEFT, B.UP, B.RIGHT, B.DOWN] * 3:
+            tip = c.on_move(d, ident(rows), ana(rows)) or tip
+        self.assertEqual(tip.key, "tip_hint_dirs")
+        self.assertIn("tip_open_dirs", c.taught)     # "the direction you chose to avoid" may follow
+        # ...and once the general one was said, the same words do not come
+        # back as the other a few moves later
+        c = self.fresh(rows)
+        c._said_general("tip_open_dirs")
+        first = None
+        for m in range(1, 40):
+            tip = c.on_move((B.LEFT, B.UP, B.RIGHT, B.DOWN)[m % 4], ident(rows), ana(rows))
+            if tip is not None and tip.key == "tip_hint_dirs" and first is None:
+                first = m
+            c.dismiss()
+        self.assertIsNotNone(first)
+        self.assertGreaterEqual(first, B.COOLDOWN["tip_hint_dirs"])
+
     def test_a_tip_is_kept_while_still_true(self):
         # what the screen may keep showing for a few seconds of fast play
         c = B.Coach()

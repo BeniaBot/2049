@@ -556,9 +556,18 @@
     tip_good_record: 0, tip_danger: 0, tip_hint_order: 20, tip_hint_dirs: 20
   };
   var SCATTER_MOVES = 3, DIRS_WINDOW = 12, DIRS_EACH = 2, GOAL_RANK = 5, OPEN_KEEP = 0.7;   // see brain2049.py
-  var OPEN_TIPS = ["tip_open", "tip_open_order", "tip_open_dirs", "tip_open_row", "tip_open_small",
-                   "tip_g_look", "tip_g_fill", "tip_g_chain", "tip_g_snake", "tip_g_fourth",
-                   "tip_g_merge", "tip_g_back", "tip_g_near", "tip_g_space"];
+  /* = Python OPEN_TIPS (a curriculum), PREREQ, TWIN */
+  var OPEN_TIPS = ["tip_open", "tip_g_merge", "tip_open_dirs", "tip_g_look",
+                   "tip_open_order", "tip_open_row", "tip_open_small", "tip_g_fourth",
+                   "tip_g_chain", "tip_g_near", "tip_g_back", "tip_g_space",
+                   "tip_g_snake", "tip_g_fill"];
+  var PREREQ = {
+    tip_open_dirs: ["tip_open"], tip_open_order: ["tip_open"], tip_open_row: ["tip_open"],
+    tip_g_back: ["tip_open"], tip_g_fourth: ["tip_open_dirs"], tip_g_chain: ["tip_open_order"],
+    tip_g_near: ["tip_g_chain"], tip_g_snake: ["tip_g_chain", "tip_open_row"],
+    tip_hint_dirs: ["tip_open"]
+  };
+  var TWIN = { tip_hint_order: "tip_open_order", tip_hint_dirs: "tip_open_dirs" };
   /* = Python _corner_line_gap / general_fits */
   function cornerLineGap(b, n) {
     var mx = maxOf(b), cs = corners(n);
@@ -573,7 +582,7 @@
   function generalFits(key, a) {
     var b = a.b, n = a.n, mx = a.maxRank;
     if (key === "tip_open_order") return mx >= 5;
-    if (key === "tip_open_row") return a.corner && cornerLineGap(b, n);
+    if (key === "tip_open_row") return mx >= 5 && a.corner && cornerLineGap(b, n);
     if (key === "tip_open_small") { var s = 0; for (var i = 0; i < b.length; i++) if (b[i] === 1 || b[i] === 2) s++; return s >= 6; }
     if (key === "tip_g_fill") return a.empties <= 4;
     if (key === "tip_g_chain") return mx >= 6;
@@ -601,7 +610,11 @@
   }
   function sameParams(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 
-  function Coach() { this.opened = false; this.habit = null; this.games = 0; this.genI = 0; this.reset(); }
+  function Coach() {
+    this.opened = false; this.habit = null; this.games = 0; this.genI = 0;
+    this.taught = new Set();      // general tips said this session (PREREQ)
+    this.reset();
+  }
   Coach.prototype.reset = function () {
     this.moveNo = 0; this.last = {}; this.prev = null; this.track = new Map();
     this.times = {}; this.lastAny = null;
@@ -666,18 +679,33 @@
     return (last === undefined || m - last >= every) &&
            (this.lastAny === null || m - this.lastAny >= GAP);
   };
+  Coach.prototype.known = function (key) {         // = Python _known
+    return this.taught.has(key) ||
+           (key === "tip_open" && this.habit !== null && this.habit >= OPEN_KEEP);
+  };
+  Coach.prototype.prereqOk = function (key) {      // = Python _prereq_ok
+    var need = PREREQ[key] || [];
+    for (var i = 0; i < need.length; i++) if (!this.known(need[i])) return false;
+    return true;
+  };
   Coach.prototype.nextGeneral = function (a) {     // = Python _next_general
-    var keep = this.habit !== null && this.habit >= OPEN_KEEP, n = OPEN_TIPS.length;
-    for (var i = 0; i < n; i++) {
-      var k = OPEN_TIPS[(this.genI + i) % n];
-      if (this.openShown.has(k) || (k === "tip_open" && keep) || !generalFits(k, a)) continue;
-      return k;
+    var self = this, keep = this.habit !== null && this.habit >= OPEN_KEEP, n = OPEN_TIPS.length, i, k;
+    function ok(key) {
+      return !self.openShown.has(key) && !(key === "tip_open" && keep) &&
+             generalFits(key, a) && self.prereqOk(key);
+    }
+    for (i = 0; i < n; i++) if (!this.taught.has(OPEN_TIPS[i]) && ok(OPEN_TIPS[i])) return OPEN_TIPS[i];
+    for (i = 0; i < n; i++) {
+      k = OPEN_TIPS[(this.genI + i) % n];
+      if (ok(k)) return k;
     }
     return null;
   };
   Coach.prototype.saidGeneral = function (key) {
     this.openShown.add(key);
+    this.taught.add(key);
     this.genI = (OPEN_TIPS.indexOf(key) + 1) % OPEN_TIPS.length;
+    for (var hint in TWIN) if (TWIN[hint] === key) this.last[hint] = this.moveNo;
   };
   /* = Python Coach.still_true */
   Coach.prototype.stillTrue = function (tip, a) {
@@ -797,7 +825,7 @@
       cands.push(new Tip("tip_hint_order", PRIO_HINT, m, {}, { maxMoves: 4, kind: "info", maxSecs: 6.0 }));
     } else if (this.recentDirs.length >= DIRS_WINDOW && a.maxRank >= 4 && !this.danger &&
                !a.deadly.length && this.offSeen !== null && m - this.offSeen <= DIRS_WINDOW &&
-               this.ready("tip_hint_dirs")) {
+               this.ready("tip_hint_dirs") && this.prereqOk("tip_hint_dirs")) {
       var least = Infinity;
       for (var di = 0; di < 4; di++) {
         var cnt = 0;
@@ -836,6 +864,7 @@
           var lk = isStuckKey(top.key) ? "stuck" : top.key;
           this.last[lk] = m;
           if (OPEN_TIPS.indexOf(top.key) >= 0) { this.last.tip_early = m; this.saidGeneral(top.key); }
+          else if (TWIN[top.key]) { this.openShown.add(TWIN[top.key]); this.taught.add(TWIN[top.key]); }
           this.times[lk] = (this.times[lk] || 0) + 1;
           if (URGENT.indexOf(lk) < 0 && OPEN_TIPS.indexOf(top.key) < 0) this.lastAny = m;   // see brain2049.py
           if (isStuckKey(top.key)) this.track.get(top.track).told = true;

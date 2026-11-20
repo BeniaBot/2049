@@ -774,10 +774,32 @@ OPEN_KEEP = 0.7          # the corner habit the opening tip asks for: kept for
 # A general tip at the start of every game, a different one each game: the
 # start is where strategy is chosen. The corner tip is skipped for a player
 # who already keeps the corner (OPEN_KEEP).
-OPEN_TIPS = ("tip_open", "tip_open_order", "tip_open_dirs", "tip_open_row",
-             "tip_open_small", "tip_g_look", "tip_g_fill", "tip_g_chain",
-             "tip_g_snake", "tip_g_fourth", "tip_g_merge", "tip_g_back",
-             "tip_g_near", "tip_g_space")
+# OPEN_TIPS is a curriculum: the order a beginner learns them in. A tip not
+# said yet comes before any repeat, the earliest one first; and some only
+# after the ones they build on (PREREQ) - the player (20.11): the game
+# opened with tips that made no sense before the basic ones were said.
+# "The direction you chose to avoid" means nothing before "pick one
+# direction to avoid", "like a snake" nothing before "a chain from the corner".
+OPEN_TIPS = ("tip_open", "tip_g_merge", "tip_open_dirs", "tip_g_look",
+             "tip_open_order", "tip_open_row", "tip_open_small", "tip_g_fourth",
+             "tip_g_chain", "tip_g_near", "tip_g_back", "tip_g_space",
+             "tip_g_snake", "tip_g_fill")
+PREREQ = {
+    "tip_open_dirs": ("tip_open",),          # "...the biggest stays in its corner"
+    "tip_open_order": ("tip_open",),
+    "tip_open_row": ("tip_open",),           # "the corner's row"
+    "tip_g_back": ("tip_open",),             # "out of its corner?"
+    "tip_g_fourth": ("tip_open_dirs",),      # "the direction you chose to avoid"
+    "tip_g_chain": ("tip_open_order",),      # big ones side by side, then a chain
+    "tip_g_near": ("tip_g_chain",),          # "the chain grows that way"
+    "tip_g_snake": ("tip_g_chain", "tip_open_row"),   # "the second row"
+    "tip_hint_dirs": ("tip_open",),
+}
+# a tip about the player's own play that says what a general tip says: once
+# it was said, that general tip counts as said too (this game and for good);
+# and once the general one was said, the same words do not come back as the
+# other a few moves later - the habit tip waits its cooldown
+TWIN = {"tip_hint_order": "tip_open_order", "tip_hint_dirs": "tip_open_dirs"}
 
 
 def _corner_line_gap(b, n):
@@ -795,8 +817,8 @@ def general_fits(key, a):
     b, n, mx = a.b, a.n, a.max_rank
     if key == "tip_open_order":
         return mx >= 5
-    if key == "tip_open_row":
-        return a.corner and _corner_line_gap(b, n)
+    if key == "tip_open_row":                # a row worth keeping: not a near-empty board
+        return mx >= 5 and a.corner and _corner_line_gap(b, n)
     if key == "tip_open_small":
         return sum(1 for v in b if v in (1, 2)) >= 6
     if key == "tip_g_fill":
@@ -837,6 +859,7 @@ class Coach:
         self.habit = None            # share of the last game the top tile kept a corner
         self.games = 0               # games started this session
         self.gen_i = 0               # where the round of general tips goes on from
+        self.taught = set()          # general tips said this session (PREREQ)
         self.reset()
 
     def reset(self):
@@ -942,24 +965,45 @@ class Coach:
         return (last is None or m - last >= every) and \
             (self.last_any is None or m - self.last_any >= GAP)
 
+    def _known(self, key):
+        """Said already this session - or, for the corner tip, a player who
+        keeps the corner anyway."""
+        return key in self.taught or (key == "tip_open" and self.habit is not None
+                                      and self.habit >= OPEN_KEEP)
+
+    def _prereq_ok(self, key):
+        return all(self._known(p) for p in PREREQ.get(key, ()))
+
     def _next_general(self, a):
-        """The next general tip that fits this board and was not said yet
+        """The next general tip: one that fits this board, was not said yet
         this game (each at most once a game: the player found 5 tips going
-        round every few moves far too repetitive); the round goes on from
-        game to game, so each game starts with different ones. The corner
-        tip not for a player who keeps the corner."""
+        round every few moves far too repetitive), and whose groundwork
+        (PREREQ) was said. A tip never said comes first, in curriculum
+        order; once all that fit were said, the round goes on from game to
+        game, so each game starts with different ones. The corner tip not
+        for a player who keeps the corner."""
         keep = self.habit is not None and self.habit >= OPEN_KEEP
+
+        def ok(k):
+            return k not in self.open_shown and not (k == "tip_open" and keep) \
+                and general_fits(k, a) and self._prereq_ok(k)
+        for k in OPEN_TIPS:
+            if k not in self.taught and ok(k):
+                return k
         n = len(OPEN_TIPS)
         for i in range(n):
             k = OPEN_TIPS[(self.gen_i + i) % n]
-            if k in self.open_shown or (k == "tip_open" and keep) or not general_fits(k, a):
-                continue
-            return k
+            if ok(k):
+                return k
         return None
 
     def _said_general(self, key):
         self.open_shown.add(key)
+        self.taught.add(key)
         self.gen_i = (OPEN_TIPS.index(key) + 1) % len(OPEN_TIPS)
+        for hint, general in TWIN.items():
+            if general == key:
+                self.last[hint] = self.move_no
 
     def still_true(self, tip, a):
         """Is what the tip says still so on this board? (is_valid without the
@@ -1119,7 +1163,8 @@ class Coach:
         elif len(self.recent_dirs) >= DIRS_WINDOW and a.max_rank >= 4 \
                 and min(self.recent_dirs.count(x) for x in DIRS) >= DIRS_EACH \
                 and self.off_seen is not None and m - self.off_seen <= DIRS_WINDOW \
-                and not self.danger and not a.deadly and self._ready("tip_hint_dirs"):
+                and not self.danger and not a.deadly and self._ready("tip_hint_dirs") \
+                and self._prereq_ok("tip_hint_dirs"):
             cands.append(Tip("tip_hint_dirs", PRIO_HINT, m, max_moves=4,
                              kind="info", max_secs=6.0))
 
@@ -1163,6 +1208,9 @@ class Coach:
                     if top.key in OPEN_TIPS:
                         self.last["tip_early"] = m
                         self._said_general(top.key)
+                    elif top.key in TWIN:
+                        self.open_shown.add(TWIN[top.key])
+                        self.taught.add(TWIN[top.key])
                     self.times[k] = self.times.get(k, 0) + 1
                     # a general tip is filler: it never makes a tip about the
                     # player's own moves wait (that tip would be lost)
