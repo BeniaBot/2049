@@ -747,7 +747,7 @@ COOLDOWN = {             # moves between two tips of the same key
     "stuck": 8, "tip_corner_lost": 6, "tip_corner_made": 6,
     "tip_corner_goal": 20, "tip_good_escape": 10, "tip_good_freed": 6,
     "tip_good_corner": 20, "tip_good_record": 0, "tip_danger": 0,
-    "tip_hint_order": 40, "tip_hint_dirs": 40,
+    "tip_hint_order": 40, "tip_hint_dirs": 40, "tip_early": 12,
 }
 RECORD_RANK = 8          # praise new records from 256 up
 OFF_CORNER_MOVES = 4     # biggest tile out of a corner this long -> corner tip
@@ -777,6 +777,11 @@ OPEN_KEEP = 0.7          # the corner habit the opening tip asks for: kept for
 OPEN_TIPS = ("tip_open", "tip_open_order", "tip_open_dirs", "tip_open_row",
              "tip_open_small")
 INFO_KEYS = OPEN_TIPS + ("tip_hint_order", "tip_hint_dirs")
+# Early in a game the general tips come often: one every EARLY_EVERY moves
+# (tip_early) for the first EARLY_MOVES moves, each a different one of
+# OPEN_TIPS - the start is where habits are made. Anything about the board
+# itself always comes first.
+EARLY_MOVES = 60
 # Pacing. Review games (19.11) gave a careful player a tip every 12 moves
 # and the same "left the corner" every 6 moves to someone who keeps doing
 # it: right each time, but a good coach does not repeat himself. So each
@@ -807,6 +812,7 @@ class Coach:
         self.off_corner = 0          # moves the biggest tile spent off a corner
         self.scattered = 0           # moves the big tiles stayed spread out
         self.recent_dirs = []        # directions of the last DIRS_WINDOW moves
+        self.open_shown = set()      # general (OPEN_TIPS) tips shown this game
         self.off_seen = None         # last move the top tile was seen out of a corner
         self.corner_moves = 0        # moves (top tile 32+) with it in a corner
         self.counted_moves = 0       # moves (top tile 32+) counted at all
@@ -829,6 +835,8 @@ class Coach:
         self.opened = True
         self.games += 1
         self.current = Tip(key, PRIO_OPEN, 0, max_moves=5, kind="info", max_secs=7.0)
+        self.open_shown = {key}
+        self.last["tip_early"] = 0       # the next general tip: EARLY_EVERY moves on
 
     def resync(self, analysis):
         """After an assist / undo, or a burst of moves too fast to analyse
@@ -888,6 +896,18 @@ class Coach:
         if k == "tip_corner_goal":
             return not a.corner and bool(self._ways_back(a))
         return True
+
+    def _next_general(self):
+        """The next general tip this game has not shown yet (the corner one
+        not for a player who keeps the corner), or None."""
+        keep = self.habit is not None and self.habit >= OPEN_KEEP
+        start = self.games % len(OPEN_TIPS)
+        for i in range(len(OPEN_TIPS)):
+            k = OPEN_TIPS[(start + i) % len(OPEN_TIPS)]
+            if k in self.open_shown or (k == "tip_open" and keep):
+                continue
+            return k
+        return None
 
     def still_true(self, tip, a):
         """Is what the tip says still so on this board? (is_valid without the
@@ -1051,6 +1071,14 @@ class Coach:
             cands.append(Tip("tip_hint_dirs", PRIO_HINT, m, max_moves=4,
                              kind="info", max_secs=6.0))
 
+        # -- early in the game: the next general tip, if nothing else speaks --
+        if m <= EARLY_MOVES and not self.danger and not a.deadly \
+                and self._ready("tip_early"):
+            nxt = self._next_general()
+            if nxt is not None:
+                cands.append(Tip(nxt, PRIO_OPEN, m, max_moves=6, kind="info",
+                                 max_secs=6.0))
+
         # -- earned praise --------------------------------------------------------
         # freed: only for a blocker / chain breaker, and only if the board
         # really is in shape afterwards (the review caught praise for moves
@@ -1081,6 +1109,9 @@ class Coach:
                     cur = top
                     k = "stuck" if top.key in STUCK_KEYS else top.key
                     self.last[k] = m
+                    if top.key in OPEN_TIPS:
+                        self.last["tip_early"] = m
+                        self.open_shown.add(top.key)
                     self.times[k] = self.times.get(k, 0) + 1
                     if k not in URGENT:
                         self.last_any = m

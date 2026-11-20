@@ -173,7 +173,7 @@ STRINGS = {
         "no":"\u05dc\u05d0",
         "done_reset":"\u05d0\u05d5\u05e4\u05e1 \u05d1\u05d4\u05e6\u05dc\u05d7\u05d4",
         # --- coach tips: {dir} {bad} {value} {place} are filled in ---
-        "tip_open":"\u05d8\u05d9\u05e4: \u05d1\u05d7\u05e8 \u05e4\u05d9\u05e0\u05d4 \u05dc\u05d0\u05e8\u05d9\u05d7 \u05d4\u05d2\u05d1\u05d5\u05d4 \u05d5\u05e9\u05de\u05d5\u05e8 \u05d0\u05d5\u05ea\u05d5 \u05e9\u05dd",
+        "tip_open":"\u05d1\u05d7\u05e8 \u05e4\u05d9\u05e0\u05d4 \u05dc\u05d0\u05e8\u05d9\u05d7 \u05d4\u05d2\u05d1\u05d5\u05d4 \u05d5\u05e9\u05de\u05d5\u05e8 \u05d0\u05d5\u05ea\u05d5 \u05e9\u05dd",
         "tip_danger":"\u05de\u05e6\u05d1 \u05e7\u05e9\u05d4 \u2013 \u05d4\u05de\u05d4\u05dc\u05da \u05d4\u05d1\u05d8\u05d5\u05d7 \u05d1\u05d9\u05d5\u05ea\u05e8: {dir}",
         "tip_trap":"\u05d6\u05d4\u05d9\u05e8\u05d5\u05ea: {bad} \u05e2\u05dc\u05d5\u05dc \u05dc\u05d2\u05de\u05d5\u05e8 \u05d0\u05ea \u05d4\u05de\u05e9\u05d7\u05e7 \u00b7 \u05d1\u05d8\u05d5\u05d7: {dir}",
         "tip_stuck_block":"ה-{value} {place} חוסם את שני ה-{big} מלהתמזג",
@@ -181,11 +181,11 @@ STRINGS = {
         "tip_stuck_corner":"ה-{value} תפס את הפינה של ה-{big}",
         "tip_corner_lost":"ה-{value} יצא מהפינה – כדאי לשמור אותו שם",
         "tip_corner_goal":"אפשר להחזיר עכשיו את ה-{value} לפינה",
-        "tip_hint_dirs":"טיפ: בחר כיוון אחד והימנע ממנו – כך הגדול נשאר בפינה",
-        "tip_open_order":"טיפ: שמור את הגדולים צמודים ובסדר יורד – כך קל לאחד אותם", "tip_open_dirs":"טיפ: בחר כיוון אחד והימנע ממנו – כך הגדול נשאר בפינה",
-        "tip_open_row":"טיפ: שמור את השורה של הפינה מלאה – כך הגדול לא זז ממנה",
-        "tip_open_small":"טיפ: אחד קטנים מוקדם – לוח מלא בקטנים נתקע מהר",
-        "tip_hint_order":"טיפ: שמור את הגדולים צמודים ובסדר יורד – כך קל לאחד אותם",
+        "tip_hint_dirs":"בחר כיוון אחד והימנע ממנו – כך הגדול נשאר בפינה",
+        "tip_open_order":"שמור את הגדולים צמודים ובסדר יורד – כך קל לאחד אותם", "tip_open_dirs":"בחר כיוון אחד והימנע ממנו – כך הגדול נשאר בפינה",
+        "tip_open_row":"שמור את השורה של הפינה מלאה – כך הגדול לא זז ממנה",
+        "tip_open_small":"אחד קטנים מוקדם – לוח מלא בקטנים נתקע מהר",
+        "tip_hint_order":"שמור את הגדולים צמודים ובסדר יורד – כך קל לאחד אותם",
         "tip_corner_made":"ה-{value} נוצר מחוץ לפינה – כדאי לאחד לכיוון הפינה",
         "tip_good_escape":"\u05d9\u05e4\u05d4! \u05d9\u05e6\u05d0\u05ea \u05de\u05d4\u05de\u05e6\u05d1 \u05d4\u05e7\u05e9\u05d4",
         "tip_good_freed":"\u05d9\u05e4\u05d4 \u05de\u05d0\u05d5\u05d3! \u05e9\u05d7\u05e8\u05e8\u05ea \u05d0\u05ea \u05d4\u05d0\u05e8\u05d9\u05d7 \u05d4\u05ea\u05e7\u05d5\u05e2",
@@ -282,7 +282,7 @@ STRINGS = {
         "yes":"Yes",
         "no":"No",
         "done_reset":"Reset done",
-        "tip_open":"Tip: pick a corner for your biggest tile and keep it there",
+        "tip_open":"Pick a corner for your biggest tile and keep it there",
         "tip_danger":"Tight spot - safest move: {dir}",
         "tip_trap":"Careful: {bad} may end the game · safe: {dir}",
         "tip_stuck_block":"The {value} {place} keeps your two {big}s from merging",
@@ -290,11 +290,11 @@ STRINGS = {
         "tip_stuck_corner":"The {value} took your {big}'s corner",
         "tip_corner_lost":"Your {value} left its corner - try to keep it there",
         "tip_corner_goal":"You can get your {value} back into a corner now",
-        "tip_hint_dirs":"Tip: pick one direction and avoid it - your biggest tile stays in its corner",
-        "tip_open_order":"Tip: keep big tiles side by side, in descending order - they merge easily", "tip_open_dirs":"Tip: pick one direction and avoid it - your biggest tile stays in its corner",
-        "tip_open_row":"Tip: keep your corner's row full - then the biggest tile cannot slide out",
-        "tip_open_small":"Tip: merge small tiles early - a board full of small ones jams fast",
-        "tip_hint_order":"Tip: keep big tiles side by side, in descending order - they merge easily",
+        "tip_hint_dirs":"Pick one direction and avoid it - your biggest tile stays in its corner",
+        "tip_open_order":"Keep big tiles side by side, in descending order - they merge easily", "tip_open_dirs":"Pick one direction and avoid it - your biggest tile stays in its corner",
+        "tip_open_row":"Keep your corner's row full - then the biggest tile cannot slide out",
+        "tip_open_small":"Merge small tiles early - a board full of small ones jams fast",
+        "tip_hint_order":"Keep big tiles side by side, in descending order - they merge easily",
         "tip_corner_made":"Your {value} was made outside the corner - merge toward the corner",
         "tip_good_escape":"Nice - you got out of that tight spot",
         "tip_good_freed":"Great - you freed the stuck tile",
@@ -2100,28 +2100,65 @@ class Game:
             lines.append(cur)
         return lines
 
+    # (card, border, badge) per tone: gold for tips, green for praise, red
+    # for warnings - soft cards in the classic palette, a clear badge
+    TIP_TONES = {
+        "gold":   ((251, 241, 212), (228, 188, 84), (209, 158, 26)),
+        "praise": ((227, 243, 228), (128, 194, 124), (60, 152, 74)),
+        "warn":   ((251, 228, 222), (228, 124, 104), (206, 72, 54)),
+    }
+
+    @staticmethod
+    def tip_tone(tip):
+        """gold: a general tip or a chance ("you can get it back now");
+        praise: green; anything that went wrong or is dangerous: red."""
+        if tip.kind == "praise":
+            return "praise"
+        if tip.kind == "info" or tip.key == "tip_corner_goal":
+            return "gold"
+        return "warn"
+
+    def _tip_icon(self, tone, cx, cy):
+        """White glyph in the badge: a bulb, a check mark, an exclamation."""
+        w = (255, 255, 255)
+        if tone == "gold":
+            self.screen.circle(w, (cx, cy - 1.6), 4.3)
+            self.screen.rect(w, pygame.Rect(cx - 2.1, cy + 2.0, 4.2, 3.4), border_radius=1)
+        elif tone == "praise":
+            self.screen.line(w, (cx - 4.6, cy + 0.3), (cx - 1.4, cy + 3.5), 2.2)
+            self.screen.line(w, (cx - 1.4, cy + 3.5), (cx + 4.8, cy - 3.4), 2.2)
+        else:
+            self.screen.rect(w, pygame.Rect(cx - 1.25, cy - 5.6, 2.5, 7.0), border_radius=1)
+            self.screen.circle(w, (cx, cy + 4.0), 1.45)
+
     def _draw_tip(self, tip):
         txt = self.tip_text(tip)
         if not txt:
             return
         bx0, by0, board_px, gap, cell = self.board_geometry()
-        max_text = self.W - 48 - 52
+        rtl = self.is_rtl()
+        max_text = self.W - 48 - 60
         lines = self._wrap(txt, self.f_tiny, max_text)[:2]
         tw = max(self.f_tiny.size(ln)[0] for ln in lines) / self.SS
-        bw = min(self.W - 48, tw + 52)
-        bh = 12 + 21 * len(lines)
+        bw = min(self.W - 48, tw + 60)
+        bh = 14 + 21 * len(lines)
         bx = self.W/2 - bw/2
         by = by0 + board_px + 8
-        bg = {"praise": (222, 240, 226), "info": (240, 234, 224)}.get(
-            tip.kind, (250, 232, 205))
-        dot = {"praise": (60, 170, 110), "info": BTN_BG}.get(tip.kind, ACCENT)
-        self.screen.card(bg, pygame.Rect(bx, by, bw, bh), radius=10, shadow=True)
-        dotx = (bx+bw-16) if self.is_rtl() else (bx+16)
-        self.screen.circle(dot, (dotx, by + bh/2), 5)
+        tone = self.tip_tone(tip)
+        bg, border, badge = self.TIP_TONES[tone]
+        card = pygame.Rect(bx, by, bw, bh)
+        self.screen.card(bg, card, radius=10, shadow=True)
+        self.screen.rect(border, card, 1.5, border_radius=10)
+        r = 10
+        cx = (bx + bw - 8 - r) if rtl else (bx + 8 + r)
+        cy = by + bh / 2
+        self.screen.circle(badge, (cx, cy), r)
+        self._tip_icon(tone, cx, cy)
+        shift = -(r + 4) if rtl else (r + 4)       # the text centred beside the badge
         for i, ln in enumerate(lines):
             tt = self.f_tiny.render(self.shape(ln), True, TEXT_DARK)
-            self.screen.blit(tt, (self.W/2 - tt.get_width()/2/self.SS + (-6 if self.is_rtl() else 6),
-                                  by + 6 + 21*i))
+            self.screen.blit(tt, (self.W/2 - tt.get_width()/2/self.SS + shift,
+                                  by + 7 + 21*i))
 
     def _tri(self, rect, direction):
         self.screen.rect(EMPTY_CELL, rect, border_radius=3)

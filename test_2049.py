@@ -406,6 +406,20 @@ class TestCoach(unittest.TestCase):
             seen.add(c.current.key)
         self.assertEqual(seen, set(B.OPEN_TIPS) - {"tip_open"})
 
+    def test_general_tips_come_often_early_in_a_game(self):
+        calm = [[2, 4, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]
+        c = B.Coach()
+        c.new_game(ana(calm))                      # opening tip at move 0
+        shown = [c.current.key]
+        for m in range(1, 100):
+            tip = c.on_move(B.LEFT, ident(calm), ana(calm))
+            if tip is not None and tip.key in B.OPEN_TIPS and tip.born == m:
+                shown.append(tip.key)
+                self.assertLessEqual(m, B.EARLY_MOVES)        # only early on
+            c.dismiss()                            # as the screen does after a while
+        self.assertGreaterEqual(len(shown), 4)
+        self.assertEqual(len(shown), len(set(shown)))          # each a different one
+
     def test_a_tip_is_kept_while_still_true(self):
         # what the screen may keep showing for a few seconds of fast play
         c = B.Coach()

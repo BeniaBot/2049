@@ -101,12 +101,16 @@
 
   /* ---------- coach ---------- */
   .tiparea{min-height:58px;display:flex;align-items:flex-start;justify-content:center;padding-top:12px;}
-  .tip{display:flex;align-items:center;gap:10px;max-width:100%;background:#fbefdc;
-    border-radius:var(--r-md);padding:9px 14px;font-size:14px;font-weight:500;line-height:1.35;
-    box-shadow:var(--shadow);animation:tipin .22s ease;}
-  .tip .dot{flex:none;width:9px;height:9px;border-radius:50%;background:var(--accent);}
-  .tip.praise{background:#e2f2e6;} .tip.praise .dot{background:var(--green);}
-  .tip.info{background:#f1ebe2;} .tip.info .dot{background:var(--btn);}
+  /* gold: a general tip or a chance - green: praise - red: a warning */
+  .tip{display:flex;align-items:center;gap:10px;max-width:100%;
+    border-radius:var(--r-md);padding:8px 14px 8px 10px;font-size:14px;font-weight:500;line-height:1.35;
+    box-shadow:var(--shadow);animation:tipin .22s ease;border:1.5px solid transparent;}
+  [dir="rtl"] .tip{padding:8px 10px 8px 14px;}
+  .tip .badge{flex:none;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;}
+  .tip .badge svg{width:20px;height:20px;display:block;}
+  .tip.gold{background:#fbf1d4;border-color:#e4bc54;} .tip.gold .badge{background:#d19e1a;}
+  .tip.praise{background:#e3f3e4;border-color:#80c27c;} .tip.praise .badge{background:#3c984a;}
+  .tip.warn{background:#fbe4de;border-color:#e47c68;} .tip.warn .badge{background:#ce4836;}
   .tip .arrow{font-weight:700;unicode-bidi:isolate;}
   @keyframes tipin{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 
@@ -214,6 +218,12 @@
 //  2049 - browser version. Same game and same brain as the desktop
 //  build (brain2049.js is a bit-identical port of brain2049.py).
 // ============================================================
+// the coach's badges: a bulb (a tip), a check (praise), an exclamation (a warning)
+const TIP_ICONS = {
+  gold: '<svg viewBox="0 0 20 20" fill="#fff" aria-hidden="true"><circle cx="10" cy="8.4" r="4.3"/><rect x="7.9" y="12" width="4.2" height="3.4" rx="1"/></svg>',
+  praise: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.4 10.3l3.2 3.2 6.2-6.9" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  warn: '<svg viewBox="0 0 20 20" fill="#fff" aria-hidden="true"><rect x="8.75" y="4.4" width="2.5" height="7" rx="1.25"/><circle cx="10" cy="14.4" r="1.45"/></svg>'
+};
 const APP_VERSION = "0.21.0";
 const B = window.Brain2049;
 
@@ -254,7 +264,7 @@ he: {
   zone_tl:"פינה שמאלית עליונה", zone_tr:"פינה ימנית עליונה", zone_bl:"פינה שמאלית תחתונה",
   zone_br:"פינה ימנית תחתונה", choose_zone:"בחר אזור נסתר",
   zone_hold_hint:"מחזיקים אצבע באזור בזמן ההחלקה", zone_tap_hint:"נוגעים פעמיים באזור כדי להפעיל",
-  tip_open:"טיפ: בחר פינה לאריח הגבוה ושמור אותו שם",
+  tip_open:"בחר פינה לאריח הגבוה ושמור אותו שם",
   tip_danger:"מצב קשה – המהלך הבטוח ביותר: {dir}",
   tip_trap:"זהירות: {bad} עלול לגמור את המשחק · בטוח: {dir}",
   tip_stuck_block:"ה-{value} {place} חוסם את שני ה-{big} מלהתמזג",
@@ -262,10 +272,10 @@ he: {
   tip_stuck_corner:"ה-{value} תפס את הפינה של ה-{big}",
   tip_corner_lost:"ה-{value} יצא מהפינה – כדאי לשמור אותו שם",
   tip_corner_goal:"אפשר להחזיר עכשיו את ה-{value} לפינה",
-  tip_hint_dirs:"טיפ: בחר כיוון אחד והימנע ממנו – כך הגדול נשאר בפינה",
-  tip_open_order:"טיפ: שמור את הגדולים צמודים ובסדר יורד – כך קל לאחד אותם", tip_open_dirs:"טיפ: בחר כיוון אחד והימנע ממנו – כך הגדול נשאר בפינה",
-  tip_open_row:"טיפ: שמור את השורה של הפינה מלאה – כך הגדול לא זז ממנה", tip_open_small:"טיפ: אחד קטנים מוקדם – לוח מלא בקטנים נתקע מהר",
-  tip_hint_order:"טיפ: שמור את הגדולים צמודים ובסדר יורד – כך קל לאחד אותם",
+  tip_hint_dirs:"בחר כיוון אחד והימנע ממנו – כך הגדול נשאר בפינה",
+  tip_open_order:"שמור את הגדולים צמודים ובסדר יורד – כך קל לאחד אותם", tip_open_dirs:"בחר כיוון אחד והימנע ממנו – כך הגדול נשאר בפינה",
+  tip_open_row:"שמור את השורה של הפינה מלאה – כך הגדול לא זז ממנה", tip_open_small:"אחד קטנים מוקדם – לוח מלא בקטנים נתקע מהר",
+  tip_hint_order:"שמור את הגדולים צמודים ובסדר יורד – כך קל לאחד אותם",
   tip_corner_made:"ה-{value} נוצר מחוץ לפינה – כדאי לאחד לכיוון הפינה",
   tip_good_escape:"יפה! יצאת מהמצב הקשה", tip_good_freed:"יפה מאוד! שחררת את האריח התקוע",
   tip_good_corner:"יופי, ה-{value} בפינה", tip_good_record:"מצוין! הגעת ל-{value}",
@@ -310,7 +320,7 @@ en: {
   zone_tl:"Top-left corner", zone_tr:"Top-right corner", zone_bl:"Bottom-left corner",
   zone_br:"Bottom-right corner", choose_zone:"Choose a hidden zone",
   zone_hold_hint:"Hold a finger in the zone while you swipe", zone_tap_hint:"Double-tap the zone to trigger",
-  tip_open:"Tip: pick a corner for your biggest tile and keep it there",
+  tip_open:"Pick a corner for your biggest tile and keep it there",
   tip_danger:"Tight spot - safest move: {dir}",
   tip_trap:"Careful: {bad} may end the game · safe: {dir}",
   tip_stuck_block:"The {value} {place} keeps your two {big}s from merging",
@@ -318,10 +328,10 @@ en: {
   tip_stuck_corner:"The {value} took your {big}'s corner",
   tip_corner_lost:"Your {value} left its corner - try to keep it there",
   tip_corner_goal:"You can get your {value} back into a corner now",
-  tip_hint_dirs:"Tip: pick one direction and avoid it - your biggest tile stays in its corner",
-  tip_open_order:"Tip: keep big tiles side by side, in descending order - they merge easily", tip_open_dirs:"Tip: pick one direction and avoid it - your biggest tile stays in its corner",
-  tip_open_row:"Tip: keep your corner's row full - then the biggest tile cannot slide out", tip_open_small:"Tip: merge small tiles early - a board full of small ones jams fast",
-  tip_hint_order:"Tip: keep big tiles side by side, in descending order - they merge easily",
+  tip_hint_dirs:"Pick one direction and avoid it - your biggest tile stays in its corner",
+  tip_open_order:"Keep big tiles side by side, in descending order - they merge easily", tip_open_dirs:"Pick one direction and avoid it - your biggest tile stays in its corner",
+  tip_open_row:"Keep your corner's row full - then the biggest tile cannot slide out", tip_open_small:"Merge small tiles early - a board full of small ones jams fast",
+  tip_hint_order:"Keep big tiles side by side, in descending order - they merge easily",
   tip_corner_made:"Your {value} was made outside the corner - merge toward the corner",
   tip_good_escape:"Nice - you got out of that tight spot", tip_good_freed:"Great - you freed the stuck tile",
   tip_good_corner:"Good - your {value} is in the corner", tip_good_record:"Excellent - you reached {value}!",
@@ -912,7 +922,8 @@ class Game{
     const el=document.getElementById("tiparea"); if(!el) return;
     const t=this.tip;
     if(!t || !this.cfg.show_tips || this.overlayKind()){ el.innerHTML=""; return; }
-    el.innerHTML=`<div class="tip ${t.kind}"><span class="dot"></span><span>${this.tipText(t)}</span></div>`;
+    const tone=t.kind==="praise"?"praise":(t.kind==="info"||t.key==="tip_corner_goal")?"gold":"warn";
+    el.innerHTML=`<div class="tip ${tone}"><span class="badge">${TIP_ICONS[tone]}</span><span>${this.tipText(t)}</span></div>`;
   }
   changeGrid(delta){ const s=[4,5,6]; let i=s.indexOf(this.cfg.grid_size); i=(i+delta+s.length)%s.length;
     this.cfg.grid_size=s[i]; saveCfg(this.cfg); this.newGame(); }
