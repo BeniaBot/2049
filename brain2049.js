@@ -556,6 +556,7 @@
     tip_good_record: 0, tip_danger: 0, tip_hint_order: 40, tip_hint_dirs: 40
   };
   var SCATTER_MOVES = 3, DIRS_WINDOW = 12, DIRS_EACH = 2, GOAL_RANK = 5, OPEN_KEEP = 0.7;   // see brain2049.py
+  var OPEN_TIPS = ["tip_open", "tip_open_order", "tip_open_dirs", "tip_open_row", "tip_open_small"];
   var GAP = 5, URGENT = ["tip_danger", "tip_trap", "tip_good_record"];   // pacing: see brain2049.py
   var RECORD_RANK = 8, OFF_CORNER_MOVES = 4;
   var LOST_MARGIN = 0.25, GOAL_REGRET = 0.15;   // measured - see brain2049.py
@@ -572,7 +573,7 @@
   }
   function sameParams(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 
-  function Coach() { this.opened = false; this.habit = null; this.reset(); }
+  function Coach() { this.opened = false; this.habit = null; this.games = 0; this.reset(); }
   Coach.prototype.reset = function () {
     this.moveNo = 0; this.last = {}; this.prev = null; this.track = new Map();
     this.times = {}; this.lastAny = null;
@@ -584,10 +585,14 @@
     if (this.countedMoves >= 20) this.habit = this.cornerMoves / this.countedMoves;
     this.reset();
     this.prev = a;
-    if (!this.opened || this.habit === null || this.habit < OPEN_KEEP) {
-      this.opened = true;
-      this.current = new Tip("tip_open", PRIO_OPEN, 0, {}, { maxMoves: 5, kind: "info", maxSecs: 7.0 });
-    }
+    var self = this;
+    var keys = OPEN_TIPS.filter(function (k) {
+      return k !== "tip_open" || !self.opened || self.habit === null || self.habit < OPEN_KEEP;
+    });
+    var key = this.opened ? keys[this.games % keys.length] : "tip_open";
+    this.opened = true;
+    this.games++;
+    this.current = new Tip(key, PRIO_OPEN, 0, {}, { maxMoves: 5, kind: "info", maxSecs: 7.0 });
   };
   Coach.prototype.resync = function (a) {     // see brain2049.py
     this.prev = a;
@@ -621,9 +626,20 @@
     if (k === "tip_trap") return this.moveNo === tip.born && a.hasValue(tip.params.dir);
     if (isStuckKey(k)) return tip.track !== null && a.problems.has(tip.track);
     if (k === "tip_hint_order") return bigTilesScattered(a.b, a.n);
-    if (k === "tip_corner_lost" || k === "tip_corner_made") return !a.corner;
     if (k === "tip_corner_goal") return !a.corner && waysBack(a).length > 0;
-    return true;
+    return true;          // general tips, praise, 'it left the corner': about what happened
+  };
+  /* = Python Coach.still_true */
+  Coach.prototype.stillTrue = function (tip, a) {
+    var k = tip.key;
+    if (k === "tip_danger" || k === "tip_trap") return false;
+    if (isStuckKey(k)) {
+      var rank = Math.round(Math.log2(tip.params.value || 1)), found = false;
+      a.problems.forEach(function (c) { if (a.b[c] === rank) found = true; });
+      return found;
+    }
+    if (k === "tip_corner_goal") return !a.corner && waysBack(a).length > 0;
+    return true;          // general tips, praise, 'it left the corner': about what happened
   };
   function countOf(b, v) { var c = 0; for (var i = 0; i < b.length; i++) if (b[i] === v) c++; return c; }
   function waysBack(a) {     // = Python Coach._ways_back

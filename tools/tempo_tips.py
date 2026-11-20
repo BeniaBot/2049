@@ -61,6 +61,8 @@ policies = [("careful", policy_corner_human), ("habit", policy_lazy_corner),
 log = open(os.path.join(OUT, "tempo_tips.txt"), "w", encoding="utf-8")
 total_moves = 0
 seen = collections.Counter()
+durations = []          # seconds each tip stayed on screen
+by_key = collections.defaultdict(list)
 for gi in range(GAMES):
     pname, pol = policies[gi % len(policies)]
     rng = random.Random(SEED * 1000 + gi)
@@ -70,6 +72,7 @@ for gi in range(GAMES):
     game.new_game()
     settle()
     last = game._tip
+    since = time.monotonic()
     moves = 0
     shown = []
     while game.board.can_move() and moves < 700:
@@ -88,6 +91,11 @@ for gi in range(GAMES):
             if TEMPO == "human" and rng.random() < 0.08:
                 run_for(rng.uniform(1.0, 2.5))       # a think
         tip = game._tip
+        if tip is not last:
+            if last is not None and last.key != "tip_open":
+                durations.append(time.monotonic() - since)
+                by_key[last.key].append(time.monotonic() - since)
+            since = time.monotonic()
         if tip is not None and tip is not last:
             shown.append((moves, tip.key, game.tip_text(tip)))
             seen[tip.key] += 1
@@ -99,6 +107,15 @@ for gi in range(GAMES):
         log.write("   move %4d  %-18s %s\n" % (m, k, t))
 log.write("\nTOTAL moves %d, tips %d (one per %.0f moves)\n%s\n"
           % (total_moves, sum(seen.values()), total_moves / max(1, sum(seen.values())), dict(seen)))
+durations.sort()
+if durations:
+    short = sum(1 for d in durations if d < 1.5)
+    log.write("on screen: median %.1f s, %d of %d under 1.5 s\n" % (durations[len(durations) // 2], short, len(durations)))
+    print("on screen: median %.1f s, %d of %d under 1.5 s" % (durations[len(durations) // 2], short, len(durations)))
+for k in sorted(by_key):
+    v = sorted(by_key[k])
+    line = "   %-18s %2d shown, median %.1f s, under 1.5 s: %d" % (k, len(v), v[len(v) // 2], sum(1 for d in v if d < 1.5))
+    log.write(line + "\n"); print(line)
 log.close()
 game.shutdown()
 print("moves %d tips %d -> one per %.0f moves" % (total_moves, sum(seen.values()),

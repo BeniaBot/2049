@@ -203,8 +203,9 @@ class TestCoach(unittest.TestCase):
     def fresh(self, rows):
         c = B.Coach()
         c.opened = True
-        c.habit = 1.0              # a player who keeps the corner: no opening tip
+        c.habit = 1.0              # a player who keeps the corner
         c.new_game(ana(rows))
+        c.current = None           # mid-game: the opening tip is long gone
         return c
 
     def test_stuck_waits_one_move_then_names_the_tile(self):
@@ -387,20 +388,34 @@ class TestCoach(unittest.TestCase):
         tip = c.on_move(B.RIGHT, moved, ana(after))
         self.assertTrue(tip is None or tip.key != "tip_corner_lost")
 
-    def test_opening_tip_until_the_corner_habit_shows(self):
+    def test_a_general_tip_opens_every_game(self):
         start = ana([[2, 0, 0, 0], Z, Z, Z])
         c = B.Coach()
         c.new_game(start)
-        self.assertEqual(c.current.key, "tip_open")        # first game: always
-        c.counted_moves, c.corner_moves = 40, 8           # the corner was not kept
-        c.new_game(start)
-        self.assertEqual(c.current.key, "tip_open")        # so: again
-        c.counted_moves, c.corner_moves = 40, 36          # now it was
-        c.new_game(start)
-        self.assertIsNone(c.current)                       # not told again
-        c.counted_moves, c.corner_moves = 5, 0            # a short game says nothing
-        c.new_game(start)
-        self.assertIsNone(c.current)
+        self.assertEqual(c.current.key, "tip_open")        # the very first: a corner
+        seen = set()
+        for _ in range(len(B.OPEN_TIPS)):                  # the corner not kept:
+            c.counted_moves, c.corner_moves = 40, 8        # all of them, in turn
+            c.new_game(start)
+            seen.add(c.current.key)
+        self.assertEqual(seen, set(B.OPEN_TIPS))
+        seen = set()
+        for _ in range(len(B.OPEN_TIPS)):                  # the corner kept: the
+            c.counted_moves, c.corner_moves = 40, 36       # others, never the corner
+            c.new_game(start)
+            seen.add(c.current.key)
+        self.assertEqual(seen, set(B.OPEN_TIPS) - {"tip_open"})
+
+    def test_a_tip_is_kept_while_still_true(self):
+        # what the screen may keep showing for a few seconds of fast play
+        c = B.Coach()
+        spread = ana([[0, 0, 0, 64], [0, 0, 2, 4], [0, 2, 4, 8], [256, 4, 8, 2]])
+        self.assertTrue(c.still_true(B.Tip("tip_hint_order", 2, 0), spread))
+        self.assertFalse(c.still_true(B.Tip("tip_trap", 5, 0, {"dir": 0, "bad": [1]}), spread))
+        lost = B.Tip("tip_corner_lost", 3, 0, {"value": 256})
+        self.assertTrue(c.still_true(lost, spread))        # what happened: a lesson
+        goal = B.Tip("tip_corner_goal", 3, 0, {"value": 256})
+        self.assertFalse(c.still_true(goal, spread))       # the 256 IS in its corner
 
     def test_beginner_directions_tip(self):
         # all four directions in turn, each at least twice in the last 12

@@ -771,6 +771,12 @@ DIRS_EACH = 2            # ...use every direction at least twice
 GOAL_RANK = 5            # "you can get it back into a corner" from 32 up
 OPEN_KEEP = 0.7          # the corner habit the opening tip asks for: kept for
                          # at least this share of the last game -> not repeated
+# A general tip at the start of every game, a different one each game: the
+# start is where strategy is chosen. The corner tip is skipped for a player
+# who already keeps the corner (OPEN_KEEP).
+OPEN_TIPS = ("tip_open", "tip_open_order", "tip_open_dirs", "tip_open_row",
+             "tip_open_small")
+INFO_KEYS = OPEN_TIPS + ("tip_hint_order", "tip_hint_dirs")
 # Pacing. Review games (19.11) gave a careful player a tip every 12 moves
 # and the same "left the corner" every 6 moves to someone who keeps doing
 # it: right each time, but a good coach does not repeat himself. So each
@@ -786,6 +792,7 @@ class Coach:
     def __init__(self):
         self.opened = False          # the opening tip was shown this session
         self.habit = None            # share of the last game the top tile kept a corner
+        self.games = 0               # games started this session (opening tips rotate)
         self.reset()
 
     def reset(self):
@@ -814,10 +821,14 @@ class Coach:
             self.habit = self.corner_moves / self.counted_moves
         self.reset()
         self.prev = analysis
-        if not self.opened or self.habit is None or self.habit < OPEN_KEEP:
-            self.opened = True
-            self.current = Tip("tip_open", PRIO_OPEN, 0, max_moves=5,
-                               kind="info", max_secs=7.0)
+        keys = [k for k in OPEN_TIPS if k != "tip_open" or not self.opened
+                or self.habit is None or self.habit < OPEN_KEEP]
+        key = keys[self.games % len(keys)]
+        if not self.opened:
+            key = "tip_open"             # the very first: choose a corner
+        self.opened = True
+        self.games += 1
+        self.current = Tip(key, PRIO_OPEN, 0, max_moves=5, kind="info", max_secs=7.0)
 
     def resync(self, analysis):
         """After an assist / undo, or a burst of moves too fast to analyse
@@ -876,6 +887,23 @@ class Coach:
             return not a.corner
         if k == "tip_corner_goal":
             return not a.corner and bool(self._ways_back(a))
+        return True
+
+    def still_true(self, tip, a):
+        """Is what the tip says still so on this board? (is_valid without the
+        move count - the screen keeps a tip readable for a few seconds even
+        when the player plays on fast, as long as it stays true; warnings
+        about the board on screen are never kept: see URGENT_BOARD)."""
+        k = tip.key
+        if k in URGENT_BOARD:
+            return False
+        if k in STUCK_KEYS:
+            rank = tip.params.get("value", 0).bit_length() - 1
+            return any(a.b[c] == rank for c in a.problems)
+        if k == "tip_corner_goal":            # "you can get it back NOW"
+            return not a.corner and bool(self._ways_back(a))
+        # general tips, praise, and 'it left / was made outside the corner':
+        # about what happened - the lesson stays true even once it is fixed
         return True
 
     @staticmethod

@@ -263,6 +263,8 @@ he: {
   tip_corner_lost:"ה-{value} יצא מהפינה – כדאי לשמור אותו שם",
   tip_corner_goal:"אפשר להחזיר עכשיו את ה-{value} לפינה",
   tip_hint_dirs:"טיפ: בחר כיוון אחד והימנע ממנו – כך הגדול נשאר בפינה",
+  tip_open_order:"טיפ: שמור את הגדולים צמודים ובסדר יורד – כך קל לאחד אותם", tip_open_dirs:"טיפ: בחר כיוון אחד והימנע ממנו – כך הגדול נשאר בפינה",
+  tip_open_row:"טיפ: שמור את השורה של הפינה מלאה – כך הגדול לא זז ממנה", tip_open_small:"טיפ: אחד קטנים מוקדם – לוח מלא בקטנים נתקע מהר",
   tip_hint_order:"טיפ: שמור את הגדולים צמודים ובסדר יורד – כך קל לאחד אותם",
   tip_corner_made:"ה-{value} נוצר מחוץ לפינה – כדאי לאחד לכיוון הפינה",
   tip_good_escape:"יפה! יצאת מהמצב הקשה", tip_good_freed:"יפה מאוד! שחררת את האריח התקוע",
@@ -317,6 +319,8 @@ en: {
   tip_corner_lost:"Your {value} left its corner - try to keep it there",
   tip_corner_goal:"You can get your {value} back into a corner now",
   tip_hint_dirs:"Tip: pick one direction and avoid it - your biggest tile stays in its corner",
+  tip_open_order:"Tip: keep big tiles side by side, in descending order - they merge easily", tip_open_dirs:"Tip: pick one direction and avoid it - your biggest tile stays in its corner",
+  tip_open_row:"Tip: keep your corner's row full - then the biggest tile cannot slide out", tip_open_small:"Tip: merge small tiles early - a board full of small ones jams fast",
   tip_hint_order:"Tip: keep big tiles side by side, in descending order - they merge easily",
   tip_corner_made:"Your {value} was made outside the corner - merge toward the corner",
   tip_good_escape:"Nice - you got out of that tight spot", tip_good_freed:"Great - you freed the stuck tile",
@@ -632,7 +636,16 @@ class Game{
     }
     else this.coach.resync(a);           // an assist / undo in between
     this.coachTag=tag; this.analysis=a;
-    if(this.coach.current!==this.tip){ this.tip=this.coach.current; this.tipSince=Date.now(); this.renderTip(); }
+    if(this.coach.current!==this.tip && !this.keepTip(this.coach.current,a)){
+      this.tip=this.coach.current; this.tipSince=Date.now(); this.renderTip(); }
+  }
+  // a tip stays readable (3.5 s at least) while it is still true, unless a
+  // more urgent one comes - fast play used to flash most tips for < 1.5 s
+  keepTip(nw,a){
+    const old=this.tip;
+    if(!old || Date.now()-this.tipSince>=3500) return false;
+    if(nw && nw.prio>old.prio) return false;
+    return this.coach.stillTrue(old,a);
   }
   analysisNow(){
     const r=this.board.ranks();
@@ -647,6 +660,10 @@ class Game{
     return p===null?null:[Math.floor(p/this.board.size),p%this.board.size];
   }
   tickTip(){
+    const cur=this.coach.current;
+    if(cur!==this.tip && this.analysis && (!this.tip || Date.now()-this.tipSince>=3500)
+       && (!cur || this.coach.isValid(cur,this.analysis))){
+      this.tip=cur; this.tipSince=Date.now(); this.renderTip(); }
     if(this.tip && Date.now()-this.tipSince>this.tip.maxSecs*1000){ this.coach.dismiss(); this.tip=null; this.renderTip(); }
   }
   tipText(t){

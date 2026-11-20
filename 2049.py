@@ -182,6 +182,9 @@ STRINGS = {
         "tip_corner_lost":"ה-{value} יצא מהפינה – כדאי לשמור אותו שם",
         "tip_corner_goal":"אפשר להחזיר עכשיו את ה-{value} לפינה",
         "tip_hint_dirs":"טיפ: בחר כיוון אחד והימנע ממנו – כך הגדול נשאר בפינה",
+        "tip_open_order":"טיפ: שמור את הגדולים צמודים ובסדר יורד – כך קל לאחד אותם", "tip_open_dirs":"טיפ: בחר כיוון אחד והימנע ממנו – כך הגדול נשאר בפינה",
+        "tip_open_row":"טיפ: שמור את השורה של הפינה מלאה – כך הגדול לא זז ממנה",
+        "tip_open_small":"טיפ: אחד קטנים מוקדם – לוח מלא בקטנים נתקע מהר",
         "tip_hint_order":"טיפ: שמור את הגדולים צמודים ובסדר יורד – כך קל לאחד אותם",
         "tip_corner_made":"ה-{value} נוצר מחוץ לפינה – כדאי לאחד לכיוון הפינה",
         "tip_good_escape":"\u05d9\u05e4\u05d4! \u05d9\u05e6\u05d0\u05ea \u05de\u05d4\u05de\u05e6\u05d1 \u05d4\u05e7\u05e9\u05d4",
@@ -288,6 +291,9 @@ STRINGS = {
         "tip_corner_lost":"Your {value} left its corner - try to keep it there",
         "tip_corner_goal":"You can get your {value} back into a corner now",
         "tip_hint_dirs":"Tip: pick one direction and avoid it - your biggest tile stays in its corner",
+        "tip_open_order":"Tip: keep big tiles side by side, in descending order - they merge easily", "tip_open_dirs":"Tip: pick one direction and avoid it - your biggest tile stays in its corner",
+        "tip_open_row":"Tip: keep your corner's row full - then the biggest tile cannot slide out",
+        "tip_open_small":"Tip: merge small tiles early - a board full of small ones jams fast",
         "tip_hint_order":"Tip: keep big tiles side by side, in descending order - they merge easily",
         "tip_corner_made":"Your {value} was made outside the corner - merge toward the corner",
         "tip_good_escape":"Nice - you got out of that tight spot",
@@ -1804,7 +1810,7 @@ class Game:
             if tag == self._board_tag:
                 self._analysis = a
                 tip = self.coach.current
-                if tip is not self._tip:
+                if tip is not self._tip and not self._keep_tip(tip, a):
                     self._tip = tip
                     self._tip_since = time.monotonic()
             elif self.coach.current is not None and self.coach.current.kind == "info" \
@@ -1834,11 +1840,32 @@ class Game:
         p = self._analysis_now().problem          # board changed: re-pick
         return None if p is None else divmod(p, self.board.size)
 
+    TIP_MIN_SECS = 3.5      # long enough to read a sentence, whatever the pace
+
+    def _keep_tip(self, new, a):
+        """Keep the tip on screen although the coach moved on? A tip stays
+        readable - TIP_MIN_SECS at least - while it is still true on this
+        board, unless a more urgent one comes. Measured 20.11: without this,
+        fast play showed most tips for under 1.5 s (median 0.8 s)."""
+        old = self._tip
+        if old is None or time.monotonic() - self._tip_since >= self.TIP_MIN_SECS:
+            return False
+        if new is not None and new.prio > old.prio:
+            return False
+        return self.coach.still_true(old, a)
+
     def _tick_tip(self):
         if self._tip is not None:
             if time.monotonic() - self._tip_since > self._tip.max_secs:
                 self.coach.dismiss()
                 self._tip = None
+        # a tip held for reading has had its time: show what the coach says now
+        cur = self.coach.current
+        if cur is not self._tip and self._analysis is not None and \
+                (self._tip is None or time.monotonic() - self._tip_since >= self.TIP_MIN_SECS):
+            if cur is None or self.coach.is_valid(cur, self._analysis):
+                self._tip = cur
+                self._tip_since = time.monotonic()
 
     def tip_text(self, tip):
         L = self.L
