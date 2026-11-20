@@ -165,6 +165,7 @@ STRINGS = {
         "sound":"\u05e6\u05dc\u05d9\u05dc\u05d9\u05dd", "on":"\u05d3\u05dc\u05d5\u05e7", "off":"\u05db\u05d1\u05d5\u05d9",
         "win_mode":"\u05de\u05e6\u05d1 \u05e0\u05d9\u05e6\u05d7\u05d5\u05df",
         "show_tips":"\u05d4\u05e6\u05d2 \u05e2\u05e6\u05d5\u05ea",
+        "resume_game":"המשך תמיד משחק שמור", "sec_game":"משחק", "sec_display":"תצוגה וצליל",
         "reset_settings":"\u05d0\u05e4\u05e1 \u05d4\u05d2\u05d3\u05e8\u05d5\u05ea",
         "reset_score":"\u05d0\u05e4\u05e1 \u05e9\u05d9\u05d0",
         "reset_settings_q":"\u05dc\u05d0\u05e4\u05e1 \u05d0\u05ea \u05db\u05dc \u05d4\u05d4\u05d2\u05d3\u05e8\u05d5\u05ea \u05dc\u05d1\u05e8\u05d9\u05e8\u05ea \u05d4\u05de\u05d7\u05d3\u05dc?",
@@ -275,6 +276,7 @@ STRINGS = {
         "sound":"Sound", "on":"On", "off":"Off",
         "win_mode":"Win mode", "infinite":"Infinite", "target":"Stop at 2048",
         "show_tips":"Show tips",
+        "resume_game":"Always continue the saved game", "sec_game":"Game", "sec_display":"Display & sound",
         "reset_settings":"Reset settings",
         "reset_score":"Reset best",
         "reset_settings_q":"Reset all settings to default?",
@@ -410,7 +412,8 @@ def default_config():
     return {
         "config_version": 3,
         "grid_size":4, "language":"he", "active_profile":0, "highscore":0,
-        "sound":True, "infinite":True, "show_tips":False, "persist_cheats":False,
+        "sound":True, "infinite":True, "show_tips":True, "resume_game":True,
+        "persist_cheats":False,
         "count_cheats_in_best":False, "difficulty":"normal",
         "profiles":[
             {"map":{}},
@@ -464,7 +467,7 @@ def _sanitize_config(cfg):
     pick("grid_size", lambda v: v in (4, 5, 6))
     pick("language", lambda v: v in STRINGS)
     pick("difficulty", lambda v: v in DIFFICULTY_EVIL_P)
-    for k in ("sound", "infinite", "show_tips", "persist_cheats",
+    for k in ("sound", "infinite", "show_tips", "resume_game", "persist_cheats",
               "count_cheats_in_best"):
         pick(k, lambda v: isinstance(v, bool))
     pick("highscore", lambda v: isinstance(v, int) and not isinstance(v, bool)
@@ -1344,7 +1347,8 @@ class Game:
         self.overlay_buttons = {}
         self.update_status = "checking"
         self._start_update_check()
-        if not self._restore_game():
+        # "always continue the saved game" (on unless the player turned it off)
+        if not (self.cfg.get("resume_game", True) and self._restore_game()):
             self.new_game()
         _trace("game ready")
 
@@ -2328,33 +2332,22 @@ class Game:
             tt = self.f_small.render(self.shape(ln), True, TEXT_LIGHT)
             self.screen.blit(tt, (self.W/2-tt.get_width()/2/self.SS, ty+8+i*28))
 
-    def _settings_row(self, y, label, options, selected_val, rtl):
-        """One settings card: the label on one side and a segmented control
-        (a soft track, the chosen option as an accent pill) on the other.
-        options = list of (value, text). Returns list of (value, Button)."""
-        M = 24
-        card_h = 56
-        card = pygame.Rect(M, y, self.W-2*M, card_h)
-        self.screen.card(CARD_BG, card, radius=14, shadow=True)
-        pad = 16
-        bh = 34; bgap = 2; tpad = 3
-        by = y + (card_h-bh)//2
-        widths = [max(62, int(self.f_small.size(text)[0]/self.SS + 26))
+    def _seg_control(self, card, ry, row_h, options, selected_val, rtl, pad=14):
+        """A segmented control (a soft track, the chosen option an accent pill)
+        at the end side of one row of a settings card."""
+        bh = 30; bgap = 2; tpad = 3
+        by = ry + (row_h - bh) / 2
+        widths = [max(58, int(self.f_small.size(text)[0]/self.SS + 24))
                   for _, text in options]
         total = sum(widths) + bgap*(len(options)-1)
-        lab = self.f_small.render(self.shape(label), True, TEXT_DARK)
-        lw = lab.get_width()/self.SS
         if rtl:
-            self.screen.blit(lab, (card.right-pad-lw, y+card_h/2-11))
             x0 = card.x + pad + tpad
             seq = list(reversed(list(zip(options, widths))))   # read right-to-left
         else:
-            self.screen.blit(lab, (card.x+pad, y+card_h/2-11))
             x0 = card.right - pad - tpad - total
             seq = list(zip(options, widths))
-        TRACK = (224, 212, 198)
-        self.screen.rect(TRACK, (x0-tpad, by-tpad, total+2*tpad, bh+2*tpad),
-                         border_radius=11)
+        TRACK = (226, 214, 200)
+        self.screen.rect(TRACK, (x0-tpad, by-tpad, total+2*tpad, bh+2*tpad), border_radius=10)
         result = []
         bx = x0
         for (val, text), bw in seq:
@@ -2364,6 +2357,29 @@ class Game:
                        text_col=TEXT_LIGHT if sel else TEXT_DARK)
             b.draw(self.screen); result.append((val, b)); bx += bw+bgap
         return result
+
+    def _settings_group(self, y, title, rows, rtl):
+        """A small section title, then ONE card holding its rows, a hairline
+        between them. rows = [(label, options, selected)]. Returns the rows'
+        buttons and the y below the card."""
+        M = 24; row_h = 46; pad = 16
+        tt = self.f_tiny.render(self.shape(title), True, (156, 141, 126))
+        tx = (self.W - M - 6 - tt.get_width()/self.SS) if rtl else (M + 6)
+        self.screen.blit(tt, (tx, y))
+        cy = y + 20
+        card = pygame.Rect(M, cy, self.W - 2*M, row_h * len(rows))
+        self.screen.card(CARD_BG, card, radius=14, shadow=True)
+        out = []
+        for i, (label, options, selected) in enumerate(rows):
+            ry = cy + i * row_h
+            if i:
+                self.screen.line((224, 212, 198), (card.x + pad, ry), (card.right - pad, ry), 1)
+            lab = self.f_small.render(self.shape(label), True, TEXT_DARK)
+            lw = lab.get_width()/self.SS
+            lx = (card.right - pad - lw) if rtl else (card.x + pad)
+            self.screen.blit(lab, (lx, ry + row_h/2 - 11))
+            out.append(self._seg_control(card, ry, row_h, options, selected, rtl))
+        return out, card.bottom
 
     def draw_settings(self):
         self._sync_lang(); self.screen.fill(BG); L = self.L; rtl = self.is_rtl()
@@ -2381,51 +2397,44 @@ class Game:
                                  base=BTN_BG, text_col=TEXT_LIGHT)
         self.s_back.draw(self.screen)
 
-        y = 76
-        self.s_grid = self._settings_row(
-            y, L("grid_size"),
-            [(4,"4\u00d74"),(5,"5\u00d75"),(6,"6\u00d76")],
-            self.cfg["grid_size"], rtl); y += 62
-        self.s_diff = self._settings_row(
-            y, L("difficulty"),
-            [("normal",L("diff_normal")),("hard",L("diff_hard")),
-             ("evil",L("diff_evil"))],
-            self.cfg.get("difficulty", "normal"), rtl); y += 62
-        self.s_lang = self._settings_row(
-            y, L("language"),
-            [("he",L("hebrew")),("en",L("english"))],
-            self.cfg["language"], rtl); y += 62
-        self.s_sound = self._settings_row(
-            y, L("sound"),
-            [(True,L("on")),(False,L("off"))],
-            self.cfg["sound"], rtl); y += 62
-        self.s_winmode = self._settings_row(
-            y, L("win_mode"),
-            [(True,L("infinite")),(False,L("target"))],
-            self.cfg["infinite"], rtl); y += 62
-        self.s_tips = self._settings_row(
-            y, L("show_tips"),
-            [(True,L("on")),(False,L("off"))],
-            self.cfg.get("show_tips", False), rtl); y += 66
+        on_off = [(True, L("on")), (False, L("off"))]
+        (self.s_grid, self.s_diff, self.s_winmode, self.s_resume), y = self._settings_group(
+            72, L("sec_game"),
+            [(L("grid_size"), [(4,"4\u00d74"),(5,"5\u00d75"),(6,"6\u00d76")],
+              self.cfg["grid_size"]),
+             (L("difficulty"), [("normal",L("diff_normal")),("hard",L("diff_hard")),
+                                ("evil",L("diff_evil"))], self.cfg.get("difficulty", "normal")),
+             (L("win_mode"), [(True,L("infinite")),(False,L("target"))], self.cfg["infinite"]),
+             (L("resume_game"), on_off, self.cfg.get("resume_game", True))], rtl)
+        (self.s_lang, self.s_sound, self.s_tips), y = self._settings_group(
+            y + 14, L("sec_display"),
+            [(L("language"), [("he",L("hebrew")),("en",L("english"))], self.cfg["language"]),
+             (L("sound"), on_off, self.cfg["sound"]),
+             (L("show_tips"), on_off, self.cfg.get("show_tips", True))], rtl)
+        y += 12
 
-        # --- Reset buttons row (settings + high score) ---
-        rbh = 38; rgap = 12
+        # --- Reset buttons row (settings + high score): quiet, outlined ---
+        rbh = 34; rgap = 12
         rbw = (self.W - 48 - rgap) / 2
-        self.s_reset_settings = Button((24, y, rbw, rbh), L("reset_settings"),
-                                       self.f_tiny, base=EMPTY_CELL, text_col=TEXT_DARK)
-        self.s_reset_score = Button((24+rbw+rgap, y, rbw, rbh), L("reset_score"),
-                                    self.f_tiny, base=EMPTY_CELL, text_col=TEXT_DARK)
-        self.s_reset_settings.draw(self.screen); self.s_reset_score.draw(self.screen)
-        y += 50
+        for i, (attr, key) in enumerate((("s_reset_settings", "reset_settings"),
+                                         ("s_reset_score", "reset_score"))):
+            r = pygame.Rect(24 + i * (rbw + rgap), y, rbw, rbh)
+            b = Button(r, L(key), self.f_tiny, base=(238, 229, 216), text_col=TEXT_DARK)
+            setattr(self, attr, b)
+            b.draw(self.screen)
+            self.screen.rect((214, 200, 184), r, 1, border_radius=8)
+        y += rbh + 12
 
         # --- "Preferences" button (discreet - actually the cheat config) ---
         pw = self.f_small.size(L("preferences"))[0]/self.SS + 48
-        self.s_prefs = Button((self.W/2-pw/2, y, pw, 44), L("preferences"),
+        self.s_prefs = Button((self.W/2-pw/2, y, pw, 40), L("preferences"),
                               self.f_small, base=BTN_BG, text_col=TEXT_LIGHT)
         self.s_prefs.draw(self.screen)
         sub = self.f_tiny.render(self.shape(L("prefs_hint")), True, BOARD_BG)
-        self.screen.blit(sub, (self.W/2-sub.get_width()/2/self.SS, y+48))
-        y += 80
+        self.screen.blit(sub, (self.W/2-sub.get_width()/2/self.SS, y+44))
+        # the update card stays exactly where it always was: the clean-machine
+        # update test clicks "Update now" by position, on this very version
+        y = 582
 
         # --- About card (status + GitHub + author with avatar) ---
         card_y = y
@@ -2929,6 +2938,10 @@ class Game:
             for val,b in self.s_tips:
                 if b.hit(e.pos):
                     self.cfg["show_tips"]=val; save_config(self.cfg)
+                    return
+            for val,b in self.s_resume:
+                if b.hit(e.pos):
+                    self.cfg["resume_game"]=val; save_config(self.cfg)
                     return
             if hasattr(self,"s_reset_settings") and self.s_reset_settings.hit(e.pos):
                 self._confirm = (self.L("reset_settings_q"), "reset_settings"); return

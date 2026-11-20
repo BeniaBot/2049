@@ -509,6 +509,31 @@ class TestConfig(unittest.TestCase):
             if os.path.exists(p):
                 os.remove(p)
 
+    def test_new_players_get_tips_and_their_game_back(self):
+        cfg = g.default_config()
+        self.assertTrue(cfg["show_tips"])          # it used to be off: no tips at all
+        self.assertTrue(cfg["resume_game"])
+
+    def test_resume_off_starts_a_new_game(self):
+        game = g.Game()
+        game.board.grid = [[2, 4, 8, 16], [0] * 4, [0] * 4, [0] * 4]
+        game.board.score = 1234
+        game._save_game(force=True)
+        game.cfg["resume_game"] = False
+        g.save_config(game.cfg)
+        game.shutdown()
+        game = g.Game()                            # resume off: a fresh board
+        self.assertEqual(game.board.score, 0)
+        game.cfg["resume_game"] = True
+        game.board.grid = [[2, 4, 8, 16], [0] * 4, [0] * 4, [0] * 4]
+        game.board.score = 1234
+        game._save_game(force=True)
+        g.save_config(game.cfg)
+        game.shutdown()
+        game = g.Game()                            # resume on: the same game
+        self.assertEqual(game.board.score, 1234)
+        game.shutdown()
+
     def test_quit_restores_builtin_modes(self):
         cfg = g.default_config()
         cfg["persist_cheats"] = False

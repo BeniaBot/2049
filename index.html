@@ -124,17 +124,21 @@
   /* ---------- settings / refuge ---------- */
   .schead{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
   .schead h1{font-size:26px;font-weight:800;margin:0;}
-  .scard{background:var(--card);border-radius:var(--r-md);padding:12px 14px;margin-bottom:10px;
-    display:flex;justify-content:space-between;align-items:center;gap:10px;box-shadow:var(--shadow);}
-  .scard .lbl{font-size:15px;font-weight:600;}
+  .stitle{font-size:12.5px;font-weight:700;color:var(--muted);margin:14px 8px 7px;}
+  .stitle:first-of-type{margin-top:0;}
+  .scard{background:var(--card);border-radius:var(--r-md);padding:0 14px;box-shadow:var(--shadow);}
+  .srow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;min-height:48px;}
+  .srow+.srow{border-top:1px solid rgba(150,125,100,.16);}
+  .srow .lbl{font-size:15px;font-weight:600;}
   .seg{display:inline-flex;background:rgba(205,193,180,.55);border-radius:10px;padding:3px;gap:2px;flex:none;}
   .seg button{background:none;padding:7px 12px;border-radius:8px;font-size:14px;font-weight:600;
     color:var(--ink);white-space:nowrap;transition:background .15s ease,color .15s ease;}
   .seg button.on{background:var(--accent);color:#fff;box-shadow:0 1px 3px rgba(150,70,20,.25);}
   .seg .ltr{direction:ltr;unicode-bidi:isolate;}
-  .resetrow{display:flex;gap:10px;margin:6px 0 4px;}
-  .resetrow button{flex:1;background:rgba(205,193,180,.55);padding:11px;border-radius:var(--r-sm);
-    font-size:13px;font-weight:600;}
+  .resetrow{display:flex;gap:10px;margin:14px 0 4px;}
+  .resetrow button{flex:1;background:rgba(238,229,216,.9);border:1px solid rgba(160,135,110,.28);
+    padding:10px;border-radius:var(--r-sm);font-size:13px;font-weight:600;color:var(--ink);}
+  .resetrow button:hover{background:#eadfcf;}
   .prefbtn{display:block;margin:20px auto 4px;}
   .prefhint{text-align:center;color:var(--muted);font-size:12px;}
   .aboutcard{background:#f6f0e6;border-radius:var(--r-lg);padding:14px;margin-top:18px;box-shadow:var(--shadow);}
@@ -236,6 +240,7 @@ he: {
   grid_size:"גודל לוח", language:"שפה", difficulty:"רמת קושי",
   diff_normal:"רגיל", diff_hard:"קשה", diff_evil:"מרושע", sound:"צלילים", on:"דלוק", off:"כבוי",
   win_mode:"מצב ניצחון", infinite:"אינסופי", target:"עצירה ב-2048", show_tips:"עצות מאמן",
+  resume_game:"המשך תמיד משחק שמור", sec_game:"משחק", sec_display:"תצוגה וצליל",
   reset_settings:"איפוס הגדרות", reset_score:"איפוס שיא",
   reset_settings_q:"לאפס את כל ההגדרות לברירת המחדל?", reset_score_q:"לאפס את השיא האישי?",
   yes:"כן", no:"לא", done_reset:"אופס בהצלחה",
@@ -292,6 +297,7 @@ en: {
   grid_size:"Grid size", language:"Language", difficulty:"Difficulty",
   diff_normal:"Normal", diff_hard:"Hard", diff_evil:"Evil", sound:"Sound", on:"On", off:"Off",
   win_mode:"Win mode", infinite:"Infinite", target:"Stop at 2048", show_tips:"Coach tips",
+  resume_game:"Always continue the saved game", sec_game:"Game", sec_display:"Display & sound",
   reset_settings:"Reset settings", reset_score:"Reset best",
   reset_settings_q:"Reset all settings to default?", reset_score_q:"Reset your personal best?",
   yes:"Yes", no:"No", done_reset:"Reset done",
@@ -372,7 +378,7 @@ const DIFFICULTY_EVIL_P = {normal:0.0, hard:0.30, evil:0.75};   // = 2049.py
 const CFG_KEY = "cfg2049", GAME_KEY = "game2049", JS_CONFIG_VERSION = 3;
 function defaultCfg(){
   return {config_version:3, grid_size:4, language:"he", active_profile:0, highscore:0, sound:true,
-    infinite:true, show_tips:false, persist_cheats:false, count_cheats_in_best:false, difficulty:"normal",
+    infinite:true, show_tips:true, resume_game:true, persist_cheats:false, count_cheats_in_best:false, difficulty:"normal",
     profiles:[{map:{}},{map:{force_4:"Shift"}},{map:{clean_stuck:"Shift",undo:"Control"}},
       {map:{force_4:"Shift",clean_stuck:"c",undo:"z",spawn_corner:"Alt",smart_spawn:"x"}}]};
 }
@@ -382,7 +388,7 @@ function sanitize(c){
   const d = defaultCfg(), ok = (k, f) => { if(!f(c[k])) c[k] = d[k]; };
   ok("grid_size", v => [4,5,6].includes(v)); ok("language", v => v in STRINGS);
   ok("difficulty", v => v in DIFFICULTY_EVIL_P);
-  ["sound","infinite","show_tips","persist_cheats","count_cheats_in_best"].forEach(k => ok(k, v => typeof v==="boolean"));
+  ["sound","infinite","show_tips","resume_game","persist_cheats","count_cheats_in_best"].forEach(k => ok(k, v => typeof v==="boolean"));
   ok("highscore", v => Number.isInteger(v) && v >= 0);
   if(!Array.isArray(c.profiles) || !c.profiles.length || !c.profiles.every(p => p && typeof p.map==="object" && p.map))
     c.profiles = d.profiles;
@@ -503,7 +509,8 @@ class Game{
     this.coach=new B.Coach(); this.boardTag=0; this.coachTag=0; this.pending=new Map();
     this.analysis=null; this.tip=null; this.tipSince=0; this.armedClean=null;
     this.moveNo=0; this.history=[];
-    if(!this.restoreGame()) this.newGame(false);
+    // "always continue the saved game" (on unless the player turned it off)
+    if(!(this.cfg.resume_game!==false && this.restoreGame())) this.newGame(false);
     this.bindGlobal();
     this.render();
     setInterval(()=>this.tickTip(), 250);
@@ -932,17 +939,21 @@ class Game{
   seg(label,opts,cur,cb){ return {label,opts,cur,cb}; }
   renderSettings(){
     const L=k=>this.L(k);
+    const groups=[[L("sec_game"),[0,1,4,6]],[L("sec_display"),[2,3,5]]];
     const rows=[
       this.seg(L("grid_size"),[[4,"4×4"],[5,"5×5"],[6,"6×6"]],this.cfg.grid_size,v=>{ this.cfg.grid_size=v; saveCfg(this.cfg); this.newGame(false); }),
       this.seg(L("difficulty"),[["normal",L("diff_normal")],["hard",L("diff_hard")],["evil",L("diff_evil")]],this.cfg.difficulty,v=>{ this.cfg.difficulty=v; saveCfg(this.cfg); }),
       this.seg(L("language"),[["he","עברית"],["en","English"]],this.cfg.language,v=>{ this.cfg.language=v; saveCfg(this.cfg); }),
       this.seg(L("sound"),[[true,L("on")],[false,L("off")]],this.cfg.sound,v=>{ this.cfg.sound=v; saveCfg(this.cfg); }),
       this.seg(L("win_mode"),[[true,L("infinite")],[false,L("target")]],this.cfg.infinite,v=>{ this.cfg.infinite=v; saveCfg(this.cfg); if(v) this.keepGoing=true; }),
-      this.seg(L("show_tips"),[[true,L("on")],[false,L("off")]],this.cfg.show_tips,v=>{ this.cfg.show_tips=v; saveCfg(this.cfg); })
+      this.seg(L("show_tips"),[[true,L("on")],[false,L("off")]],this.cfg.show_tips,v=>{ this.cfg.show_tips=v; saveCfg(this.cfg); }),
+      this.seg(L("resume_game"),[[true,L("on")],[false,L("off")]],this.cfg.resume_game!==false,v=>{ this.cfg.resume_game=v; saveCfg(this.cfg); })
     ];
     let h=`<div class="screen"><div class="schead"><h1>${L("settings")}</h1><button class="btn" id="back">${L("back")}</button></div>`;
-    rows.forEach((r,i)=>{ h+=`<div class="scard"><span class="lbl">${r.label}</span><div class="seg">${r.opts.map((o,j)=>
-      `<button class="${o[0]===r.cur?"on":""}" data-r="${i}" data-o="${j}"><span class="${/^[0-9]/.test(o[1])?"ltr":""}">${o[1]}</span></button>`).join("")}</div></div>`; });
+    groups.forEach(([title,idx])=>{ h+=`<div class="stitle">${title}</div><div class="scard">`;
+      idx.forEach(i=>{ const r=rows[i]; h+=`<div class="srow"><span class="lbl">${r.label}</span><div class="seg">${r.opts.map((o,j)=>
+        `<button class="${o[0]===r.cur?"on":""}" data-r="${i}" data-o="${j}"><span class="${/^[0-9]/.test(o[1])?"ltr":""}">${o[1]}</span></button>`).join("")}</div></div>`; });
+      h+=`</div>`; });
     h+=`<div class="resetrow"><button id="rSettings">${L("reset_settings")}</button><button id="rScore">${L("reset_score")}</button></div>
       <button class="btn prefbtn" id="toPrefs">${L("preferences")}</button><div class="prefhint">${L("prefs_hint")}</div>
       <div class="aboutcard"><a class="btn ghbtn" href="https://github.com/BeniaBot/2049" target="_blank" rel="noopener">${L("visit_github")}</a>
