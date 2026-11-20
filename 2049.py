@@ -36,7 +36,7 @@ _trace("python + imports ready")
 _TRACE_INPUT = bool(_TRACE) and bool(os.environ.get("TWENTY49_TRACE_INPUT"))
 
 APP_NAME    = "2049"
-APP_VERSION = "0.21.0"
+APP_VERSION = "0.22.0"
 _trace("version " + APP_VERSION)
 GITHUB_REPO = "BeniaBot/2049"   # owner/repo for auto-update checks
 
