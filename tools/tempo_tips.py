@@ -102,6 +102,10 @@ for gi in range(GAMES):
             seen[tip.key] += 1
         last = tip
     total_moves += moves
+    per = collections.Counter(k for _, k, _ in shown)
+    general = sum(v for k, v in per.items() if k in B.OPEN_TIPS)
+    log.write("    most repeated: %s x%d | general %d, about the board/moves %d\n" % (
+        (per.most_common(1)[0] if per else ("-", 0)) + (general, len(shown) - general)))
     log.write("=== game %d (%s), %d moves, max %d, tips %d, coach steps %d\n"
               % (gi + 1, pname, moves, game.board.max_tile(), len(shown), game.coach.move_no))
     for m, k, t in shown:

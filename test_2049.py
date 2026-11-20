@@ -425,6 +425,18 @@ class TestCoach(unittest.TestCase):
         self.assertIn("tip_g_fill", keys)          # said once the board filled up
         self.assertNotIn("tip_g_fill", keys[:4])   # ...and not while it was empty
 
+    def test_habit_tips_at_most_twice_a_game(self):
+        rows = [[2, 4, 0, 0], [4, 16, 2, 0], [8, 2, 0, 0], [2, 0, 0, 0]]
+        c = self.fresh(rows)
+        told = 0
+        for m in range(1, 300):
+            d = (B.LEFT, B.UP, B.RIGHT, B.DOWN)[m % 4]       # all four, all game
+            tip = c.on_move(d, ident(rows), ana(rows))
+            if tip is not None and tip.key == "tip_hint_dirs" and tip.born == m:
+                told += 1
+            c.dismiss()
+        self.assertEqual(told, B.HINT_MAX)
+
     def test_a_general_tip_never_holds_back_a_tip_about_a_move(self):
         calm = [[2, 4, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]
         c = B.Coach()

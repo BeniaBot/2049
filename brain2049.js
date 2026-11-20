@@ -584,6 +584,7 @@
     return true;
   }
   var EARLY_MOVES = 60, EARLY_EVERY = 8, LATE_EVERY = 16;   // see brain2049.py
+  var HINT_MAX = 2;   // see brain2049.py
   var GAP = 3, URGENT = ["tip_danger", "tip_trap", "tip_good_record"];   // pacing: see brain2049.py
   var RECORD_RANK = 8, OFF_CORNER_MOVES = 4;
   var LOST_MARGIN = 0.25, GOAL_REGRET = 0.15;   // measured - see brain2049.py
@@ -642,6 +643,7 @@
   Coach.prototype.ready = function (key) {
     if (isStuckKey(key)) key = "stuck";
     var last = this.last[key];
+    if ((key === "tip_hint_order" || key === "tip_hint_dirs") && (this.times[key] || 0) >= HINT_MAX) return false;
     var cd = (COOLDOWN[key] === undefined ? 5 : COOLDOWN[key]) <<
              Math.min(1, Math.max(0, (this.times[key] || 0) - 1));
     if (last !== undefined && this.moveNo - last < cd) return false;

@@ -826,6 +826,7 @@ LATE_EVERY = 16
 # never held back. (20.11: the player asked for MORE tips - the old x8 and
 # GAP 5 were too quiet.)
 GAP = 3
+HINT_MAX = 2             # 'big tiles side by side' / 'pick one direction': at most this often a game
 URGENT = ("tip_danger", "tip_trap", "tip_good_record")
 URGENT_BOARD = ("tip_danger", "tip_trap")    # about the board on screen only
 
@@ -908,6 +909,8 @@ class Coach:
     def _ready(self, key):
         key = "stuck" if key in STUCK_KEYS else key
         last = self.last.get(key)
+        if key in ("tip_hint_order", "tip_hint_dirs") and self.times.get(key, 0) >= HINT_MAX:
+            return False                 # a habit tip: twice a game is enough
         cd = COOLDOWN.get(key, 5) << min(1, max(0, self.times.get(key, 0) - 1))
         if last is not None and self.move_no - last < cd:
             return False
