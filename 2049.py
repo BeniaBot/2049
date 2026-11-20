@@ -185,6 +185,15 @@ STRINGS = {
         "tip_hint_dirs":"בחר כיוון אחד והימנע ממנו – כך הגדול נשאר בפינה",
         "tip_open_order":"שמור את הגדולים צמודים ובסדר יורד – כך קל לאחד אותם", "tip_open_dirs":"בחר כיוון אחד והימנע ממנו – כך הגדול נשאר בפינה",
         "tip_open_row":"שמור את השורה של הפינה מלאה – כך הגדול לא זז ממנה",
+        "tip_g_look":"לפני כל מהלך, חשוב איפה ייפול האריח החדש",
+        "tip_g_fill":"הלוח מתמלא – האט וחשוב על כל מהלך",
+        "tip_g_chain":"בנה שרשרת יורדת מהפינה – כך אריחים מתאחדים ברצף",
+        "tip_g_snake":"את השורה השנייה בנה בכיוון ההפוך – כמו נחש",
+        "tip_g_fourth":"הכיוון הרביעי הוא מוצא אחרון – רק כשאין ברירה",
+        "tip_g_merge":"העדף מהלך שמאחד – מהלך ריק רק ממלא את הלוח",
+        "tip_g_back":"הגדול יצא מהפינה? החזר אותו לפני שאריח אחר יתפוס אותה",
+        "tip_g_near":"אחד ליד הפינה, לא באמצע הלוח – כך השרשרת גדלה",
+        "tip_g_space":"השאר משבצות פנויות – לוח פתוח נותן יותר אפשרויות",
         "tip_open_small":"אחד קטנים מוקדם – לוח מלא בקטנים נתקע מהר",
         "tip_hint_order":"שמור את הגדולים צמודים ובסדר יורד – כך קל לאחד אותם",
         "tip_corner_made":"ה-{value} נוצר מחוץ לפינה – כדאי לאחד לכיוון הפינה",
@@ -295,6 +304,15 @@ STRINGS = {
         "tip_hint_dirs":"Pick one direction and avoid it - your biggest tile stays in its corner",
         "tip_open_order":"Keep big tiles side by side, in descending order - they merge easily", "tip_open_dirs":"Pick one direction and avoid it - your biggest tile stays in its corner",
         "tip_open_row":"Keep your corner's row full - then the biggest tile cannot slide out",
+        "tip_g_look":"Before each move, think where the new tile will land",
+        "tip_g_fill":"The board is filling up - slow down and weigh each move",
+        "tip_g_chain":"Build a descending chain from the corner - tiles then merge in a row",
+        "tip_g_snake":"Build the second row the other way round - like a snake",
+        "tip_g_fourth":"The fourth direction is a last resort - only when there is no choice",
+        "tip_g_merge":"Prefer a move that merges - an empty move only fills the board",
+        "tip_g_back":"Biggest tile out of its corner? Get it back before another tile takes it",
+        "tip_g_near":"Merge near the corner, not in the middle - the chain grows that way",
+        "tip_g_space":"Keep cells free - an open board leaves you more choices",
         "tip_open_small":"Merge small tiles early - a board full of small ones jams fast",
         "tip_hint_order":"Keep big tiles side by side, in descending order - they merge easily",
         "tip_corner_made":"Your {value} was made outside the corner - merge toward the corner",
@@ -1817,11 +1835,14 @@ class Game:
                 if tip is not self._tip and not self._keep_tip(tip, a):
                     self._tip = tip
                     self._tip_since = time.monotonic()
-            elif self.coach.current is not None and self.coach.current.kind == "info" \
-                    and self.coach.current is not self._tip:
-                # the board already moved on (fast play): a general tip is about
-                # the player's habits, not this exact board - it may show; a
-                # warning or a tile-by-tile tip waits for a board that holds still
+            elif self.coach.current is not None and self.coach.current is not self._tip \
+                    and (self.coach.current.kind in ("info", "praise") or
+                         self.coach.current.key in ("tip_corner_lost", "tip_corner_made")) \
+                    and not self._keep_tip(self.coach.current, a):
+                # the board already moved on (fast play): a general tip, praise,
+                # or a word about a move just made ("it left its corner") is not
+                # about this exact board - it may show; a warning or a tip about
+                # a tile waits for a board that holds still
                 self._tip = self.coach.current
                 self._tip_since = time.monotonic()
 

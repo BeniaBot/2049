@@ -388,42 +388,56 @@ class TestCoach(unittest.TestCase):
         tip = c.on_move(B.RIGHT, moved, ana(after))
         self.assertTrue(tip is None or tip.key != "tip_corner_lost")
 
-    def test_a_general_tip_opens_every_game(self):
+    def test_a_general_tip_opens_every_game_and_each_game_differently(self):
         start = ana([[2, 0, 0, 0], Z, Z, Z])
         c = B.Coach()
         c.new_game(start)
         self.assertEqual(c.current.key, "tip_open")        # the very first: a corner
-        seen = set()
-        for _ in range(len(B.OPEN_TIPS)):                  # the corner not kept:
-            c.counted_moves, c.corner_moves = 40, 8        # all of them, in turn
+        opens = []
+        for _ in range(4):                                 # the corner not kept
+            c.counted_moves, c.corner_moves = 40, 8
             c.new_game(start)
-            seen.add(c.current.key)
-        self.assertEqual(seen, set(B.OPEN_TIPS))
-        seen = set()
-        for _ in range(len(B.OPEN_TIPS)):                  # the corner kept: the
-            c.counted_moves, c.corner_moves = 40, 36       # others, never the corner
+            opens.append(c.current.key)
+            self.assertTrue(B.general_fits(c.current.key, start))
+        self.assertEqual(len(set(opens)), 4)               # the round goes on
+        for _ in range(len(B.OPEN_TIPS)):                  # the corner kept: never it
+            c.counted_moves, c.corner_moves = 40, 36
             c.new_game(start)
-            seen.add(c.current.key)
-        self.assertEqual(seen, set(B.OPEN_TIPS) - {"tip_open"})
+            self.assertNotEqual(c.current.key, "tip_open")
 
-    def test_general_tips_often_early_and_all_game_long(self):
+    def test_general_tips_often_early_never_twice_in_a_game(self):
         calm = [[2, 4, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]
+        full = [[2, 4, 8, 2], [4, 8, 2, 4], [8, 64, 4, 0], [128, 32, 16, 0]]
         c = B.Coach()
         c.new_game(ana(calm))                      # opening tip at move 0
-        at = [0]
-        keys = [c.current.key]
-        for m in range(1, 200):
-            tip = c.on_move(B.LEFT, ident(calm), ana(calm))
+        at, keys = [0], [c.current.key]
+        for m in range(1, 300):
+            rows = calm if m < 40 else full        # a board that fills up later
+            a = ana(rows)
+            tip = c.on_move(B.LEFT, ident(rows), a)
             if tip is not None and tip.key in B.OPEN_TIPS and tip.born == m:
                 at.append(m)
                 keys.append(tip.key)
+                self.assertTrue(B.general_fits(tip.key, a))      # fits the board it is said on
             c.dismiss()                            # as the screen does after a while
-        early = [m for m in at if m <= B.EARLY_MOVES]
-        late = [m for m in at if m > B.EARLY_MOVES]
-        self.assertGreaterEqual(len(early), 7)                 # every 8 moves
-        self.assertGreaterEqual(len(late), 7)                  # then every 16
-        self.assertEqual(len(set(keys[:5])), 5)                # a round: each once
+        self.assertEqual(len(keys), len(set(keys)))             # never twice in a game
+        self.assertGreaterEqual(len([m for m in at if m <= B.EARLY_MOVES]), 4)
+        self.assertIn("tip_g_fill", keys)          # said once the board filled up
+        self.assertNotIn("tip_g_fill", keys[:4])   # ...and not while it was empty
 
+    def test_a_general_tip_never_holds_back_a_tip_about_a_move(self):
+        calm = [[2, 4, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]
+        c = B.Coach()
+        c.new_game(ana(calm))
+        general = None
+        for m in range(1, 40):
+            tip = c.on_move(B.LEFT, ident(calm), ana(calm))
+            if tip is not None and tip.key in B.OPEN_TIPS and tip.born == m:
+                general = tip
+                break
+        self.assertIsNotNone(general)
+        self.assertIsNone(c.last_any)              # it left GAP alone: the next move,
+        self.assertTrue(c._ready("tip_corner_lost"))   # a tip about it may speak
     def test_a_tip_is_kept_while_still_true(self):
         # what the screen may keep showing for a few seconds of fast play
         c = B.Coach()

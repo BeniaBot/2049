@@ -556,7 +556,33 @@
     tip_good_record: 0, tip_danger: 0, tip_hint_order: 20, tip_hint_dirs: 20
   };
   var SCATTER_MOVES = 3, DIRS_WINDOW = 12, DIRS_EACH = 2, GOAL_RANK = 5, OPEN_KEEP = 0.7;   // see brain2049.py
-  var OPEN_TIPS = ["tip_open", "tip_open_order", "tip_open_dirs", "tip_open_row", "tip_open_small"];
+  var OPEN_TIPS = ["tip_open", "tip_open_order", "tip_open_dirs", "tip_open_row", "tip_open_small",
+                   "tip_g_look", "tip_g_fill", "tip_g_chain", "tip_g_snake", "tip_g_fourth",
+                   "tip_g_merge", "tip_g_back", "tip_g_near", "tip_g_space"];
+  /* = Python _corner_line_gap / general_fits */
+  function cornerLineGap(b, n) {
+    var mx = maxOf(b), cs = corners(n);
+    for (var c = 0; c < cs.length; c++) {
+      if (b[cs[c]] !== mx) continue;
+      var ls = edgeLines(cs[c], n);
+      for (var l = 0; l < ls.length; l++)
+        for (var j = 0; j < ls[l].length; j++) if (b[ls[l][j]] === 0) return true;
+    }
+    return false;
+  }
+  function generalFits(key, a) {
+    var b = a.b, n = a.n, mx = a.maxRank;
+    if (key === "tip_open_order") return mx >= 5;
+    if (key === "tip_open_row") return a.corner && cornerLineGap(b, n);
+    if (key === "tip_open_small") { var s = 0; for (var i = 0; i < b.length; i++) if (b[i] === 1 || b[i] === 2) s++; return s >= 6; }
+    if (key === "tip_g_fill") return a.empties <= 4;
+    if (key === "tip_g_chain") return mx >= 6;
+    if (key === "tip_g_snake") return mx >= 7 && a.corner;
+    if (key === "tip_g_back") return mx >= 5 && !a.corner;
+    if (key === "tip_g_near") return mx >= 5;
+    if (key === "tip_g_space") return a.empties <= 6;
+    return true;
+  }
   var EARLY_MOVES = 60, EARLY_EVERY = 8, LATE_EVERY = 16;   // see brain2049.py
   var GAP = 3, URGENT = ["tip_danger", "tip_trap", "tip_good_record"];   // pacing: see brain2049.py
   var RECORD_RANK = 8, OFF_CORNER_MOVES = 4;
@@ -574,7 +600,7 @@
   }
   function sameParams(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 
-  function Coach() { this.opened = false; this.habit = null; this.games = 0; this.reset(); }
+  function Coach() { this.opened = false; this.habit = null; this.games = 0; this.genI = 0; this.reset(); }
   Coach.prototype.reset = function () {
     this.moveNo = 0; this.last = {}; this.prev = null; this.track = new Map();
     this.times = {}; this.lastAny = null;
@@ -586,16 +612,15 @@
     if (this.countedMoves >= 20) this.habit = this.cornerMoves / this.countedMoves;
     this.reset();
     this.prev = a;
-    var self = this;
-    var keys = OPEN_TIPS.filter(function (k) {
-      return k !== "tip_open" || !self.opened || self.habit === null || self.habit < OPEN_KEEP;
-    });
-    var key = this.opened ? keys[this.games % keys.length] : "tip_open";
+    this.openShown = new Set();
+    var key = this.opened ? this.nextGeneral(a) : "tip_open";
     this.opened = true;
     this.games++;
-    this.current = new Tip(key, PRIO_OPEN, 0, {}, { maxMoves: 5, kind: "info", maxSecs: 7.0 });
-    this.openShown = new Set([key]);
     this.last.tip_early = 0;
+    if (key !== null) {
+      this.saidGeneral(key);
+      this.current = new Tip(key, PRIO_OPEN, 0, {}, { maxMoves: 5, kind: "info", maxSecs: 7.0 });
+    }
   };
   Coach.prototype.resync = function (a) {     // see brain2049.py
     this.prev = a;
@@ -639,18 +664,18 @@
     return (last === undefined || m - last >= every) &&
            (this.lastAny === null || m - this.lastAny >= GAP);
   };
-  Coach.prototype.nextGeneral = function () {
-    var keep = this.habit !== null && this.habit >= OPEN_KEEP;
-    for (var round = 0; round < 2; round++) {
-      var start = this.games % OPEN_TIPS.length;
-      for (var i = 0; i < OPEN_TIPS.length; i++) {
-        var k = OPEN_TIPS[(start + i) % OPEN_TIPS.length];
-        if (this.openShown.has(k) || (k === "tip_open" && keep)) continue;
-        return k;
-      }
-      this.openShown = new Set();
+  Coach.prototype.nextGeneral = function (a) {     // = Python _next_general
+    var keep = this.habit !== null && this.habit >= OPEN_KEEP, n = OPEN_TIPS.length;
+    for (var i = 0; i < n; i++) {
+      var k = OPEN_TIPS[(this.genI + i) % n];
+      if (this.openShown.has(k) || (k === "tip_open" && keep) || !generalFits(k, a)) continue;
+      return k;
     }
     return null;
+  };
+  Coach.prototype.saidGeneral = function (key) {
+    this.openShown.add(key);
+    this.genI = (OPEN_TIPS.indexOf(key) + 1) % OPEN_TIPS.length;
   };
   /* = Python Coach.still_true */
   Coach.prototype.stillTrue = function (tip, a) {
@@ -751,7 +776,7 @@
         var kv = p.values[keep[0]];
         for (var i = 1; i < keep.length; i++) if (p.values[keep[i]] > kv) kv = p.values[keep[i]];
         if ((kv - p.values[d]) / p.unit >= LOST_MARGIN)
-          cands.push(new Tip(ckey, PRIO_CORNER, m, { value: Math.pow(2, a.maxRank) }, { maxMoves: 3 }));
+          cands.push(new Tip(ckey, PRIO_CORNER, m, { value: Math.pow(2, a.maxRank) }, { maxMoves: 6 }));
       }
     } else if (!a.corner && a.maxRank >= GOAL_RANK && this.offCorner >= OFF_CORNER_MOVES &&
                (this.cornerTold === null || m - this.cornerTold > 8) &&
@@ -783,7 +808,7 @@
 
     // early in the game: the next general tip, if nothing else speaks
     if (!this.danger && !a.deadly.length && this.generalDue(m)) {
-      var nxt = this.nextGeneral();
+      var nxt = this.nextGeneral(a);
       if (nxt !== null)
         cands.push(new Tip(nxt, PRIO_OPEN, m, {}, { maxMoves: 6, kind: "info", maxSecs: 6.0 }));
     }
@@ -808,9 +833,9 @@
           cur = top;
           var lk = isStuckKey(top.key) ? "stuck" : top.key;
           this.last[lk] = m;
-          if (OPEN_TIPS.indexOf(top.key) >= 0) { this.last.tip_early = m; this.openShown.add(top.key); }
+          if (OPEN_TIPS.indexOf(top.key) >= 0) { this.last.tip_early = m; this.saidGeneral(top.key); }
           this.times[lk] = (this.times[lk] || 0) + 1;
-          if (URGENT.indexOf(lk) < 0) this.lastAny = m;
+          if (URGENT.indexOf(lk) < 0 && OPEN_TIPS.indexOf(top.key) < 0) this.lastAny = m;   // see brain2049.py
           if (isStuckKey(top.key)) this.track.get(top.track).told = true;
           if (top.key === "tip_corner_lost" || top.key === "tip_corner_made" ||
               top.key === "tip_corner_goal") this.cornerTold = m;

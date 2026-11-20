@@ -775,7 +775,43 @@ OPEN_KEEP = 0.7          # the corner habit the opening tip asks for: kept for
 # start is where strategy is chosen. The corner tip is skipped for a player
 # who already keeps the corner (OPEN_KEEP).
 OPEN_TIPS = ("tip_open", "tip_open_order", "tip_open_dirs", "tip_open_row",
-             "tip_open_small")
+             "tip_open_small", "tip_g_look", "tip_g_fill", "tip_g_chain",
+             "tip_g_snake", "tip_g_fourth", "tip_g_merge", "tip_g_back",
+             "tip_g_near", "tip_g_space")
+
+
+def _corner_line_gap(b, n):
+    """The top tile sits in a corner and a line along the edge from it has
+    a hole - the tile could be pushed out along it."""
+    mx = max(b)
+    return any(b[ci] == mx and any(0 in [b[j] for j in line] for line in edge_lines(ci, n))
+               for ci in corners(n))
+
+
+def general_fits(key, a):
+    """Does this general tip fit the board right now? Most are said only
+    when the board shows what they are about (a general tip, but never out
+    of place); the rest are plain strategy and fit any time."""
+    b, n, mx = a.b, a.n, a.max_rank
+    if key == "tip_open_order":
+        return mx >= 5
+    if key == "tip_open_row":
+        return a.corner and _corner_line_gap(b, n)
+    if key == "tip_open_small":
+        return sum(1 for v in b if v in (1, 2)) >= 6
+    if key == "tip_g_fill":
+        return a.empties <= 4
+    if key == "tip_g_chain":
+        return mx >= 6
+    if key == "tip_g_snake":
+        return mx >= 7 and a.corner
+    if key == "tip_g_back":
+        return mx >= 5 and not a.corner
+    if key == "tip_g_near":
+        return mx >= 5
+    if key == "tip_g_space":
+        return a.empties <= 6
+    return True
 INFO_KEYS = OPEN_TIPS + ("tip_hint_order", "tip_hint_dirs")
 # General tips all game long, often early: one every EARLY_EVERY moves for
 # the first EARLY_MOVES moves (the start is where habits are made), then
@@ -798,7 +834,8 @@ class Coach:
     def __init__(self):
         self.opened = False          # the opening tip was shown this session
         self.habit = None            # share of the last game the top tile kept a corner
-        self.games = 0               # games started this session (opening tips rotate)
+        self.games = 0               # games started this session
+        self.gen_i = 0               # where the round of general tips goes on from
         self.reset()
 
     def reset(self):
@@ -828,16 +865,14 @@ class Coach:
             self.habit = self.corner_moves / self.counted_moves
         self.reset()
         self.prev = analysis
-        keys = [k for k in OPEN_TIPS if k != "tip_open" or not self.opened
-                or self.habit is None or self.habit < OPEN_KEEP]
-        key = keys[self.games % len(keys)]
-        if not self.opened:
-            key = "tip_open"             # the very first: choose a corner
+        self.open_shown = set()
+        key = "tip_open" if not self.opened else self._next_general(analysis)
         self.opened = True
         self.games += 1
-        self.current = Tip(key, PRIO_OPEN, 0, max_moves=5, kind="info", max_secs=7.0)
-        self.open_shown = {key}
         self.last["tip_early"] = 0       # the next general tip: EARLY_EVERY moves on
+        if key is not None:
+            self._said_general(key)
+            self.current = Tip(key, PRIO_OPEN, 0, max_moves=5, kind="info", max_secs=7.0)
 
     def resync(self, analysis):
         """After an assist / undo, or a burst of moves too fast to analyse
@@ -904,19 +939,24 @@ class Coach:
         return (last is None or m - last >= every) and \
             (self.last_any is None or m - self.last_any >= GAP)
 
-    def _next_general(self):
-        """The next general tip not said yet in this round (the corner one
-        not for a player who keeps the corner); all said: a new round."""
+    def _next_general(self, a):
+        """The next general tip that fits this board and was not said yet
+        this game (each at most once a game: the player found 5 tips going
+        round every few moves far too repetitive); the round goes on from
+        game to game, so each game starts with different ones. The corner
+        tip not for a player who keeps the corner."""
         keep = self.habit is not None and self.habit >= OPEN_KEEP
-        for _ in range(2):
-            start = self.games % len(OPEN_TIPS)
-            for i in range(len(OPEN_TIPS)):
-                k = OPEN_TIPS[(start + i) % len(OPEN_TIPS)]
-                if k in self.open_shown or (k == "tip_open" and keep):
-                    continue
-                return k
-            self.open_shown = set()
+        n = len(OPEN_TIPS)
+        for i in range(n):
+            k = OPEN_TIPS[(self.gen_i + i) % n]
+            if k in self.open_shown or (k == "tip_open" and keep) or not general_fits(k, a):
+                continue
+            return k
         return None
+
+    def _said_general(self, key):
+        self.open_shown.add(key)
+        self.gen_i = (OPEN_TIPS.index(key) + 1) % len(OPEN_TIPS)
 
     def still_true(self, tip, a):
         """Is what the tip says still so on this board? (is_valid without the
@@ -1042,7 +1082,7 @@ class Coach:
             if keep and self._ready(key) and \
                     (max(p.values[x] for x in keep) - p.values[d]) / p.unit >= LOST_MARGIN:
                 cands.append(Tip(key, PRIO_CORNER, m,
-                                 {"value": 1 << a.max_rank}, max_moves=3))
+                                 {"value": 1 << a.max_rank}, max_moves=6))
         elif not a.corner and a.max_rank >= GOAL_RANK \
                 and self.off_corner >= OFF_CORNER_MOVES \
                 and (self.corner_told is None or m - self.corner_told > 8) \
@@ -1082,7 +1122,7 @@ class Coach:
 
         # -- early in the game: the next general tip, if nothing else speaks --
         if not self.danger and not a.deadly and self._general_due(m):
-            nxt = self._next_general()
+            nxt = self._next_general(a)
             if nxt is not None:
                 cands.append(Tip(nxt, PRIO_OPEN, m, max_moves=6, kind="info",
                                  max_secs=6.0))
@@ -1119,9 +1159,11 @@ class Coach:
                     self.last[k] = m
                     if top.key in OPEN_TIPS:
                         self.last["tip_early"] = m
-                        self.open_shown.add(top.key)
+                        self._said_general(top.key)
                     self.times[k] = self.times.get(k, 0) + 1
-                    if k not in URGENT:
+                    # a general tip is filler: it never makes a tip about the
+                    # player's own moves wait (that tip would be lost)
+                    if k not in URGENT and top.key not in OPEN_TIPS:
                         self.last_any = m
                     if top.key in STUCK_KEYS:
                         self.track[top.track]["told"] = True
