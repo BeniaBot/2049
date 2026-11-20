@@ -64,18 +64,20 @@ seen = collections.Counter()
 durations = []          # seconds each tip stayed on screen
 by_key = collections.defaultdict(list)
 t_play = time.monotonic()
+game.coach = B.Coach()          # one coach for the session, as for a real player:
+known = set()                   # the course of general tips goes on game to game
+order_bad = []                  # a general tip said before what it builds on
 for gi in range(GAMES):
     pname, pol = policies[gi % len(policies)]
     rng = random.Random(SEED * 1000 + gi)
     random.seed(SEED * 1000 + gi)
-    game.coach = B.Coach()
-    game.coach.opened = True            # the opening tip is not what we count
     game.new_game()
     settle()
-    last = game._tip
+    last = opening = game._tip
+    keep = game.coach.habit is not None and game.coach.habit >= B.OPEN_KEEP
     since = time.monotonic()
     moves = 0
-    shown = []
+    shown = [] if last is None else [(0, last.key, game.tip_text(last))]
     while game.board.can_move() and moves < 700:
         b, n = B.to_ranks(game.board.grid)
         d = pol(b, n, rng)
@@ -93,7 +95,7 @@ for gi in range(GAMES):
                 run_for(rng.uniform(1.0, 2.5))       # a think
         tip = game._tip
         if tip is not last:
-            if last is not None and last.key != "tip_open":
+            if last is not None and last is not opening:
                 durations.append(time.monotonic() - since)
                 by_key[last.key].append(time.monotonic() - since)
             since = time.monotonic()
@@ -102,6 +104,12 @@ for gi in range(GAMES):
             seen[tip.key] += 1
         last = tip
     total_moves += moves
+    for m, k, _ in shown:
+        for need in B.PREREQ.get(k, ()):
+            if need not in known and not (need == "tip_open" and keep):
+                order_bad.append((gi + 1, m, k, need))
+        known.add(B.TWIN.get(k, k))
+        known.add(k)
     per = collections.Counter(k for _, k, _ in shown)
     general = sum(v for k, v in per.items() if k in B.OPEN_TIPS)
     log.write("    most repeated: %s x%d | general %d, about the board/moves %d\n" % (
@@ -112,6 +120,8 @@ for gi in range(GAMES):
         log.write("   move %4d  %-18s %s\n" % (m, k, t))
 log.write("\nTOTAL moves %d, tips %d (one per %.0f moves)\n%s\n"
           % (total_moves, sum(seen.values()), total_moves / max(1, sum(seen.values())), dict(seen)))
+line = "teaching order: %d general tips said before what they build on %s" % (len(order_bad), order_bad[:5])
+log.write(line + "\n"); print(line)
 share = sum(durations) / max(1e-9, time.monotonic() - t_play)
 durations.sort()
 if durations:
