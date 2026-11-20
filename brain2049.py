@@ -894,8 +894,7 @@ class Coach:
         self.opened = True
         self.games += 1
         self.last["tip_early"] = 0       # the next general tip: EARLY_EVERY moves on
-        if key is not None:
-            self._said_general(key)
+        if key is not None:              # said once the screen shows it (shown)
             self.current = Tip(key, PRIO_OPEN, 0, max_moves=5, kind="info", max_secs=7.0)
 
     def resync(self, analysis):
@@ -996,6 +995,19 @@ class Coach:
             if ok(k):
                 return k
         return None
+
+    def shown(self, tip):
+        """The screen put this tip in front of the player. Only that counts
+        as said: in fast play a tip the coach chose may never reach the
+        screen (20.11, fast play: 'like a snake' came before 'keep your
+        corner's row full' - that one had been chosen, never shown, and
+        taken as taught). A general tip chosen but not shown is chosen
+        again, next time one is due."""
+        if tip.key in OPEN_TIPS:
+            self._said_general(tip.key)
+        elif tip.key in TWIN:
+            self.open_shown.add(TWIN[tip.key])
+            self.taught.add(TWIN[tip.key])
 
     def _said_general(self, key):
         self.open_shown.add(key)
@@ -1205,12 +1217,8 @@ class Coach:
                     cur = top
                     k = "stuck" if top.key in STUCK_KEYS else top.key
                     self.last[k] = m
-                    if top.key in OPEN_TIPS:
+                    if top.key in OPEN_TIPS:     # (said: once it is shown)
                         self.last["tip_early"] = m
-                        self._said_general(top.key)
-                    elif top.key in TWIN:
-                        self.open_shown.add(TWIN[top.key])
-                        self.taught.add(TWIN[top.key])
                     self.times[k] = self.times.get(k, 0) + 1
                     # a general tip is filler: it never makes a tip about the
                     # player's own moves wait (that tip would be lost)

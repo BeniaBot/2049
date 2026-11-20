@@ -36,7 +36,7 @@ _trace("python + imports ready")
 _TRACE_INPUT = bool(_TRACE) and bool(os.environ.get("TWENTY49_TRACE_INPUT"))
 
 APP_NAME    = "2049"
-APP_VERSION = "0.22.0"
+APP_VERSION = "0.23.0"
 _trace("version " + APP_VERSION)
 GITHUB_REPO = "BeniaBot/2049"   # owner/repo for auto-update checks
 
@@ -1354,6 +1354,7 @@ class Game:
         self._pending_move = None
         self._analysis = None          # analysis of the CURRENT board
         self._tip = None               # tip on screen (brain.Tip)
+        self._tip_told = None          # the last tip the coach heard was really seen
         self._tip_since = 0.0
         self._armed_clean = None       # (tag, cell) - removed on next move
         self._move_no = 0
@@ -2086,6 +2087,9 @@ class Game:
         tip = self._tip
         if tip is not None and self.cfg.get("show_tips", False) and overlay is None:
             self._draw_tip(tip)
+            if tip is not self._tip_told:   # drawn: the player can read it now -
+                self._tip_told = tip        # only that counts as said (Coach.shown)
+                self.coach.shown(tip)
 
         # in-game toast (settings confirmations etc. - never for assists)
         self._draw_toast()

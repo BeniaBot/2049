@@ -64,6 +64,9 @@ def main():
         b = spawn(spawn(tuple([0] * (n * n)), n, rng), n, rng)
         a = B.Analysis(b, n)
         coach.new_game(a)
+        if coach.current is not None:      # a screen that shows every tip
+            coach.shown(coach.current)
+        seen = coach.current
         steps = [{"board": list(b), "expect": summary(a, coach.current)}]
         for mv in range(160 if n == 4 else 70):
             if not a.values:
@@ -74,6 +77,9 @@ def main():
             b = spawn(b, n, rng)
             a = B.Analysis(b, n)
             tip = coach.on_move(d, mm, a)
+            if tip is not None and tip is not seen:
+                coach.shown(tip)
+            seen = tip
             steps.append({"board": list(b), "dir": d,
                           "moved": [[k, v[0], v[1]] for k, v in mm.items()],
                           "expect": summary(a, tip)})
@@ -89,12 +95,15 @@ const close = (x, y) => (x === null && y === undefined) || (x === undefined && y
   (x === y) || (typeof x === 'number' && typeof y === 'number' && Math.abs(x - y) <= 1e-9 * Math.max(1, Math.abs(x)));
 const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
 const coach = new B.Coach();
+let seen = null;
 for (const g of games) {
   g.steps.forEach((s, k) => {
     const a = new B.Analysis(s.board, g.n);
     let tip;
     if (k === 0) { coach.newGame(a); tip = coach.current; }
     else tip = coach.onMove(s.dir, new Map(s.moved.map(m => [m[0], [m[1], m[2]]])), a, false);
+    if (tip && tip !== seen) coach.shown(tip);
+    seen = tip;
     const e = s.expect, why = [];
     for (let d = 0; d < 4; d++) {
       if (!close(e.values[d], a.values[d])) why.push('value ' + d + ' ' + e.values[d] + ' vs ' + a.values[d]);

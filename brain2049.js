@@ -631,8 +631,7 @@
     this.opened = true;
     this.games++;
     this.last.tip_early = 0;
-    if (key !== null) {
-      this.saidGeneral(key);
+    if (key !== null) {             // said once the screen shows it (shown)
       this.current = new Tip(key, PRIO_OPEN, 0, {}, { maxMoves: 5, kind: "info", maxSecs: 7.0 });
     }
   };
@@ -701,6 +700,10 @@
       if (ok(k)) return k;
     }
     return null;
+  };
+  Coach.prototype.shown = function (tip) {        // = Python Coach.shown
+    if (OPEN_TIPS.indexOf(tip.key) >= 0) this.saidGeneral(tip.key);
+    else if (TWIN[tip.key]) { this.openShown.add(TWIN[tip.key]); this.taught.add(TWIN[tip.key]); }
   };
   Coach.prototype.saidGeneral = function (key) {
     this.openShown.add(key);
@@ -864,8 +867,7 @@
           cur = top;
           var lk = isStuckKey(top.key) ? "stuck" : top.key;
           this.last[lk] = m;
-          if (OPEN_TIPS.indexOf(top.key) >= 0) { this.last.tip_early = m; this.saidGeneral(top.key); }
-          else if (TWIN[top.key]) { this.openShown.add(TWIN[top.key]); this.taught.add(TWIN[top.key]); }
+          if (OPEN_TIPS.indexOf(top.key) >= 0) this.last.tip_early = m;   // said: once it is shown
           this.times[lk] = (this.times[lk] || 0) + 1;
           if (URGENT.indexOf(lk) < 0 && OPEN_TIPS.indexOf(top.key) < 0) this.lastAny = m;   // see brain2049.py
           if (isStuckKey(top.key)) this.track.get(top.track).told = true;

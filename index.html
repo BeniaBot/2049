@@ -215,7 +215,7 @@
 <body>
 <div id="app"></div>
 <div id="cornerdot"></div>
-<script src="brain2049.js?v=0.22.0"></script>
+<script src="brain2049.js?v=0.23.0"></script>
 <script>
 "use strict";
 // ============================================================
@@ -228,7 +228,7 @@ const TIP_ICONS = {
   praise: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.4 10.3l3.2 3.2 6.2-6.9" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   warn: '<svg viewBox="0 0 20 20" fill="#fff" aria-hidden="true"><rect x="8.75" y="4.4" width="2.5" height="7" rx="1.25"/><circle cx="10" cy="14.4" r="1.45"/></svg>'
 };
-const APP_VERSION = "0.22.0";
+const APP_VERSION = "0.23.0";
 const B = window.Brain2049;
 
 const STRINGS = {
@@ -525,7 +525,7 @@ class Game{
     this.state="game"; this.capturing=null; this.cheatDirty=false;
     this.heldKeys=new Set(); this.animating=false; this.audioCtx=null;
     this.coach=new B.Coach(); this.boardTag=0; this.coachTag=0; this.pending=new Map();
-    this.analysis=null; this.tip=null; this.tipSince=0; this.armedClean=null;
+    this.analysis=null; this.tip=null; this.tipSince=0; this.armedClean=null; this.tipTold=null;
     this.moveNo=0; this.history=[];
     // "always continue the saved game" (on unless the player turned it off)
     if(!(this.cfg.resume_game!==false && this.restoreGame())) this.newGame(false);
@@ -949,6 +949,7 @@ class Game{
     if(!t || !this.cfg.show_tips || this.overlayKind()){ el.innerHTML=""; return; }
     const tone=t.kind==="praise"?"praise":(t.kind==="info"||t.key==="tip_corner_goal")?"gold":"warn";
     el.innerHTML=`<div class="tip ${tone}"><span class="badge">${TIP_ICONS[tone]}</span><span>${this.tipText(t)}</span></div>`;
+    if(t!==this.tipTold){ this.tipTold=t; this.coach.shown(t); }   // seen: only that counts as said
   }
   changeGrid(delta){ const s=[4,5,6]; let i=s.indexOf(this.cfg.grid_size); i=(i+delta+s.length)%s.length;
     this.cfg.grid_size=s[i]; saveCfg(this.cfg); this.newGame(); }
