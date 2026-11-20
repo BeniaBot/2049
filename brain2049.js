@@ -669,8 +669,9 @@
     if (k === "tip_trap") return this.moveNo === tip.born && a.hasValue(tip.params.dir);
     if (isStuckKey(k)) return tip.track !== null && a.problems.has(tip.track);
     if (k === "tip_hint_order") return bigTilesScattered(a.b, a.n);
+    if (k === "tip_corner_lost" || k === "tip_corner_made") return !a.corner;   // back in it: done
     if (k === "tip_corner_goal") return !a.corner && waysBack(a).length > 0;
-    return true;          // general tips, praise, 'it left the corner': about what happened
+    return true;          // general tips and praise: about what happened
   };
   /* = Python Coach._next_general */
   Coach.prototype.generalDue = function (m) {     // = Python _general_due

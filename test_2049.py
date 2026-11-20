@@ -520,6 +520,25 @@ class TestCoach(unittest.TestCase):
         self.assertIsNotNone(first)
         self.assertGreaterEqual(first, B.COOLDOWN["tip_hint_dirs"])
 
+    def test_corner_tips_end_once_it_is_back_in_its_corner(self):
+        # 'it left its corner' ends the move the tile is back - in BOTH
+        # engines (the browser's lost this line once and kept the tip up,
+        # hiding the praise for bringing it back; found 20.11 by parity_check)
+        back = [[0, 0, 0, 64], [0, 0, 2, 4], [0, 2, 4, 8], [256, 4, 8, 2]]
+        c = B.Coach()
+        keys = ["tip_corner_lost", "tip_corner_made"]
+        self.assertEqual([c.is_valid(B.Tip(k, 3, 0, {"value": 256}, max_moves=6), ana(back))
+                          for k in keys], [False, False])
+        js = ("const B=require(%r);const c=new B.Coach();const a=B.Analysis.ofGrid(%s,true);"
+              "console.log(JSON.stringify(%s.map(k=>c.isValid(new B.Tip(k,3,0,{value:256},{maxMoves:6}),a))))"
+              % (os.path.join(_HERE, "brain2049.js").replace("\\", "/"), json.dumps(back), json.dumps(keys)))
+        try:
+            out = subprocess.run(["node", "-e", js], capture_output=True, text=True,
+                                 timeout=60).stdout.strip()
+        except FileNotFoundError:
+            self.skipTest("node not installed")
+        self.assertEqual(json.loads(out), [False, False])
+
     def test_a_tip_is_kept_while_still_true(self):
         # what the screen may keep showing for a few seconds of fast play
         c = B.Coach()
