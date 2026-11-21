@@ -2133,6 +2133,14 @@ class Game:
                 cur = w
         if cur:
             lines.append(cur)
+        # no lone word on the last line ('...נסה לבנות לידו' / '2' looked
+        # broken): it takes one more word down with it, when that fits
+        if len(lines) >= 2 and " " not in lines[-1]:
+            prev = lines[-2].split(" ")
+            moved = prev[-1] + " " + lines[-1]
+            if len(prev) >= 3 and font.size(moved)[0] / self.SS <= max_w:
+                lines[-2] = " ".join(prev[:-1])
+                lines[-1] = moved
         return lines
 
     # (card, border, badge) per tone: gold for tips, green for praise, red
@@ -2523,8 +2531,14 @@ class Game:
             msg, badge, bcol = L("offline"), "!", (190, 150, 120)
         else:
             msg, badge, bcol = L("checking"), None, None
-        mt = self.f_tiny.render(self.shape(msg), True, TEXT_DARK)
         ca = self.f_tiny.render(self.shape(L("check_again")), True, ACCENT)
+        # 'Check again' only where it means something: not while downloading,
+        # and not after a failed update (the button below is the way on) -
+        # there the long English message ran into it
+        show_ca = st not in ("downloading", "apply", "failed")
+        ca_w = ca.get_width()/self.SS + 28 if show_ca else 14
+        mt = self._clip_text(msg, self.f_tiny, pill.w - 40 - ca_w, TEXT_DARK)
+        self.a_recheck = pygame.Rect(0, 0, 0, 0)
         if rtl:
             if badge:
                 bx0 = pill.right-22
@@ -2532,9 +2546,10 @@ class Game:
                 bt = self.f_tiny.render(badge, True, TEXT_LIGHT)
                 self.screen.blit(bt, bt.get_rect(center=(bx0, pill.centery)))
             self.screen.blit(mt, (pill.right-40-mt.get_width()/self.SS, pill.centery-8))
-            self.a_recheck = pygame.Rect(pill.x+12, pill.centery-11,
-                                         ca.get_width()/self.SS+8, 22)
-            self.screen.blit(ca, (pill.x+14, pill.centery-8))
+            if show_ca:
+                self.a_recheck = pygame.Rect(pill.x+12, pill.centery-11,
+                                             ca.get_width()/self.SS+8, 22)
+                self.screen.blit(ca, (pill.x+14, pill.centery-8))
         else:
             if badge:
                 bx0 = pill.x+22
@@ -2542,9 +2557,10 @@ class Game:
                 bt = self.f_tiny.render(badge, True, TEXT_LIGHT)
                 self.screen.blit(bt, bt.get_rect(center=(bx0, pill.centery)))
             self.screen.blit(mt, (pill.x+40, pill.centery-8))
-            self.a_recheck = pygame.Rect(pill.right-14-ca.get_width()/self.SS,
-                                         pill.centery-11, ca.get_width()/self.SS+8, 22)
-            self.screen.blit(ca, (pill.right-14-ca.get_width()/self.SS, pill.centery-8))
+            if show_ca:
+                self.a_recheck = pygame.Rect(pill.right-14-ca.get_width()/self.SS,
+                                             pill.centery-11, ca.get_width()/self.SS+8, 22)
+                self.screen.blit(ca, (pill.right-14-ca.get_width()/self.SS, pill.centery-8))
         iy += 46
 
         # GitHub button (full-width inside card). When an update is available,
@@ -2798,9 +2814,10 @@ class Game:
         total = yesw + now + gap
         bx = cx - total/2
         by = dy + dh - 64
-        self.cf_yes = Button((bx, by, yesw, 46), L("confess_yes"),
+        yx, nx = (bx+now+gap, bx) if self.is_rtl() else (bx, bx+yesw+gap)   # reading order
+        self.cf_yes = Button((yx, by, yesw, 46), L("confess_yes"),
                              self.f_small, base=BTN_BG, text_col=TEXT_LIGHT)
-        self.cf_no = Button((bx+yesw+gap, by, now, 46), L("confess_no"),
+        self.cf_no = Button((nx, by, now, 46), L("confess_no"),
                             self.f_small, base=ACCENT, text_col=TEXT_LIGHT)
         self.cf_yes.draw(self.screen); self.cf_no.draw(self.screen)
 
@@ -2810,7 +2827,11 @@ class Game:
         dim = pygame.Surface(self._render_surf.get_size(), pygame.SRCALPHA)
         dim.fill((22, 34, 26, 180))
         self.screen.surf.blit(dim, (0, 0))
-        dw, dh = 420, 250
+        dw = 420
+        # the body wraps inside the box (the English one ran out of it)
+        body = self._wrap(L("praise_body"), self.f_small, dw - 48)
+        body2 = self._wrap(L("praise_body2"), self.f_tiny, dw - 48)
+        dh = 250 + 26 * (len(body) - 1) + 20 * (len(body2) - 1)
         dx, dy = (self.W-dw)//2, (self.H-dh)//2
         self.screen.rect(BG, (dx, dy, dw, dh), border_radius=16)
         self.screen.rect(GREEN, (dx, dy, dw, 6), border_radius=6)
@@ -2821,10 +2842,14 @@ class Game:
         self.screen.blit(ck, ck.get_rect(center=(cx, dy+46)))
         t = self.f_med.render(self.shape(L("praise_title")), True, GREEN)
         self.screen.blit(t, (cx-t.get_width()/2/self.SS, dy+78))
-        b = self.f_small.render(self.shape(L("praise_body")), True, TEXT_DARK)
-        self.screen.blit(b, (cx-b.get_width()/2/self.SS, dy+118))
-        b2 = self.f_tiny.render(self.shape(L("praise_body2")), True, BOARD_BG)
-        self.screen.blit(b2, (cx-b2.get_width()/2/self.SS, dy+146))
+        y = dy + 118
+        for ln in body:
+            b = self.f_small.render(self.shape(ln), True, TEXT_DARK)
+            self.screen.blit(b, (cx-b.get_width()/2/self.SS, y)); y += 26
+        y += 2
+        for ln in body2:
+            b2 = self.f_tiny.render(self.shape(ln), True, BOARD_BG)
+            self.screen.blit(b2, (cx-b2.get_width()/2/self.SS, y)); y += 20
         okw = self.f_small.size(L("praise_ok"))[0]/self.SS + 60
         self.pr_ok = Button((cx-okw/2, dy+dh-58, okw, 46), L("praise_ok"),
                             self.f_small, base=GREEN, text_col=TEXT_LIGHT)
@@ -2948,9 +2973,11 @@ class Game:
         yesw = self.f_small.size(L("yes"))[0]/self.SS + 50
         now = self.f_small.size(L("no"))[0]/self.SS + 50
         gap = 16; total = yesw+now+gap; bx = cx-total/2; by = dy+dh-58
-        self.cfm_yes = Button((bx, by, yesw, 44), L("yes"), self.f_small,
+        # reading order: 'yes' first - on the right in Hebrew, as in the browser
+        yx, nx = (bx+now+gap, bx) if self.is_rtl() else (bx, bx+yesw+gap)
+        self.cfm_yes = Button((yx, by, yesw, 44), L("yes"), self.f_small,
                               base=ACCENT, text_col=TEXT_LIGHT)
-        self.cfm_no = Button((bx+yesw+gap, by, now, 44), L("no"), self.f_small,
+        self.cfm_no = Button((nx, by, now, 44), L("no"), self.f_small,
                              base=BTN_BG, text_col=TEXT_LIGHT)
         self.cfm_yes.draw(self.screen); self.cfm_no.draw(self.screen)
 

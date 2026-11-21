@@ -827,6 +827,33 @@ class TestGameFlow(unittest.TestCase):
             gm.cfg["language"], gm.state, gm.update_status = saved
             gm.frame(1 / 60)
 
+    def test_no_lone_word_on_a_tips_last_line(self):
+        # '...נסה לבנות לידו' / '2' on the 6x6 board looked broken
+        gm = self.game
+        txt = "ה-2 בשורה התחתונה שובר את השרשרת של ה-1024 – נסה לבנות לידו 2"
+        for w in range(200, 520, 20):
+            lines = gm._wrap(txt, gm.f_tiny, w)
+            self.assertEqual(" ".join(lines), txt)            # every word, in order
+            if len(lines) > 1:
+                self.assertIn(" ", lines[-1], (w, lines))
+
+    def test_dialog_buttons_in_reading_order(self):
+        # 'yes' first: on the right in Hebrew, on the left in English (the
+        # desktop kept the English order in Hebrew; the browser did not)
+        gm = self.game
+        saved = gm.cfg["language"], gm.state, gm._confirm
+        try:
+            for lang in ("he", "en"):
+                gm.cfg["language"] = lang
+                gm.state = "settings"
+                gm._confirm = (gm.L("reset_settings_q"), "reset_settings")
+                gm.frame(1 / 60)
+                yes, no = gm.cfm_yes.rect.x, gm.cfm_no.rect.x
+                self.assertTrue(yes > no if lang == "he" else yes < no, lang)
+        finally:
+            gm.cfg["language"], gm.state, gm._confirm = saved
+            gm.frame(1 / 60)
+
     def test_hebrew_is_shown_right_in_the_english_ui(self):
         # 'עברית' in the language switch came out reversed in the English UI
         saved = g._CURRENT_LANG
