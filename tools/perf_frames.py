@@ -68,8 +68,11 @@ for label, sel in (("ALL", lambda m: True), ("while tiles move", lambda m: m),
                    ("board at rest", lambda m: not m)):
     fs = sorted(f for f, m in frames if sel(m))
     k = len(fs)
-    over = sum(1 for f in fs if f > 1 / 60)
     print(label + ": ", end="")
+    if not fs:                     # e.g. a board never at rest at this pace
+        print("no frames")
+        continue
+    over = sum(1 for f in fs if f > 1 / 60)
     hitches = sum(1 for f in fs if f > 2 / 60)      # 2+ frames late: what an eye sees
     print("%dx%d, %d moves, %d frames: frame ms p50 %.1f  p95 %.1f  p99 %.1f  max %.1f;"
       " frames over 16.7ms: %.1f%%; hitches (>33ms) per minute: %.0f"
