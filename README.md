@@ -48,10 +48,10 @@
 בעמוד ה-**[Releases](https://github.com/BeniaBot/2049/releases)** תמצאו את
 הגרסה האחרונה, בשתי צורות:
 
-- &rlm;**`2049.exe`** — גרסה ניידת: מורידים ומריצים. בלי התקנה, בלי תלות בשום דבר.
-- **`2049_Setup.exe`** — מתקין מלא עם קיצור דרך לשולחן העבודה.
+- &rlm;**<code dir="ltr">2049.exe</code>** — גרסה ניידת: מורידים ומריצים. בלי התקנה, בלי תלות בשום דבר.
+- **<code dir="ltr">2049_Setup.exe</code>** — מתקין מלא עם קיצור דרך לשולחן העבודה.
 
-> **הגדרות, שיאים והמשחק הנוכחי** נשמרים ב-`%APPDATA%\2049\` — גם אם תמחק או
+> **הגדרות, שיאים והמשחק הנוכחי** נשמרים ב-<code dir="ltr">%APPDATA%\2049\\</code> — גם אם תמחק או
 > תזיז את ה-exe, הם לא ייפגעו.
 
 ---
@@ -105,11 +105,11 @@
 
 ## בנייה מקוד המקור (אופציונלי)
 
-מי שמעדיף לקמפל בעצמו: צריך Python 3.9+ מותקן, ואז לחיצה כפולה על
-`build_exe.bat` — התוצאה ב-`dist\2049.exe`. הבדיקות: `python test_2049.py`.
+מי שמעדיף לקמפל בעצמו: צריך Python בגרסה 3.9 ומעלה, ואז לחיצה כפולה על
+<code dir="ltr">build_exe.bat</code> — התוצאה ב-<code dir="ltr">dist\2049.exe</code>. הבדיקות: <code dir="ltr">python test_2049.py</code>.
 
 ## קרדיטים
 - **פיתוח וקוד:** Claude (Anthropic) · **בעלים:** BeniaBot
-- גופן: [Rubik](https://github.com/googlefonts/rubik) (רישיון OFL, ב-`OFL-Rubik.txt`)
+- גופן: [Rubik](https://github.com/googlefonts/rubik) (רישיון OFL, ב-<code dir="ltr">OFL-Rubik.txt</code>)
 
 </div>
