@@ -798,6 +798,46 @@ class TestGameFlow(unittest.TestCase):
         gm._board_changed("resync")
         self.settle()
 
+    def test_settings_screen_layout_and_rows(self):
+        gm = self.game
+        saved = gm.cfg["language"], gm.state, getattr(gm, "update_status", None)
+        try:
+            for lang in ("he", "en"):
+                gm.cfg["language"] = lang
+                gm.state = "settings"
+                gm.update_status, gm.update_available = "update", "9.9.9"
+                gm.frame(1 / 60)
+                # 'Update now' stays exactly where the clean-machine update
+                # test clicks it (tools/vm/guest_update_test.ps1: 280, 659)
+                self.assertTrue(gm.s_github.hit((280, 659)))
+                # the reset buttons in reading order: 'reset settings' first
+                a, b = gm.s_reset_settings.rect, gm.s_reset_score.rect
+                self.assertTrue(a.x > b.x if lang == "he" else a.x < b.x)
+                # nothing overlaps: the preferences row, the resets, the about card
+                self.assertLess(gm.s_prefs.rect.bottom, min(a.top, b.top))
+                self.assertLess(max(a.bottom, b.bottom), 582)
+                # the whole preferences row opens the preferences
+                x, y = gm.s_prefs.rect.x + 30, gm.s_prefs.rect.centery
+                vs = gm.view_scale
+                gm.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN,
+                                                   {"pos": (x * vs, y * vs), "button": 1}))
+                self.assertEqual(gm.state, "preferences")
+                gm.state = "settings"
+        finally:
+            gm.cfg["language"], gm.state, gm.update_status = saved
+            gm.frame(1 / 60)
+
+    def test_hebrew_is_shown_right_in_the_english_ui(self):
+        # 'עברית' in the language switch came out reversed in the English UI
+        saved = g._CURRENT_LANG
+        try:
+            g._CURRENT_LANG = "en"
+            self.assertEqual(g.shape_text("עברית"), g._bidi_display("עברית"))
+            self.assertNotEqual(g.shape_text("עברית"), "עברית")
+            self.assertEqual(g.shape_text("English"), "English")
+        finally:
+            g._CURRENT_LANG = saved
+
     def test_the_coach_hears_only_what_the_screen_showed(self):
         gm = self.game
         saved = gm.cfg.get("show_tips"), gm.coach

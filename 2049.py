@@ -166,8 +166,8 @@ STRINGS = {
         "win_mode":"\u05de\u05e6\u05d1 \u05e0\u05d9\u05e6\u05d7\u05d5\u05df",
         "show_tips":"\u05d4\u05e6\u05d2 \u05e2\u05e6\u05d5\u05ea",
         "resume_game":"המשך תמיד משחק שמור", "sec_game":"משחק", "sec_display":"תצוגה וצליל",
-        "reset_settings":"\u05d0\u05e4\u05e1 \u05d4\u05d2\u05d3\u05e8\u05d5\u05ea",
-        "reset_score":"\u05d0\u05e4\u05e1 \u05e9\u05d9\u05d0",
+        "reset_settings":"איפוס הגדרות",
+        "reset_score":"איפוס שיא",
         "reset_settings_q":"\u05dc\u05d0\u05e4\u05e1 \u05d0\u05ea \u05db\u05dc \u05d4\u05d4\u05d2\u05d3\u05e8\u05d5\u05ea \u05dc\u05d1\u05e8\u05d9\u05e8\u05ea \u05d4\u05de\u05d7\u05d3\u05dc?",
         "reset_score_q":"\u05dc\u05d0\u05e4\u05e1 \u05d0\u05ea \u05d4\u05e9\u05d9\u05d0 \u05d4\u05d0\u05d9\u05e9\u05d9?",
         "yes":"\u05db\u05df",
@@ -229,7 +229,7 @@ STRINGS = {
         "update_ready":"\u05d2\u05e8\u05e1\u05d4 \u05d7\u05d3\u05e9\u05d4 \u05d6\u05de\u05d9\u05e0\u05d4 \u05dc\u05d4\u05d5\u05e8\u05d3\u05d4",
         "check_again":"\u05d1\u05d3\u05d5\u05e7 \u05e9\u05d5\u05d1",
         "checking":"\u05d1\u05d5\u05d3\u05e7...",
-        "visit_github":"\u05d1\u05e7\u05e8 \u05d1\u05e2\u05de\u05d5\u05d3 \u05d4-GitHub",
+        "visit_github":"עמוד הפרויקט ב-GitHub",
         "download_update":"\u05d4\u05d5\u05e8\u05d3 \u05d2\u05e8\u05e1\u05d4 \u05d7\u05d3\u05e9\u05d4",
         "version_lbl":"\u05d2\u05e8\u05e1\u05d4",
         "update_avail":"\u05e2\u05d3\u05db\u05d5\u05df \u05d6\u05de\u05d9\u05df!",
@@ -340,12 +340,12 @@ STRINGS = {
         "count_best":"Count cheats in best",
         "credit":"Made by Claude \u2022 BeniaBot",
         "about":"About",
-        "opened_by":"Opened by",
+        "opened_by":"Developed by",
         "up_to_date":"The app is up to date",
         "update_ready":"A new version is available",
         "check_again":"Check again",
         "checking":"Checking...",
-        "visit_github":"Visit the GitHub page",
+        "visit_github":"Project page on GitHub",
         "download_update":"Download new version",
         "version_lbl":"Version",
         "update_avail":"Update available!",
@@ -382,8 +382,14 @@ STRINGS = {
 
 # Global current-language shaper, set by Game each frame. Buttons use it too.
 _CURRENT_LANG = "he"
+def _has_hebrew(text):
+    return any("\u0590" <= ch <= "\u05ff" for ch in text)
+
 def shape_text(text):
-    if _CURRENT_LANG == "he" and _HAS_BIDI:
+    # Hebrew is put in display order in the Hebrew UI - and wherever it
+    # shows up in the English one too ("עברית" in the language switch used
+    # to come out reversed there)
+    if _HAS_BIDI and (_CURRENT_LANG == "he" or _has_hebrew(text)):
         try:
             return _bidi_display(text)
         except Exception:
@@ -2436,34 +2442,52 @@ class Game:
             [(L("language"), [("he",L("hebrew")),("en",L("english"))], self.cfg["language"]),
              (L("sound"), on_off, self.cfg["sound"]),
              (L("show_tips"), on_off, self.cfg.get("show_tips", True))], rtl)
-        y += 12
+        y += 14
 
-        # --- Reset buttons row (settings + high score): quiet, outlined ---
-        rbh = 34; rgap = 12
-        rbw = (self.W - 48 - rgap) / 2
+        # --- Preferences (actually the cheat config): a row like the rows
+        #     above, the whole row opens it; its hint and a chevron on the far
+        #     side (it used to be a button with a caption stuck under it) ---
+        MUTED = (156, 141, 126)
+        prow = pygame.Rect(M, y, self.W - 2*M, 46)
+        self.screen.card(CARD_BG, prow, radius=14, shadow=True)
+        self.s_prefs = Button(prow, "", self.f_small)
+        lab = self.f_small.render(self.shape(L("preferences")), True, TEXT_DARK)
+        hint = self.f_tiny.render(self.shape(L("prefs_hint")), True, MUTED)
+        lw, hw = lab.get_width()/self.SS, hint.get_width()/self.SS
+        cy = prow.centery
+        if rtl:                                   # onward is to the left
+            self.screen.blit(lab, (prow.right - 16 - lw, cy - 11))
+            cx = prow.x + 20
+            self.screen.line(MUTED, (cx + 3, cy - 6), (cx - 3, cy), 2)
+            self.screen.line(MUTED, (cx - 3, cy), (cx + 3, cy + 6), 2)
+            self.screen.blit(hint, (cx + 14, cy - 8))
+        else:
+            self.screen.blit(lab, (prow.x + 16, cy - 11))
+            cx = prow.right - 20
+            self.screen.line(MUTED, (cx - 3, cy - 6), (cx + 3, cy), 2)
+            self.screen.line(MUTED, (cx + 3, cy), (cx - 3, cy + 6), 2)
+            self.screen.blit(hint, (cx - 14 - hw, cy - 8))
+        y = prow.bottom + 14
+
+        # --- Reset buttons (settings + best): quiet, outlined, in reading
+        #     order - the same order as in the browser ---
+        rbh = 32; rgap = 12
+        rbw = (self.W - 2*M - rgap) / 2
         for i, (attr, key) in enumerate((("s_reset_settings", "reset_settings"),
                                          ("s_reset_score", "reset_score"))):
-            r = pygame.Rect(24 + i * (rbw + rgap), y, rbw, rbh)
+            slot = (1 - i) if rtl else i
+            r = pygame.Rect(M + slot * (rbw + rgap), y, rbw, rbh)
             b = Button(r, L(key), self.f_tiny, base=(238, 229, 216), text_col=TEXT_DARK)
             setattr(self, attr, b)
             b.draw(self.screen)
-            self.screen.rect((214, 200, 184), r, 1, border_radius=8)
-        y += rbh + 12
-
-        # --- "Preferences" button (discreet - actually the cheat config) ---
-        pw = self.f_small.size(L("preferences"))[0]/self.SS + 48
-        self.s_prefs = Button((self.W/2-pw/2, y, pw, 40), L("preferences"),
-                              self.f_small, base=BTN_BG, text_col=TEXT_LIGHT)
-        self.s_prefs.draw(self.screen)
-        sub = self.f_tiny.render(self.shape(L("prefs_hint")), True, BOARD_BG)
-        self.screen.blit(sub, (self.W/2-sub.get_width()/2/self.SS, y+44))
+            self.screen.rect((214, 200, 184), r, 1, border_radius=6)
         # the update card stays exactly where it always was: the clean-machine
         # update test clicks "Update now" by position, on this very version
         y = 582
 
         # --- About card (status + GitHub + author with avatar) ---
         card_y = y
-        card_h = 150
+        card_h = 140              # the same breathing room under the author row as above the pill
         acard = pygame.Rect(24, card_y, self.W-48, card_h)
         self.screen.card((245, 239, 229), acard, radius=18, shadow=True)
         iy = card_y + 12
@@ -2539,10 +2563,15 @@ class Game:
                                    base=ACCENT, text_col=TEXT_LIGHT)
             self._github_target = "release"
         else:
-            self.s_github = Button(gbtn, L("visit_github"), self.f_small,
-                                   base=BTN_BG, text_col=TEXT_LIGHT)
+            # just a link out: quiet and outlined, like the reset buttons -
+            # it used to be the heaviest thing on the screen
+            self.s_github = Button(gbtn, L("visit_github"), self.f_tiny,
+                                   base=(238, 229, 216), text_col=TEXT_DARK)
             self._github_target = "repo"
-        self.s_github.draw(self.screen); iy += 48
+        self.s_github.draw(self.screen)
+        if self._github_target == "repo":
+            self.screen.rect((214, 200, 184), gbtn, 1, border_radius=6)
+        iy += 48
 
         # author row: avatar + "opened by BeniaBot"
         by_txt = self.f_tiny.render(self.shape(L("opened_by")), True, BOARD_BG)
