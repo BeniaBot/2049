@@ -104,7 +104,12 @@ try {
     ("12 fast keys: {0} arrived, {1} moved, {2} blocked by the rules; saved moves +{3}" -f $arrived, $moved, $blocked, ($s2.moves - $before))
   # 3) assists: undo (Z), smart tile (hold X), clean (C)
   Start-Process 'C:\bench\2049.exe' | Out-Null; $h = Wait-Window 60; Start-Sleep -Seconds 2
-  Tap $h 'left' 300; Tap $h 'z' 400
+  # all four directions first, so at least one really moves and the undo has
+  # a move to undo (1.0.0 on Win11: the board after the random run was stuck
+  # left, down and right - no assist could act, so none was marked: a flaky
+  # test, not the game)
+  foreach ($k in 'left', 'down', 'right', 'up') { Tap $h $k 250 }
+  Tap $h 'z' 400
   [W]::Down($h, 0x58, 0x2D, $false); Start-Sleep -Milliseconds 60
   Tap $h 'down' 200
   [W]::Up($h, 0x58, 0x2D, $false); Start-Sleep -Milliseconds 300
