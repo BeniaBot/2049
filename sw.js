@@ -3,8 +3,8 @@
  * at once) and the cached copy is only the fallback when offline. Static
  * files are served from the cache and refreshed in the background. */
 "use strict";
-const CACHE = "2049-v0.23.0";
-const SHELL = ["./", "index.html", "brain2049.js?v=0.23.0", "avatar.png", "icon_64.png",
+const CACHE = "2049-v1.0.0";
+const SHELL = ["./", "index.html", "brain2049.js?v=1.0.0", "avatar.png", "icon_64.png",
                "icon_256.png", "icon_512.png", "manifest.webmanifest"];
 
 self.addEventListener("install", e => {
