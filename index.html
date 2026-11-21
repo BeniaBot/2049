@@ -48,6 +48,8 @@
     box-shadow:inset 0 -2px 0 rgba(0,0,0,.06);}
   .scorebox .lbl{font-size:11px;font-weight:600;letter-spacing:.6px;color:#eee4da;}
   .scorebox .val{font-size:22px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums;}
+  /* a long score gets a smaller font: 6 digits in both boxes pushed the header past a phone's edge */
+  .scorebox .val.long{font-size:18px;margin-top:5px;} .scorebox .val.xlong{font-size:15px;margin-top:7px;}
   .scorebox .plus{position:absolute;inset-inline:0;top:22px;font-size:20px;font-weight:700;
     color:rgba(119,110,101,.9);pointer-events:none;animation:plus .65s ease-in forwards;}
   @keyframes plus{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-38px)}}
@@ -92,7 +94,8 @@
 
   .overlay{position:absolute;inset:0;border-radius:var(--r-lg);z-index:20;display:flex;
     flex-direction:column;align-items:center;justify-content:center;gap:14px;
-    background:rgba(250,248,239,.8);animation:fade .6s ease .25s backwards;}
+    background:rgba(250,248,239,.88);animation:fade .6s ease .25s backwards;}   /* the tiles stay a faint backdrop: at .8 their numbers ran through the title and the hint */
+  [dir="rtl"] .overlay{direction:rtl;}   /* the board is ltr (tile positions); its end screens read right-to-left */
   .overlay h2{font-size:clamp(30px,8vw,44px);margin:0;font-weight:800;color:var(--ink);}
   .overlay .btns{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}
   .overlay .hint{font-size:13px;color:var(--muted);}
@@ -112,6 +115,7 @@
   .tip.praise{background:#e3f3e4;border-color:#80c27c;} .tip.praise .badge{background:#3c984a;}
   .tip.warn{background:#fbe4de;border-color:#e47c68;} .tip.warn .badge{background:#ce4836;}
   .tip .arrow{font-weight:700;unicode-bidi:isolate;}
+  .tip>span:last-child{text-wrap:pretty;}   /* no lone word on a tip's last line */
   @keyframes tipin{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 
   .bottombar{display:flex;justify-content:space-between;align-items:center;gap:10px;
@@ -185,7 +189,7 @@
   .cheatrow .d{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.35;}
   .keybox{flex:none;min-width:92px;background:rgba(205,193,180,.55);border-radius:var(--r-sm);padding:9px 10px;
     text-align:center;font-size:13px;font-weight:700;}
-  .keybox.listening{background:var(--accent);color:#fff;} .keybox.empty{color:var(--muted);}
+  .keybox.listening,.keybox.empty.listening{background:var(--accent);color:#fff;}   /* white even on a still-empty box (the grey 'empty' rule came later and won) */ .keybox.empty{color:var(--muted);}
   .clicknote{text-align:center;color:var(--muted);font-size:12px;margin-top:10px;}
 
   /* ---------- dialogs, dot, toast ---------- */
@@ -200,7 +204,10 @@
   .dialog .btns{display:flex;gap:10px;justify-content:center;margin-top:18px;flex-wrap:wrap;}
   .dialog .check{width:46px;height:46px;border-radius:50%;background:var(--green);color:#fff;display:flex;
     align-items:center;justify-content:center;font-size:24px;margin:0 auto 8px;}
-  .dialog .picks{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0 4px;}
+  /* the four corners laid out where they are on the screen - also in Hebrew (the
+     grid used to flow right-to-left and put 'top-left' on the right) */
+  .dialog .picks{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0 4px;direction:ltr;}
+  [dir="rtl"] .dialog .pick{direction:rtl;}
   .dialog .pick{background:var(--card);padding:12px 8px;border-radius:var(--r-sm);font-weight:600;font-size:14px;}
   .btn.green{background:var(--green);}
   #cornerdot{position:fixed;top:5px;right:5px;width:6px;height:6px;border-radius:50%;opacity:0;
@@ -836,7 +843,13 @@ class Game{
 
   // ---------- dialogs ----------
   toast(text){ document.querySelectorAll(".toast").forEach(t=>t.remove());
-    const t=document.createElement("div"); t.className="toast"; t.textContent=text; document.body.appendChild(t);
+    const t=document.createElement("div"); t.className="toast"; t.textContent=text;
+    // as in the desktop game: over the top of the board, or right under a
+    // screen's header - never on the title or the scores (it used to cover them)
+    const bd=document.getElementById("board"), hd=document.querySelector(".schead");
+    const y=bd ? bd.getBoundingClientRect().top+18 : hd ? hd.getBoundingClientRect().bottom+8 : 16;
+    t.style.top=Math.max(12,Math.round(y))+"px";
+    document.body.appendChild(t);
     setTimeout(()=>t.remove(),3200); }
   closeDialog(){ document.querySelectorAll(".dim").forEach(d=>d.remove()); }
   dialog(html,cls=""){
@@ -896,7 +909,7 @@ class Game{
     if($("ovNew")) $("ovNew").onclick=()=>this.newGame();
     if($("ovKeep")) $("ovKeep").onclick=()=>{ this.keepGoing=true; this.saveGame(); this.render(); };
     if(IS_TOUCH) this.bindTouchZones();
-    this.layoutTiles(); this.renderTip(); this.showArmedDot();
+    this.layoutTiles(); this.renderTip(); this.showArmedDot(); this.fitScores();
   }
   geometry(){
     const board=document.getElementById("board"); if(!board) return null;
@@ -950,10 +963,14 @@ class Game{
     const s=document.getElementById("sval"), bv=document.getElementById("bval"), box=document.getElementById("scorebox");
     if(s) s.textContent=this.board.score;
     if(bv) bv.textContent=Math.max(this.cfg.highscore,this.board.score);
+    this.fitScores();
     if(box && gain>0){ box.querySelectorAll(".plus").forEach(p=>p.remove());
       const p=document.createElement("div"); p.className="plus"; p.textContent="+"+gain; box.appendChild(p);
       setTimeout(()=>p.remove(),700); }
   }
+  fitScores(){                       // see .scorebox .val.long
+    for(const id of ["sval","bval"]){ const e=document.getElementById(id); if(!e) continue;
+      const n=e.textContent.length; e.classList.toggle("long",n===6); e.classList.toggle("xlong",n>=7); } }
   renderTip(){
     const el=document.getElementById("tiparea"); if(!el) return;
     const t=this.tip;
