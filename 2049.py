@@ -36,7 +36,7 @@ _trace("python + imports ready")
 _TRACE_INPUT = bool(_TRACE) and bool(os.environ.get("TWENTY49_TRACE_INPUT"))
 
 APP_NAME    = "2049"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 _trace("version " + APP_VERSION)
 GITHUB_REPO = "BeniaBot/2049"   # owner/repo for auto-update checks
 
@@ -169,7 +169,7 @@ STRINGS = {
         "reset_settings":"איפוס הגדרות",
         "reset_score":"איפוס שיא",
         "reset_settings_q":"\u05dc\u05d0\u05e4\u05e1 \u05d0\u05ea \u05db\u05dc \u05d4\u05d4\u05d2\u05d3\u05e8\u05d5\u05ea \u05dc\u05d1\u05e8\u05d9\u05e8\u05ea \u05d4\u05de\u05d7\u05d3\u05dc?",
-        "reset_score_q":"\u05dc\u05d0\u05e4\u05e1 \u05d0\u05ea \u05d4\u05e9\u05d9\u05d0 \u05d4\u05d0\u05d9\u05e9\u05d9?",
+        "reset_score_q":"לאפס את השיא של לוח {n}?",
         "yes":"\u05db\u05df",
         "no":"\u05dc\u05d0",
         "done_reset":"\u05d0\u05d5\u05e4\u05e1 \u05d1\u05d4\u05e6\u05dc\u05d7\u05d4",
@@ -289,7 +289,7 @@ STRINGS = {
         "reset_settings":"Reset settings",
         "reset_score":"Reset best",
         "reset_settings_q":"Reset all settings to default?",
-        "reset_score_q":"Reset your personal best?",
+        "reset_score_q":"Reset your {n} best?",
         "yes":"Yes",
         "no":"No",
         "done_reset":"Reset done",
@@ -431,11 +431,14 @@ def key_display_name(code):
 # 2048-reach rate roughly in half; evil makes 2048 nearly unreachable while
 # 512-1024 stays common. See git history / release notes for the full table.
 DIFFICULTY_EVIL_P = {"normal": 0.0, "hard": 0.30, "evil": 0.75}
+BOARD_SIZES = (4, 5, 6)
 
 def default_config():
     return {
         "config_version": 3,
-        "grid_size":4, "language":"he", "active_profile":0, "highscore":0,
+        "grid_size":4, "language":"he", "active_profile":0,
+        # a best for each board size (a 6x6 score says nothing about a 4x4 one)
+        "highscores":{str(n): 0 for n in BOARD_SIZES},
         "sound":True, "infinite":True, "show_tips":True, "resume_game":True,
         "persist_cheats":False,
         "count_cheats_in_best":False, "difficulty":"normal",
@@ -481,6 +484,20 @@ def _read_json(path):
         raise ValueError("not a JSON object")
     return data
 
+def _is_score(v):
+    return isinstance(v, int) and not isinstance(v, bool) and v >= 0
+
+def _bests_from_one(saved):
+    """Up to 1.0.0 there was ONE best for all board sizes ("highscore"). Which
+    size it was made on was never recorded: it goes to the size the player has
+    selected, so nobody opens the game to find it gone. (The old number stays
+    in the file.)"""
+    bests = {str(n): 0 for n in BOARD_SIZES}
+    n = saved.get("grid_size")
+    if _is_score(saved.get("highscore")):
+        bests[str(n if n in BOARD_SIZES else 4)] = saved["highscore"]
+    return bests
+
 def _sanitize_config(cfg):
     """Coerce every field to a sane value so a hand-edited or half-written
     config can never crash the game (e.g. an unknown language)."""
@@ -488,14 +505,16 @@ def _sanitize_config(cfg):
     def pick(key, ok):
         if not ok(cfg.get(key)):
             cfg[key] = d[key]
-    pick("grid_size", lambda v: v in (4, 5, 6))
+    pick("grid_size", lambda v: v in BOARD_SIZES)
     pick("language", lambda v: v in STRINGS)
     pick("difficulty", lambda v: v in DIFFICULTY_EVIL_P)
     for k in ("sound", "infinite", "show_tips", "resume_game", "persist_cheats",
               "count_cheats_in_best"):
         pick(k, lambda v: isinstance(v, bool))
-    pick("highscore", lambda v: isinstance(v, int) and not isinstance(v, bool)
-         and v >= 0)
+    hs = cfg.get("highscores")
+    hs = hs if isinstance(hs, dict) else {}
+    cfg["highscores"] = {str(n): (hs[str(n)] if _is_score(hs.get(str(n))) else 0)
+                         for n in BOARD_SIZES}
     profs = cfg.get("profiles")
     if not (isinstance(profs, list) and profs
             and all(isinstance(p, dict) and isinstance(p.get("map"), dict)
@@ -523,6 +542,8 @@ def load_config():
         try:
             old_version = saved.get("config_version", 1)
             cfg.update(saved)
+            if not isinstance(saved.get("highscores"), dict):
+                cfg["highscores"] = _bests_from_one(saved)
             cfg["config_version"] = CONFIG_VERSION
             if not cfg.get("profiles"):
                 cfg["profiles"] = default_config()["profiles"]
@@ -1628,6 +1649,10 @@ class Game:
             self._game_dirty = False
             self._game_saved_at = time.monotonic()
 
+    def best_score(self):
+        """The saved best of the board being played."""
+        return self.cfg["highscores"].get(str(self.board.size), 0)
+
     def update_highscore(self):
         # A game "counts" for the saved best if it was cheat-free, OR the player
         # explicitly enabled "count cheats in best". Otherwise the best still
@@ -1635,10 +1660,10 @@ class Game:
         cheating = getattr(self, "cheat_used_this_game", False) or self._active_cheat_on()
         if cheating and not self.cfg.get("count_cheats_in_best", False):
             return
-        if self.board.score > self.cfg["highscore"]:
+        if self.board.score > self.best_score():
             # written when the board is at rest (and on quit) - a safe write
             # on every record-breaking move used to cost a frame mid-slide
-            self.cfg["highscore"] = self.board.score
+            self.cfg["highscores"][str(self.board.size)] = self.board.score
             self._cfg_dirty = True
 
     def _flush_saves(self, force=False):
@@ -2035,7 +2060,7 @@ class Game:
         # The BEST box shows the higher of the saved best and the current score,
         # so it rises during play like normal - but the saved value only
         # actually updates for clean (cheat-free) games (see update_highscore).
-        shown_best = max(self.cfg["highscore"], self.board.score)
+        shown_best = max(self.best_score(), self.board.score)
         self._score_box(L("best"), shown_best, best_x, 26)
 
         # --- Second row: settings (left) + 4x4 selector & refresh (right) ---
@@ -2948,13 +2973,13 @@ class Game:
         which = self._confirm[1] if self._confirm else None
         self._confirm = None
         if which == "reset_settings":
-            hs = self.cfg.get("highscore", 0)   # keep the high score
+            hs = self.cfg["highscores"]         # keep the bests
             self.cfg = default_config()
-            self.cfg["highscore"] = hs
+            self.cfg["highscores"] = hs
             save_config(self.cfg); self._sync_lang(); self.new_game()
             self.toast = [self.L("done_reset"), 150]
         elif which == "reset_score":
-            self.cfg["highscore"] = 0
+            self.cfg["highscores"][str(self.board.size)] = 0    # this board's only
             save_config(self.cfg)
             self.toast = [self.L("done_reset"), 150]
 
@@ -3027,7 +3052,9 @@ class Game:
             if hasattr(self,"s_reset_settings") and self.s_reset_settings.hit(e.pos):
                 self._confirm = (self.L("reset_settings_q"), "reset_settings"); return
             if hasattr(self,"s_reset_score") and self.s_reset_score.hit(e.pos):
-                self._confirm = (self.L("reset_score_q"), "reset_score"); return
+                n = self.board.size             # say WHICH best goes
+                self._confirm = (self.L("reset_score_q").format(n="%d\u00d7%d" % (n, n)),
+                                 "reset_score"); return
             if self.s_prefs.hit(e.pos):
                 self.enter_preferences(); return
             if hasattr(self,"a_recheck") and self.a_recheck.collidepoint(e.pos):

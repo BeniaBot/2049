@@ -233,7 +233,7 @@
 <body>
 <div id="app"></div>
 <div id="cornerdot"></div>
-<script src="brain2049.js?v=1.0.0"></script>
+<script src="brain2049.js?v=1.1.0"></script>
 <script>
 "use strict";
 // ============================================================
@@ -246,7 +246,7 @@ const TIP_ICONS = {
   praise: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.4 10.3l3.2 3.2 6.2-6.9" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   warn: '<svg viewBox="0 0 20 20" fill="#fff" aria-hidden="true"><rect x="8.75" y="4.4" width="2.5" height="7" rx="1.25"/><circle cx="10" cy="14.4" r="1.45"/></svg>'
 };
-const APP_VERSION = "1.0.0";
+const APP_VERSION = "1.1.0";
 const B = window.Brain2049;
 
 const STRINGS = {
@@ -260,7 +260,7 @@ he: {
   win_mode:"מצב ניצחון", infinite:"אינסופי", target:"עצירה ב-2048", show_tips:"הצג עצות",
   resume_game:"המשך תמיד משחק שמור", sec_game:"משחק", sec_display:"תצוגה וצליל",
   reset_settings:"איפוס הגדרות", reset_score:"איפוס שיא",
-  reset_settings_q:"לאפס את כל ההגדרות לברירת המחדל?", reset_score_q:"לאפס את השיא האישי?",
+  reset_settings_q:"לאפס את כל ההגדרות לברירת המחדל?", reset_score_q:"לאפס את השיא של לוח {n}?",
   yes:"כן", no:"לא", done_reset:"אופס בהצלחה",
   preferences:"העדפות", prefs_hint:"הגדרות מתקדמות",
   prefs_title:"מקלט הרמאים והנוכלים", prefs_sub:"כאן מתאספים כל אלו שלא מספיק טובים בזכות עצמם",
@@ -326,7 +326,7 @@ en: {
   win_mode:"Win mode", infinite:"Infinite", target:"Stop at 2048", show_tips:"Show tips",
   resume_game:"Always continue the saved game", sec_game:"Game", sec_display:"Display & sound",
   reset_settings:"Reset settings", reset_score:"Reset best",
-  reset_settings_q:"Reset all settings to default?", reset_score_q:"Reset your personal best?",
+  reset_settings_q:"Reset all settings to default?", reset_score_q:"Reset your {n} best?",
   yes:"Yes", no:"No", done_reset:"Reset done",
   preferences:"Preferences", prefs_hint:"Advanced settings",
   prefs_title:"Refuge of Cheats & Crooks", prefs_sub:"Where everyone who isn't good enough on their own gathers",
@@ -413,19 +413,28 @@ const DIFFICULTY_EVIL_P = {normal:0.0, hard:0.30, evil:0.75};   // = 2049.py
 // ---- persistence ----
 const CFG_KEY = "cfg2049", GAME_KEY = "game2049", JS_CONFIG_VERSION = 3;
 function defaultCfg(){
-  return {config_version:3, grid_size:4, language:"he", active_profile:0, highscore:0, sound:true,
+  return {config_version:3, grid_size:4, language:"he", active_profile:0,
+    highscores:{4:0,5:0,6:0},      // a best for each board size = 2049.py
+    sound:true,
     infinite:true, show_tips:true, resume_game:true, persist_cheats:false, count_cheats_in_best:false, difficulty:"normal",
     profiles:[{map:{}},{map:{force_4:"Shift"}},{map:{clean_stuck:"Shift",undo:"Control"}},
       {map:{force_4:"Shift",clean_stuck:"c",undo:"z",spawn_corner:"Alt",smart_spawn:"x"}}]};
 }
 function store(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
 function load(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } }
+const isScore = v => Number.isInteger(v) && v >= 0;
+function bestsFromOne(s){          // = _bests_from_one in 2049.py: the one old best goes to the selected size
+  const b = {4:0,5:0,6:0};
+  if(isScore(s.highscore)) b[[4,5,6].includes(s.grid_size) ? s.grid_size : 4] = s.highscore;
+  return b;
+}
 function sanitize(c){
   const d = defaultCfg(), ok = (k, f) => { if(!f(c[k])) c[k] = d[k]; };
   ok("grid_size", v => [4,5,6].includes(v)); ok("language", v => v in STRINGS);
   ok("difficulty", v => v in DIFFICULTY_EVIL_P);
   ["sound","infinite","show_tips","resume_game","persist_cheats","count_cheats_in_best"].forEach(k => ok(k, v => typeof v==="boolean"));
-  ok("highscore", v => Number.isInteger(v) && v >= 0);
+  const hs = c.highscores && typeof c.highscores==="object" ? c.highscores : {};
+  c.highscores = {}; for(const n of [4,5,6]) c.highscores[n] = isScore(hs[n]) ? hs[n] : 0;
   if(!Array.isArray(c.profiles) || !c.profiles.length || !c.profiles.every(p => p && typeof p.map==="object" && p.map))
     c.profiles = d.profiles;
   for(const p of c.profiles) for(const a of Object.keys(p.map)){
@@ -441,6 +450,7 @@ function loadCfg(){
   if(s && typeof s==="object"){
     const oldVer = s.config_version || 1;
     Object.assign(c, s);
+    if(!s.highscores || typeof s.highscores!=="object") c.highscores = bestsFromOne(s);
     c.config_version = JS_CONFIG_VERSION;
     if(oldVer < JS_CONFIG_VERSION){ c.profiles = defaultCfg().profiles; c.active_profile = 0; }
   }
@@ -586,10 +596,11 @@ class Game{
     store(GAME_KEY,{v:1,size:this.board.size,grid:this.board.grid,score:this.board.score,won:this.won,
       keepGoing:this.keepGoing,cheat:this.cheatUsed,moves:this.moveNo});
   }
+  best(){ return this.cfg.highscores[this.board.size] || 0; }      // of the board being played
   updateHighscore(){
     const cheating=this.cheatUsed||this.activeCheatOn();
     if(cheating && !this.cfg.count_cheats_in_best) return;
-    if(this.board.score>this.cfg.highscore){ this.cfg.highscore=this.board.score; saveCfg(this.cfg); }
+    if(this.board.score>this.best()){ this.cfg.highscores[this.board.size]=this.board.score; saveCfg(this.cfg); }
   }
   heldParams(){
     let fv=null, pe=false, smart=false;
@@ -884,7 +895,7 @@ class Game{
     let h=`<div class="screen game">
       <div class="top"><div class="brand"><div class="title">2049</div></div>
         <div class="scores"><div class="scorebox" id="scorebox"><div class="lbl">${L("score")}</div><div class="val" id="sval">${b.score}</div></div>
-        <div class="scorebox"><div class="lbl">${L("best")}</div><div class="val" id="bval">${Math.max(this.cfg.highscore,b.score)}</div></div></div></div>
+        <div class="scorebox"><div class="lbl">${L("best")}</div><div class="val" id="bval">${Math.max(this.best(),b.score)}</div></div></div></div>
       <div class="toolbar"><button class="btn" id="toSettings">${L("settings")}</button>
         <div class="tools"><div class="sizesel"><button id="gridDown" aria-label="-">${ICON.down}</button><span>${n}×${n}</span>
           <button id="gridUp" aria-label="+">${ICON.up}</button></div>
@@ -962,7 +973,7 @@ class Game{
   updateScore(gain){
     const s=document.getElementById("sval"), bv=document.getElementById("bval"), box=document.getElementById("scorebox");
     if(s) s.textContent=this.board.score;
-    if(bv) bv.textContent=Math.max(this.cfg.highscore,this.board.score);
+    if(bv) bv.textContent=Math.max(this.best(),this.board.score);
     this.fitScores();
     if(box && gain>0){ box.querySelectorAll(".plus").forEach(p=>p.remove());
       const p=document.createElement("div"); p.className="plus"; p.textContent="+"+gain; box.appendChild(p);
@@ -1011,9 +1022,10 @@ class Game{
     document.getElementById("back").onclick=()=>{ this.state="game"; this.render(); };
     document.getElementById("toPrefs").onclick=()=>this.enterPreferences();
     document.getElementById("rSettings").onclick=()=>this.showConfirm(L("reset_settings_q"),()=>{
-      const hs=this.cfg.highscore; this.cfg=defaultCfg(); this.cfg.highscore=hs; saveCfg(this.cfg); this.newGame(false); this.toast(this.L("done_reset")); this.render(); });
-    document.getElementById("rScore").onclick=()=>this.showConfirm(L("reset_score_q"),()=>{
-      this.cfg.highscore=0; saveCfg(this.cfg); this.toast(this.L("done_reset")); this.render(); });
+      const hs=this.cfg.highscores; this.cfg=defaultCfg(); this.cfg.highscores=hs; saveCfg(this.cfg); this.newGame(false); this.toast(this.L("done_reset")); this.render(); });
+    const bn=this.board.size;                // say WHICH best goes: this board's only
+    document.getElementById("rScore").onclick=()=>this.showConfirm(L("reset_score_q").replace("{n}",bn+"×"+bn),()=>{
+      this.cfg.highscores[bn]=0; saveCfg(this.cfg); this.toast(this.L("done_reset")); this.render(); });
     this.app.querySelectorAll(".seg button").forEach(btn=>{ btn.onclick=()=>{ const r=rows[+btn.dataset.r]; r.cb(r.opts[+btn.dataset.o][0]); this.render(); }; });
   }
 
