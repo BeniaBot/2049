@@ -6,6 +6,7 @@ The game module is imported headless (SDL dummy drivers); no window opens
 and the user's real config in %APPDATA%\\2049 is never touched (every test
 that saves points the config and game files at a temp folder).
 """
+import copy
 import importlib.util
 import json
 import os
@@ -704,8 +705,8 @@ class TestConfig(unittest.TestCase):
                        "profiles": [{"map": {}}] * 4}, f)
         cfg = g.load_config()
         self.assertEqual(cfg["profiles"], g.default_config()["profiles"])
-        self.assertEqual((cfg["highscore"], cfg["grid_size"], cfg["language"]),
-                         (4321, 5, "en"))
+        self.assertEqual((cfg["highscores"], cfg["grid_size"], cfg["language"]),
+                         ({"4": 0, "5": 4321, "6": 0}, 5, "en"))
 
     def test_junk_values_are_sanitized(self):
         with open(g.CONFIG_PATH, "w", encoding="utf-8") as f:
@@ -717,7 +718,7 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(cfg["grid_size"], 4)
         self.assertEqual(cfg["language"], "he")
         self.assertEqual(cfg["difficulty"], "normal")
-        self.assertEqual(cfg["highscore"], 0)
+        self.assertEqual(cfg["highscores"], {"4": 0, "5": 0, "6": 0})
         self.assertIs(cfg["sound"], True)
         self.assertEqual(cfg["active_profile"], 0)
         self.assertEqual(cfg["profiles"][0]["map"], {})
@@ -727,18 +728,43 @@ class TestConfig(unittest.TestCase):
         with open(g.CONFIG_PATH, "w", encoding="utf-8-sig") as f:
             json.dump({"config_version": 3, "highscore": 4242, "language": "en"}, f)
         cfg = g.load_config()
-        self.assertEqual(cfg["highscore"], 4242)
+        self.assertEqual(cfg["highscores"]["4"], 4242)
         self.assertEqual(cfg["language"], "en")
+
+    def test_the_one_old_best_moves_to_the_selected_size(self):
+        # up to 1.0.0 there was one best for all board sizes
+        for size, want in ((4, "4"), (5, "5"), (6, "6"), (9, "4"), (None, "4")):
+            old = {"config_version": 3, "highscore": 6308, "language": "en"}
+            if size is not None:
+                old["grid_size"] = size
+            with open(g.CONFIG_PATH, "w", encoding="utf-8") as f:
+                json.dump(old, f)
+            cfg = g.load_config()
+            self.assertEqual(cfg["highscores"], {**{"4": 0, "5": 0, "6": 0}, want: 6308})
+            # once moved it is not moved again: not onto another size, and
+            # not back after a reset
+            cfg["grid_size"] = 6
+            cfg["highscores"] = {"4": 0, "5": 12, "6": 0}
+            g.save_config(cfg)
+            self.assertEqual(g.load_config()["highscores"], {"4": 0, "5": 12, "6": 0})
+
+    def test_junk_bests_are_sanitized(self):
+        for junk, want in (({"4": -1, "5": "7", "6": 5, "7": 9}, {"4": 0, "5": 0, "6": 5}),
+                           ({"4": True}, {"4": 0, "5": 0, "6": 0}),
+                           ([1, 2], {"4": 0, "5": 0, "6": 0})):
+            with open(g.CONFIG_PATH, "w", encoding="utf-8") as f:
+                json.dump({"config_version": 3, "highscores": junk}, f)
+            self.assertEqual(g.load_config()["highscores"], want)
 
     def test_corrupt_file_falls_back_to_backup(self):
         cfg = g.default_config()
-        cfg["highscore"] = 777
+        cfg["highscores"]["4"] = 777
         g.save_config(cfg)
-        cfg["highscore"] = 888
+        cfg["highscores"]["4"] = 888
         g.save_config(cfg)                    # 777 is now the .bak
         with open(g.CONFIG_PATH, "w", encoding="utf-8") as f:
             f.write('{"highscore": ')         # power cut mid-write
-        self.assertEqual(g.load_config()["highscore"], 777)
+        self.assertEqual(g.load_config()["highscores"]["4"], 777)
         self.assertFalse(os.path.exists(g.CONFIG_PATH + ".tmp"))
 
     def test_version_gt(self):
@@ -836,6 +862,56 @@ class TestGameFlow(unittest.TestCase):
             self.assertEqual(" ".join(lines), txt)            # every word, in order
             if len(lines) > 1:
                 self.assertIn(" ", lines[-1], (w, lines))
+
+    def test_each_board_size_has_its_own_best(self):
+        gm = self.game
+        saved = (copy.deepcopy(gm.cfg), gm.state, gm._confirm)
+        try:
+            gm.cfg["active_profile"] = 0             # honest mode: bests count
+            gm.cfg["highscores"] = {"4": 500, "5": 90, "6": 7000}
+            for size, best in ((4, 500), (5, 90), (6, 7000)):
+                gm.cfg["grid_size"] = size
+                gm.new_game(); self.settle()
+                self.assertEqual(gm.best_score(), best)
+                gm.board.score = best + 10           # a new best, on this board only
+                gm.update_highscore()
+                self.assertEqual(gm.best_score(), best + 10)
+            self.assertEqual(gm.cfg["highscores"], {"4": 510, "5": 100, "6": 7010})
+            gm.cfg["grid_size"] = 5                  # a 4x4-sized score on 5x5
+            gm.new_game(); self.settle()
+            gm.board.score = 99
+            gm.update_highscore()                    # below the 5x5 best: nothing
+            self.assertEqual(gm.cfg["highscores"]["5"], 100)
+            # reset: the question names the board, and only its best goes
+            gm.state = "settings"; gm.frame(1 / 60)
+            vs = gm.view_scale
+            x, y = gm.s_reset_score.rect.center
+            gm.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN,
+                                               {"pos": (x * vs, y * vs), "button": 1}))
+            self.assertIn("5×5", gm._confirm[0])
+            gm._do_confirmed_action()
+            self.assertEqual(gm.cfg["highscores"], {"4": 510, "5": 0, "6": 7010})
+            gm._confirm = ("?", "reset_settings")    # the settings reset keeps them
+            gm._do_confirmed_action()
+            self.assertEqual(gm.cfg["highscores"], {"4": 510, "5": 0, "6": 7010})
+        finally:
+            gm.cfg, gm.state, gm._confirm = saved
+            gm.toast = None
+            gm.new_game(); self.settle()
+
+    def test_the_browser_keeps_the_bests_the_same_way(self):
+        # the migration is the risky part: run the page's own code in node
+        with open(os.path.join(_HERE, "index.html"), encoding="utf-8") as f:
+            h = f.read()
+        a = h.index("const isScore"); b = h.index("function sanitize(c){")
+        js = h[a:b] + ("console.log(JSON.stringify([{highscore:6308,grid_size:5},{highscore:6308},"
+                       "{highscore:-2,grid_size:4},{highscore:'x'},{}].map(bestsFromOne)))")
+        try:
+            out = subprocess.run(["node", "-e", js], capture_output=True, text=True, timeout=60).stdout
+        except FileNotFoundError:
+            self.skipTest("node not installed")
+        z = {"4": 0, "5": 0, "6": 0}
+        self.assertEqual(json.loads(out), [{**z, "5": 6308}, {**z, "4": 6308}, z, z, z])
 
     def test_dialog_buttons_in_reading_order(self):
         # 'yes' first: on the right in Hebrew, on the left in English (the
@@ -943,10 +1019,10 @@ class TestGameFlow(unittest.TestCase):
         try:
             gm.state = "settings"
             gm._confirm = ("?", "reset_score")
-            best = gm.cfg["highscore"]
+            best = dict(gm.cfg["highscores"])
             gm.handle_event(esc)
             self.assertIsNone(gm._confirm)              # closed, nothing reset
-            self.assertEqual(gm.cfg["highscore"], best)
+            self.assertEqual(gm.cfg["highscores"], best)
             gm.cfg["active_profile"] = 0                # honest...
             gm.enter_preferences()
             gm.cfg["active_profile"] = 1                # ...then a cheat mode
