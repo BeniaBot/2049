@@ -254,7 +254,7 @@ he: {
   score:"ניקוד", best:"שיא", new_game:"משחק חדש", settings:"הגדרות", back:"חזרה",
   you_win:"הגעת ל-2048!", keep_playing:"המשך לשחק",
   game_over:"המשחק נגמר", press_new:"Enter – משחק חדש",
-  hint_keys:"משחקים בחצים או במקשי <span dir=\"ltr\">WASD</span>", hint_touch:"מחליקים על הלוח כדי לשחק",
+  hint_keys:"משחקים בחצים, ב-<span dir=\"ltr\">WASD</span> או בגרירה", hint_touch:"מחליקים על הלוח כדי לשחק",
   grid_size:"גודל לוח", language:"שפה", difficulty:"רמת קושי",
   diff_normal:"רגיל", diff_hard:"קשה", diff_evil:"מרושע", sound:"צלילים", on:"דלוק", off:"כבוי",
   win_mode:"מצב ניצחון", infinite:"אינסופי", target:"עצירה ב-2048", show_tips:"הצג עצות",
@@ -320,7 +320,7 @@ en: {
   score:"SCORE", best:"BEST", new_game:"New game", settings:"Settings", back:"Back",
   you_win:"You reached 2048!", keep_playing:"Keep playing",
   game_over:"Game over", press_new:"Enter – new game",
-  hint_keys:"Play with the arrow keys or WASD", hint_touch:"Swipe on the board to play",
+  hint_keys:"Play with the arrows, WASD or a drag", hint_touch:"Swipe on the board to play",
   grid_size:"Grid size", language:"Language", difficulty:"Difficulty",
   diff_normal:"Normal", diff_hard:"Hard", diff_evil:"Evil", sound:"Sound", on:"On", off:"Off",
   win_mode:"Win mode", infinite:"Infinite", target:"Stop at 2048", show_tips:"Show tips",
@@ -808,6 +808,22 @@ class Game{
       if(Math.max(Math.abs(dx),Math.abs(dy))<24) return;
       if(Math.abs(dx)>Math.abs(dy)) this.handleMove(dx>0?"right":"left"); else this.handleMove(dy>0?"down":"up");
     },{passive:true});
+    // a mouse (or pen) drag plays like a swipe; touch keeps the code above,
+    // which the hidden corner zones rely on (one finger holds, one swipes)
+    let mx=0, my=0, mdown=false;
+    document.addEventListener("pointerdown",e=>{
+      if(e.pointerType==="touch"||e.button!==0||this.state!=="game") return;
+      if(e.target.closest("button,a,.bicon,.overlay")||document.querySelector(".dim")) return;
+      mx=e.clientX; my=e.clientY; mdown=true;
+    });
+    document.addEventListener("pointerup",e=>{
+      if(!mdown||e.pointerType==="touch") return; mdown=false;
+      if(this.state!=="game") return;
+      const dx=e.clientX-mx, dy=e.clientY-my;
+      if(Math.max(Math.abs(dx),Math.abs(dy))<24) return;     // a click, not a move
+      if(Math.abs(dx)>Math.abs(dy)) this.handleMove(dx>0?"right":"left"); else this.handleMove(dy>0?"down":"up");
+    });
+    document.addEventListener("pointercancel",()=>{ mdown=false; });
   }
   onKey(e){
     if(this.capturing!==null && this.state!=="preferences") this.capturing=null;

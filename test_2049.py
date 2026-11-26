@@ -913,6 +913,43 @@ class TestGameFlow(unittest.TestCase):
         z = {"4": 0, "5": 0, "6": 0}
         self.assertEqual(json.loads(out), [{**z, "5": 6308}, {**z, "4": 6308}, z, z, z])
 
+    def drag(self, start, end, touch=False):
+        """A press, then a release elsewhere, in logical units (the window
+        is scaled); touch=True: what Windows makes of a finger on the screen."""
+        gm, vs = self.game, self.game.view_scale
+        for typ, p in ((pygame.MOUSEBUTTONDOWN, start), (pygame.MOUSEBUTTONUP, end)):
+            gm.handle_event(pygame.event.Event(typ, {"pos": (p[0] * vs, p[1] * vs),
+                                                     "button": 1, "touch": touch}))
+
+    def test_a_mouse_drag_or_a_swipe_plays_a_move(self):
+        gm = self.game
+        self.assertEqual(g.drag_direction((100, 100), (160, 110)), "right")
+        self.assertEqual(g.drag_direction((100, 100), (95, 40)), "up")
+        self.assertIsNone(g.drag_direction((100, 100), (110, 108)))    # a click
+        self.assertIsNone(g.drag_direction(None, (300, 300)))
+        bx, by, bp, _, _ = gm.board_geometry()
+        mid = (bx + bp / 2, by + bp / 2)
+        rows = [[2, 0, 0, 0], [0, 4, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]
+        for touch in (False, True):
+            self.set_board(rows)
+            moves = gm._move_no
+            self.drag(mid, (mid[0] + 80, mid[1] + 10), touch)          # to the right
+            self.settle()
+            self.assertEqual(gm._move_no, moves + 1, touch)
+            self.assertEqual(gm.board.grid[0][3], 2)
+            self.drag(mid, (mid[0] + 6, mid[1] - 5), touch)             # only a click
+            self.settle()
+            self.assertEqual(gm._move_no, moves + 1)
+        # a press on a button is the button, not the start of a drag
+        self.set_board(rows)
+        moves = gm._move_no
+        s = gm.game_buttons["settings"].rect.center
+        self.drag(s, (s[0], s[1] + 200))
+        self.assertEqual(gm.state, "settings")
+        gm.state = "game"
+        self.drag((mid[0], mid[1]), (mid[0], mid[1]))                  # (no stale start)
+        self.assertEqual(gm._move_no, moves)
+
     def test_dialog_buttons_in_reading_order(self):
         # 'yes' first: on the right in Hebrew, on the left in English (the
         # desktop kept the English order in Hebrew; the browser did not)

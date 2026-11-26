@@ -209,7 +209,7 @@ STRINGS = {
             "middle":"\u05d1\u05d0\u05de\u05e6\u05e2 \u05d4\u05dc\u05d5\u05d7",
         },
         "keep_playing":"\u05d4\u05de\u05e9\u05da \u05dc\u05e9\u05d7\u05e7",
-        "hint_keys":"\u05de\u05e9\u05d7\u05e7\u05d9\u05dd \u05d1\u05d7\u05e6\u05d9\u05dd \u05d0\u05d5 \u05d1\u05de\u05e7\u05e9\u05d9 WASD",
+        "hint_keys":"משחקים בחצים, ב-WASD או בגרירה",
         "offline":"\u05d0\u05d9\u05df \u05d7\u05d9\u05d1\u05d5\u05e8 \u2013 \u05dc\u05d0 \u05e0\u05d9\u05ea\u05df \u05dc\u05d1\u05d3\u05d5\u05e7 \u05e2\u05d3\u05db\u05d5\u05e0\u05d9\u05dd",
         "update_now":"עדכן עכשיו", "updating":"מעדכן...",
         "downloading":"מוריד את העדכון...",
@@ -328,7 +328,7 @@ STRINGS = {
             "middle":"in the middle",
         },
         "keep_playing":"Keep playing",
-        "hint_keys":"Play with the arrow keys or WASD",
+        "hint_keys":"Play with the arrows, WASD or a drag",
         "offline":"Offline - couldn't check for updates",
         "update_now":"Update now", "updating":"Updating...",
         "downloading":"Downloading the update...",
@@ -401,6 +401,19 @@ HOLD_ACTIONS = {"smart_spawn","force_2","force_4","spawn_corner"}
 TAP_ACTIONS  = {"clean_stuck","undo"}
 
 DIR_ARROWS = {"left":"←", "right":"→", "up":"↑", "down":"↓"}
+
+DRAG_MIN = 24       # logical px: a shorter drag is a click, not a move (= the web's swipe)
+
+def drag_direction(start, end):
+    """The move a mouse drag / swipe from start to end means, or None."""
+    if start is None:
+        return None
+    dx, dy = end[0] - start[0], end[1] - start[1]
+    if max(abs(dx), abs(dy)) < DRAG_MIN:
+        return None
+    if abs(dx) > abs(dy):
+        return "right" if dx > 0 else "left"
+    return "down" if dy > 0 else "up"
 
 # Keys we never allow binding to (reserved for gameplay/navigation).
 RESERVED_KEYS = {pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN,
@@ -2946,6 +2959,15 @@ class Game:
                 save_config(self.cfg)
                 if self.cfg["infinite"]: self.keep_going = True
                 return
+            # not on a button: maybe the start of a drag. A mouse drag plays
+            # like a swipe - and so does a finger on a touch screen, which
+            # Windows hands over as the very same mouse events
+            self._drag_from = e.pos
+        elif e.type==pygame.MOUSEBUTTONUP and e.button==1:
+            start, self._drag_from = getattr(self, "_drag_from", None), None
+            d = drag_direction(start, e.pos)
+            if d:
+                self.handle_move(d)
         elif e.type==pygame.KEYDOWN:
             taps = self.taps_for_key(e.key)
             if taps:
